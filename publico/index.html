@@ -129,6 +129,17 @@
 
     <label for="termos">Segmento / termos (separados por vírgula)</label>
     <input id="termos" placeholder="ex.: home care, cuidador de idosos">
+    <div id="caixa-sinonimos" class="oculto">
+      <label>Sinônimos (confirme antes de buscar) <span class="suave" title="Servem para marcar quais leads são do segmento: um lead é do segmento se o termo, um sinônimo ou uma categoria aceita aparece no nome ou na categoria do Google. Tire os que não servem e adicione outros.">ⓘ</span></label>
+      <div class="chips" id="sinonimos"></div>
+      <div class="linha" style="margin-top:6px">
+        <input id="sin-novo" placeholder="adicionar sinônimo" style="flex:1;min-width:180px">
+        <button class="sec mini" id="sin-add">Adicionar</button>
+        <button class="sec mini" id="sin-restaurar">Restaurar sugestões</button>
+      </div>
+      <label class="inline" style="margin-top:6px"><input type="checkbox" id="sin-buscar"> Buscar também pelos sinônimos <span class="suave" id="sin-custo"></span></label>
+      <p class="suave" id="cat-aceitas-info" style="margin:6px 0 0"></p>
+    </div>
 
     <label>Regiões do RN (IBGE)</label>
     <div class="linha" style="margin-top:0">
@@ -184,10 +195,28 @@
         <div><label for="f-texto">Procurar nome</label><input id="f-texto" placeholder="parte do nome"></div>
       </div>
       <div class="linha">
-        <label class="inline" title="Esconde os leads cujo endereço mostra outra cidade. Os sem cidade no endereço continuam."><input type="checkbox" id="f-pedida" checked> Só da cidade pedida</label>
+        <label class="inline" title="Esconde os leads que o Google devolveu mas não são do segmento buscado (ex.: loja de construção numa busca de home care). Nada é apagado."><input type="checkbox" id="f-segmento" checked> Só do segmento</label>
+        <label class="inline" title="Esconde os leads cujo endereço mostra outra cidade e os que não têm cidade no endereço."><input type="checkbox" id="f-pedida" checked> Só da cidade pedida</label>
+        <label class="inline"><input type="checkbox" id="f-semcidade"> Mostrar leads sem cidade</label>
         <label class="inline"><input type="checkbox" id="f-whats"> Tem WhatsApp</label>
         <label class="inline"><input type="checkbox" id="f-semsite"> Sem site</label>
       </div>
+      <div class="linha suave" id="segmento-info"></div>
+      <details id="caixa-categorias" style="margin-top:10px">
+        <summary><b>Categorias do Google</b> <span class="suave" id="cat-resumo"></span></summary>
+        <p class="suave" style="margin:6px 0">Marque só as categorias que interessam. ✓ = categoria do segmento. A lista vem dos leads carregados (nada inventado).</p>
+        <div class="linha" style="margin-top:0">
+          <input id="f-cat-busca" placeholder="Procurar categoria" style="flex:1;min-width:180px">
+          <button class="sec mini" id="cat-todas">Marcar todas</button>
+          <button class="sec mini" id="cat-nenhuma">Desmarcar todas</button>
+          <button class="sec mini" id="cat-segmento">Só as ✓</button>
+        </div>
+        <div class="cidades" id="f-cat-lista" style="margin-top:8px"></div>
+        <div class="linha">
+          <label for="cat-perfil" style="margin:0">Guardar as categorias marcadas como “aceitas” no perfil:</label>
+          <select id="cat-perfil" style="width:auto"></select><button class="sec" id="cat-salvar">Guardar no perfil</button>
+        </div>
+      </details>
       <div class="linha">
         <b id="leads-contagem"></b>
         <button class="sec" id="baixar-xlsx">Baixar .xlsx</button>
@@ -293,6 +322,62 @@ const normalizar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "
   .replace(/[-–]\s*rn$|\s+rn$|\/rn$/, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/^assu$/, "acu");
 const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+// <relevancia> ------------------------------------------------ RELEVÂNCIA DO SEGMENTO (bloco puro)
+// Marca cada lead como "no segmento" ou "fora do segmento" comparando o termo buscado, os
+// sinônimos e as categorias aceitas com o NOME e a CATEGORIA do Google do lead (sem acento,
+// sem maiúsculas). Não apaga nada: só marca e filtra (regra "marcar, nunca apagar").
+// Este bloco não usa nada de fora dele: os testes (testes/relevancia.test.mjs) e a análise
+// rodam exatamente este mesmo código.
+const SINONIMOS = {
+  "home care": ["atendimento domiciliar", "assistência domiciliar", "internação domiciliar", "enfermagem domiciliar",
+    "cuidador de idosos", "cuidado de idosos", "casa de repouso", "residência geriátrica", "clínica geriátrica"],
+  "dentista": ["odontologia", "clínica odontológica", "consultório odontológico", "ortodontia", "implante dentário"],
+  "farmácia": ["drogaria", "farmácia de manipulação"],
+  "fisioterapia": ["fisioterapeuta", "clínica de fisioterapia", "pilates"],
+  "psicólogo": ["psicologia", "clínica de psicologia", "psicoterapia"],
+  "laboratório": ["laboratório de análises clínicas", "análises clínicas"],
+  "clínica médica": ["consultório médico", "centro médico", "policlínica"],
+  "pet shop": ["banho e tosa", "clínica veterinária", "veterinário", "agropet"],
+  "academia": ["academia de ginástica", "musculação", "crossfit", "pilates"],
+  "salão de beleza": ["cabeleireiro", "barbearia", "estética", "manicure"],
+  "supermercado": ["mercadinho", "atacarejo", "minimercado"],
+  "contabilidade": ["contador", "escritório de contabilidade", "escritório contábil"],
+  "advogado": ["advocacia", "escritório de advocacia"],
+  "hospital": ["pronto atendimento", "pronto socorro", "maternidade"],
+  "ótica": ["óculos", "optometrista"],
+};
+const semAcento = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const PALAVRAS_VAZIAS = new Set(["de", "da", "do", "das", "dos", "e", "em", "para", "a", "o", "as", "os", "com", "no", "na"]);
+const palavras = (s) => semAcento(s).split(/[^a-z0-9]+/).filter((p) => p && !PALAVRAS_VAZIAS.has(p));
+/** Sinônimos sugeridos para os termos (o usuário confirma/edita antes de buscar). */
+function sugerirSinonimos(termos) {
+  const saida = [];
+  for (const t of termos || []) {
+    const chave = semAcento(t);
+    for (const [base, lista] of Object.entries(SINONIMOS)) {
+      if (semAcento(base) === chave) for (const s of lista) if (!saida.some((x) => semAcento(x) === semAcento(s))) saida.push(s);
+    }
+  }
+  return saida.filter((s) => !(termos || []).some((t) => semAcento(t) === semAcento(s)));
+}
+/** A frase casa com o texto se TODAS as palavras dela aparecem (plural só em palavras com 5+ letras: "idoso" casa "idosos", mas "care" não casa "caretas"). */
+function casaFrase(frase, palavrasTexto) {
+  const ps = palavras(frase);
+  return ps.length > 0 && ps.every((p) => palavrasTexto.some((t) => t === p || (p.length >= 5 && t.startsWith(p))));
+}
+/** Critério do segmento a partir de termos, sinônimos e categorias aceitas. */
+function criterioSegmento({ termos = [], sinonimos = [], categorias = [] } = {}) {
+  return { frases: [...termos, ...sinonimos].filter(Boolean), categorias: new Set(categorias.map(semAcento).filter(Boolean)) };
+}
+/** true = lead do segmento; false = fora (Google devolveu algo "parecido"). */
+function noSegmento(lead, criterio) {
+  const cats = [lead?.categoria, ...(Array.isArray(lead?.categorias) ? lead.categorias : [])].filter(Boolean);
+  if (cats.some((c) => criterio.categorias.has(semAcento(c)))) return true;
+  const texto = palavras([lead?.nome, ...cats].join(" "));
+  return criterio.frases.some((f) => casaFrase(f, texto));
+}
+// </relevancia>
+
 async function api(caminho, corpo) {
   const token = await usuario.getIdToken();
   const r = await fetch(`/api/${caminho}`, {
@@ -337,14 +422,33 @@ $("entrar").onclick = async () => {
   catch { mensagem("msg-login", "E-mail ou senha inválidos.", "erro"); }
 };
 $("ls").onkeydown = (ev) => { if (ev.key === "Enter") $("entrar").click(); };
-$("sair").onclick = () => signOut(auth);
+// Sair: cancela os listeners, sai e RECARREGA a página (nada do usuário anterior fica em memória).
+let saindo = false;
+$("sair").onclick = async () => {
+  saindo = true;
+  pararLista?.(); pararFila?.();
+  try { await signOut(auth); } finally { location.reload(); }
+};
 // Só libera o "Entrar" quando a página terminou de carregar (evita clique perdido em internet lenta).
 $("entrar").disabled = false;
 $("carregando").remove();
 
+// Usuário que a página carregou. Qualquer troca (sair, outro login, sessão expirada) recarrega a página:
+// assim leads, buscas, perfis, filtros, cache e "admin" do usuário anterior nunca aparecem para o próximo.
+let uidDaPagina = null;
 onAuthStateChanged(auth, async (u) => {
+  if (saindo) return; // o botão Sair já recarrega a página
+  if (uidDaPagina && (u?.uid || null) !== uidDaPagina) {
+    pararLista?.(); pararFila?.();
+    document.body.innerHTML = "";
+    location.reload();
+    return;
+  }
+  uidDaPagina = u?.uid || null;
   usuario = u;
   pararLista?.(); pararFila?.();
+  ehAdmin = false; // nunca herda: só vale a claim do token recém-atualizado (abaixo)
+  for (const id of ["aba-admin", "selo", "filtro"]) $(id).classList.add("oculto");
   $("login").classList.toggle("oculto", !!u);
   for (const id of ["abas", "quem"]) $(id).classList.toggle("oculto", !u);
   if (!u) { for (const t of ["hoje", "nova", "buscas", "leads", "admin"]) $(`tela-${t}`).classList.add("oculto"); return; }
@@ -422,6 +526,7 @@ function desenharCidades() {
     : `<span class="suave">Escolha regiões ou adicione cidades.</span>`;
   const marcadas = nomes.filter((n) => cidadesEscolhidas.get(n)).length;
   $("qtd-cidades").textContent = nomes.length ? `(${marcadas} de ${nomes.length} marcadas)` : "";
+  if (typeof desenharSinonimos === "function") desenharSinonimos();
   agendarEstimativa();
 }
 for (const r of document.querySelectorAll("input[name=tipo-regiao]")) {
@@ -460,8 +565,36 @@ function cidadesDoPedido() {
   const outras = $("outras").value.split(",").map((s) => s.trim()).filter(Boolean);
   return [...rn, ...outras];
 }
+// Sinônimos: sugeridos pelo dicionário (bloco <relevancia>), editáveis; o usuário confirma antes de buscar.
+let sinonimosAtuais = [], sinonimosEditados = false, categoriasAceitasAtuais = [];
+const termosDigitados = () => $("termos").value.split(",").map((t) => t.trim()).filter(Boolean);
+function desenharSinonimos() {
+  if (!sinonimosEditados) sinonimosAtuais = sugerirSinonimos(termosDigitados());
+  $("caixa-sinonimos").classList.toggle("oculto", !termosDigitados().length);
+  $("sinonimos").innerHTML = sinonimosAtuais.map((s2, i) => `<label class="chip">${texto(s2)} <button class="sec mini" data-tira-sin="${i}" aria-label="Tirar ${texto(s2)}">×</button></label>`).join("") ||
+    `<span class="suave">Sem sugestões para este termo — adicione os seus, se quiser.</span>`;
+  const cidades = cidadesDoPedido().length || 1;
+  $("sin-custo").textContent = sinonimosAtuais.length ? `(+${sinonimosAtuais.length * cidades} consulta(s))` : "";
+  $("cat-aceitas-info").textContent = categoriasAceitasAtuais.length ? `Categorias aceitas do perfil: ${categoriasAceitasAtuais.join(", ")}` : "";
+}
+$("sinonimos").onclick = (ev) => {
+  const i = ev.target.dataset?.tiraSin;
+  if (i === undefined) return;
+  ev.preventDefault(); sinonimosEditados = true; sinonimosAtuais.splice(Number(i), 1); desenharSinonimos(); agendarEstimativa();
+};
+$("sin-add").onclick = () => {
+  const novo = $("sin-novo").value.trim().slice(0, 80);
+  if (novo && !sinonimosAtuais.some((x) => semAcento(x) === semAcento(novo))) { sinonimosEditados = true; sinonimosAtuais.push(novo); }
+  $("sin-novo").value = ""; desenharSinonimos(); agendarEstimativa();
+};
+$("sin-novo").onkeydown = (ev) => { if (ev.key === "Enter") $("sin-add").click(); };
+$("sin-restaurar").onclick = () => { sinonimosEditados = false; desenharSinonimos(); agendarEstimativa(); };
+$("termos").addEventListener("input", desenharSinonimos);
+$("sin-buscar").addEventListener("change", agendarEstimativa);
 function pedidoComum(simular) {
-  return { termos: $("termos").value, cidades: cidadesDoPedido().join(","), profundidade: $("prof").value, extrair_email: $("email-sn").checked, simular };
+  const termos = [...termosDigitados(), ...($("sin-buscar").checked ? sinonimosAtuais : [])].join(",");
+  return { termos, cidades: cidadesDoPedido().join(","), profundidade: $("prof").value, extrair_email: $("email-sn").checked,
+    sinonimos: sinonimosAtuais, categorias_aceitas: categoriasAceitasAtuais, simular };
 }
 
 // Estimativa automática antes de buscar (1 chamada ao servidor, alguns segundos depois de parar de digitar).
@@ -499,12 +632,17 @@ async function carregarPerfis() {
       perfis.map((p) => `<option value="${texto(p.id)}">${texto(p.nome)}</option>`).join("");
   } catch (e) { mensagem("msg-nova", `Perfis: ${e.message}`, "erro"); }
   $("perfil-apagar").disabled = !$("perfil-sel").value;
+  desenharPerfisCategorias();
 }
 $("perfil-sel").onchange = () => {
   const p = perfis.find((x) => x.id === $("perfil-sel").value);
   $("perfil-apagar").disabled = !p;
   if (!p) return;
   $("termos").value = p.termos.join(", ");
+  sinonimosEditados = Array.isArray(p.sinonimos) && p.sinonimos.length > 0;
+  sinonimosAtuais = sinonimosEditados ? [...p.sinonimos] : [];
+  categoriasAceitasAtuais = [...(p.categorias_aceitas || [])];
+  desenharSinonimos();
   $("prof").value = p.profundidade;
   $("email-sn").checked = p.extrair_email;
   tipoRegiao = p.tipo_regiao || "micro";
@@ -528,6 +666,7 @@ $("perfil-salvar").onclick = async () => {
   const perfil = {
     nome, termos: $("termos").value, cidades: cidadesDoPedido(), profundidade: $("prof").value,
     extrair_email: $("email-sn").checked, tipo_regiao: tipoRegiao, regioes: [...regioesMarcadas],
+    sinonimos: sinonimosAtuais, categorias_aceitas: categoriasAceitasAtuais,
     ...(atual && atual.nome === nome ? { id: atual.id } : {}),
   };
   try {
@@ -637,6 +776,8 @@ async function abrirLeads(ids) {
       const lotes = await Promise.all(Array.from({ length: b.qtd_lotes || 0 }, (_, n) => getDoc(doc(db, `buscas/${b.id}/lotes/${n}`))));
       return lotes.flatMap((l) => l.data()?.leads || []);
     }));
+    segmentoAtual = montarSegmento(buscasAbertas);
+    categoriasDesmarcadas.clear();
     leadsBase = juntarSemDuplicados(listas.flat()).map(enriquecer);
     $("leads-origem").textContent = buscasAbertas.length === 1 ? `· ${rotuloBusca(buscasAbertas[0])}` : `· ${buscasAbertas.length} buscas juntas`;
     mensagem("msg-leads", "");
@@ -659,19 +800,35 @@ function juntarSemDuplicados(leads) {
   return [...vistos.values()];
 }
 // Região pela cidade do ENDEREÇO do lead (dado real); sem cidade no endereço = em branco.
+// Segmento: marcado (nunca apagado) comparando termos/sinônimos/categorias aceitas com nome e categoria.
 function enriquecer(l) {
   const m = infoCidade(l.cidade);
-  return { ...l, microrregiao: m?.micro?.nome || "", regiao_imediata: m?.imediata?.nome || "", _micro: m?.micro?.id || "", _imediata: m?.imediata?.id || "" };
+  const marcado = { ...l, microrregiao: m?.micro?.nome || "", regiao_imediata: m?.imediata?.nome || "", _micro: m?.micro?.id || "", _imediata: m?.imediata?.id || "" };
+  marcado.no_segmento = noSegmento(marcado, segmentoAtual.criterio) ? "sim" : "não";
+  return marcado;
 }
+// Critério do segmento das buscas abertas: termos + sinônimos (os confirmados na busca; nas buscas
+// antigas, os sugeridos) + categorias aceitas guardadas na busca/perfil.
+let segmentoAtual = { termos: [], sinonimos: [], categorias: [], criterio: criterioSegmento() };
+const categoriasDesmarcadas = new Set();
+function montarSegmento(lista, extra = {}) {
+  const termos = [...new Set(lista.flatMap((b) => b.parametros?.termos || []))];
+  const sinonimos = [...new Set([...lista.flatMap((b) => b.parametros?.sinonimos ?? sugerirSinonimos(b.parametros?.termos || [])), ...(extra.sinonimos || [])])];
+  const categorias = [...new Set([...lista.flatMap((b) => b.parametros?.categorias_aceitas || []), ...(extra.categorias || [])])];
+  return { termos, sinonimos, categorias, criterio: criterioSegmento({ termos, sinonimos, categorias }) };
+}
+const categoriaDo = (l) => l.categoria || "(sem categoria)";
 const regiaoDo = (l) => (tipoRegiao === "micro" ? l.microrregiao : l.regiao_imediata);
 const regiaoIdDo = (l) => (tipoRegiao === "micro" ? l._micro : l._imediata);
 
 // ------------------------------------------------------------- LEADS: filtros
-function filtrar({ semCidade = false, semRegiao = false } = {}) {
+function filtrar({ semCidade = false, semRegiao = false, semSegmento = false, semCategoria = false } = {}) {
   const regiao = $("f-regiao").value, cidade = $("f-cidade").value, nota = Number($("f-nota").value || 0);
   const busca = normalizar($("f-texto").value);
   return leadsBase.filter((l) =>
-    (!$("f-pedida").checked || l.cidade_confere !== "nao") &&
+    (semSegmento || !$("f-segmento").checked || l.no_segmento === "sim") &&
+    (semCategoria || !categoriasDesmarcadas.has(categoriaDo(l))) &&
+    (!$("f-pedida").checked || (l.cidade_confere !== "nao" && (l.cidade || $("f-semcidade").checked))) &&
     (!$("f-whats").checked || l.whatsapp_link) &&
     (!$("f-semsite").checked || (!l.site && !l.instagram)) &&
     (!nota || (Number(l.nota) || 0) >= nota) &&
@@ -692,9 +849,68 @@ function montarFiltros() {
   $("f-cidade").value = porCidade.has(cidadeAtual) ? cidadeAtual : "";
   $("f-regiao-rotulo").textContent = ROTULO_REGIAO[tipoRegiao];
   $("col-regiao").textContent = ROTULO_REGIAO[tipoRegiao];
+  desenharCategorias();
+  desenharSegmentoInfo();
   desenharLeads();
 }
-for (const id of ["f-regiao", "f-cidade", "f-nota", "f-pedida", "f-whats", "f-semsite"]) $(id).onchange = () => { mostrar = 300; montarFiltros(); };
+// Categorias do Google com contagem (sobre os leads dos outros filtros, dentro e fora do segmento).
+function desenharCategorias() {
+  const porCat = new Map();
+  for (const l of filtrar({ semSegmento: true, semCategoria: true })) {
+    const c = categoriaDo(l), x = porCat.get(c) || { n: 0, seg: 0 };
+    x.n++; if (l.no_segmento === "sim") x.seg++; porCat.set(c, x);
+  }
+  const procura = normalizar($("f-cat-busca").value);
+  const lista = [...porCat].sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0], "pt-BR"));
+  $("f-cat-lista").innerHTML = lista.filter(([c]) => !procura || normalizar(c).includes(procura)).map(([c, x]) =>
+    `<label class="inline"><input type="checkbox" data-cat="${texto(c)}" ${categoriasDesmarcadas.has(c) ? "" : "checked"}> ${x.seg ? "✓ " : ""}${texto(c)} <span class="suave">(${x.n})</span></label>`).join("") ||
+    `<span class="suave">Nenhuma categoria.</span>`;
+  const marcadas = lista.filter(([c]) => !categoriasDesmarcadas.has(c)).length;
+  $("cat-resumo").textContent = `· ${marcadas} de ${lista.length} marcadas`;
+  categoriasNaTela = lista;
+}
+let categoriasNaTela = [];
+$("f-cat-lista").onchange = (ev) => {
+  const c = ev.target.dataset?.cat;
+  if (c === undefined) return;
+  if (ev.target.checked) categoriasDesmarcadas.delete(c); else categoriasDesmarcadas.add(c);
+  mostrar = 300; montarFiltros();
+};
+$("f-cat-busca").oninput = desenharCategorias;
+$("cat-todas").onclick = () => { categoriasDesmarcadas.clear(); montarFiltros(); };
+$("cat-nenhuma").onclick = () => { for (const [c] of categoriasNaTela) categoriasDesmarcadas.add(c); montarFiltros(); };
+$("cat-segmento").onclick = () => { categoriasDesmarcadas.clear(); for (const [c, x] of categoriasNaTela) if (!x.seg) categoriasDesmarcadas.add(c); montarFiltros(); };
+// Contador "x leads fora do segmento escondidos – ver" e resumo do critério usado.
+function desenharSegmentoInfo() {
+  const fora = $("f-segmento").checked ? filtrar({ semSegmento: true }).filter((l) => l.no_segmento !== "sim").length : 0;
+  const { termos, sinonimos, categorias } = segmentoAtual;
+  $("segmento-info").innerHTML = `Segmento: <b>${texto(termos.join(", ") || "—")}</b>` +
+    (sinonimos.length ? ` · sinônimos: ${texto(sinonimos.join(", "))}` : "") +
+    (categorias.length ? ` · categorias aceitas: ${texto(categorias.join(", "))}` : "") +
+    (fora ? ` · <a href="#" id="ver-fora">${numero(fora)} lead(s) fora do segmento escondido(s) – ver</a>` : "");
+  $("ver-fora")?.addEventListener("click", (ev) => { ev.preventDefault(); $("f-segmento").checked = false; mostrar = 300; montarFiltros(); });
+}
+// Guardar as categorias marcadas como "aceitas" num perfil (usado nas próximas buscas).
+function desenharPerfisCategorias() {
+  $("cat-perfil").innerHTML = perfis.length ? perfis.map((p) => `<option value="${texto(p.id)}">${texto(p.nome)}</option>`).join("")
+    : `<option value="">(crie um perfil na Nova busca)</option>`;
+  $("cat-salvar").disabled = !perfis.length;
+}
+$("cat-salvar").onclick = async () => {
+  const perfil = perfis.find((p) => p.id === $("cat-perfil").value);
+  const marcadas = categoriasNaTela.map(([c]) => c).filter((c) => !categoriasDesmarcadas.has(c) && c !== "(sem categoria)");
+  if (!perfil || !marcadas.length) return;
+  if (!confirm(`Guardar ${marcadas.length} categoria(s) como aceitas no perfil “${perfil.nome}”?`)) return;
+  try {
+    await api("perfis", { acao: "salvar_categorias", id: perfil.id, categorias_aceitas: marcadas });
+    await carregarPerfis();
+    segmentoAtual = montarSegmento(buscasAbertas, { categorias: marcadas });
+    leadsBase = leadsBase.map(enriquecer);
+    mensagem("msg-leads", `Categorias guardadas no perfil “${perfil.nome}”. As próximas buscas com esse perfil já marcam esses leads como do segmento.`, "ok");
+    montarFiltros();
+  } catch (e) { mensagem("msg-leads", e.message, "erro"); }
+};
+for (const id of ["f-regiao", "f-cidade", "f-nota", "f-pedida", "f-whats", "f-semsite", "f-segmento", "f-semcidade"]) $(id).onchange = () => { mostrar = 300; montarFiltros(); };
 $("f-texto").oninput = () => { mostrar = 300; montarFiltros(); };
 document.querySelector("#tabela-leads thead").onclick = (ev) => {
   const campo = ev.target.dataset.ordem;
@@ -719,7 +935,7 @@ function desenharLeads() {
   $("leads-contagem").textContent = `${numero(leadsVisiveis.length)} de ${numero(leadsBase.length)} leads`;
   const CONFERE = { sim: "sim", nao: "não", indefinido: "?" };
   $("tabela-leads").querySelector("tbody").innerHTML = leadsVisiveis.slice(0, mostrar).map((l, i) => `<tr data-i="${i}">
-    <td><b>${texto(l.nome)}</b><div class="suave">${texto(l.categoria)}</div></td>
+    <td><b>${texto(l.nome)}</b><div class="suave">${texto(l.categoria)}${l.no_segmento === "sim" ? "" : ' <span class="pilula indefinido">fora do segmento</span>'}</div></td>
     <td>${texto(l.bairro)}</td><td>${texto(l.cidade)}</td><td>${texto(regiaoDo(l))}</td>
     <td style="white-space:nowrap">${texto(l.telefone)}</td>
     <td>${linkSeguro(l.whatsapp_link) ? `<a class="wa" href="${linkSeguro(l.whatsapp_link)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</td>
@@ -739,7 +955,7 @@ $("tabela-leads").querySelector("tbody").onclick = (ev) => {
 };
 function abrirFicha(l) {
   $("ficha-nome").textContent = l.nome || "(sem nome)";
-  const campos = [["Categoria", l.categoria], ["Telefone", l.telefone], ["E-mail", l.email], ["Endereço", l.endereco], ["Bairro", l.bairro],
+  const campos = [["Categoria", l.categoria], ["Todas as categorias", (l.categorias || []).join(", ")], ["No segmento", l.no_segmento], ["Telefone", l.telefone], ["E-mail", l.email], ["Endereço", l.endereco], ["Bairro", l.bairro],
     ["Cidade", l.cidade], ["Microrregião", l.microrregiao], ["Região imediata", l.regiao_imediata], ["Nota", l.nota], ["Avaliações", l.qtd_avaliacoes],
     ["Site", l.site], ["Instagram", l.instagram], ["Encontrado por", l.termo_que_encontrou], ["Cidade pedida", l.cidade_buscada], ["Cidade confere", l.cidade_confere]];
   $("ficha-dados").innerHTML = campos.filter(([, v]) => v !== "" && v !== null && v !== undefined)
@@ -757,7 +973,8 @@ $("ficha-fechar").onclick = () => $("ficha").close();
 
 // ------------------------------------------------------------- LEADS: exportar (.xlsx / .csv)
 const COLUNAS = ["nome", "categoria", "telefone", "whatsapp_link", "email", "site", "instagram", "endereco", "bairro", "cidade",
-  "microrregiao", "regiao_imediata", "nota", "qtd_avaliacoes", "link_maps", "termo_que_encontrou", "cidade_buscada", "cidade_confere"];
+  "microrregiao", "regiao_imediata", "nota", "qtd_avaliacoes", "link_maps", "termo_que_encontrou", "cidade_buscada", "cidade_confere",
+  "categorias", "no_segmento"];
 
 // Nome do arquivo: segmento-cidade-data | segmento-RN-data | segmento-<região>-data | segmento-varias-cidades-data
 function nomeDoArquivo() {
@@ -784,7 +1001,8 @@ function nomeDoArquivo() {
   if (regiaoInteira) return `${segmento}-${slug(regiaoInteira.nome)}-${dia}`;
   return `${segmento}-varias-cidades-${dia}`;
 }
-const linhasParaExportar = () => leadsVisiveis.map((l) => Object.fromEntries(COLUNAS.map((c) => [c, l[c] ?? ""])));
+const linhasParaExportar = () => leadsVisiveis.map((l) => Object.fromEntries(COLUNAS.map((c) =>
+  [c, c === "categorias" ? (l.categorias || []).join("; ") : l[c] ?? ""])));
 
 function baixar(blob, nome) {
   const a = document.createElement("a");

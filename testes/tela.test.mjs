@@ -59,9 +59,14 @@ before(async () => {
   await db.doc("buscas/b2/lotes/0").set({ dono_uid: ana.uid, leads: [
     lead({ nome: "Clínica Alfa", telefone: "(84) 99999-0001", whatsapp_link: "https://wa.me/5584999990001", cidade: "Natal", id_lugar: "p1", termo_que_encontrou: "consultório", cidade_buscada: "Extremoz RN", cidade_confere: "nao" }),
     lead({ nome: "Clínica Delta; & <b>", telefone: "(84) 99999-0004", whatsapp_link: "https://wa.me/5584999990004", cidade: "Extremoz", cidade_buscada: "Extremoz RN", id_lugar: "p4" }),
+    // Google devolveu algo "parecido": fora do segmento (marcado, não apagado)
+    lead({ nome: "Loja Exemplo Construções", categoria: "Loja de materiais de construção", site: "https://loja.example", cidade: "Extremoz", cidade_buscada: "Extremoz RN", id_lugar: "p5" }),
+    // Sem cidade no endereço: escondido por padrão com "Só da cidade pedida"
+    lead({ nome: "Clínica Sem Endereço", cidade: "", endereco: "", cidade_buscada: "Extremoz RN", cidade_confere: "indefinido", id_lugar: "p6" }),
   ] });
   // Uma busca de outra pessoa (a Ana não pode ver).
-  await db.doc("buscas/outra").set({ tipo: "comum", lista: true, dono_uid: breno.uid, status: "concluida", criada_em: agora, parametros: { termos: ["segredo"], cidades: ["Natal RN"] } });
+  await db.doc("buscas/outra").set({ tipo: "comum", lista: true, dono_uid: breno.uid, status: "concluida", criada_em: agora, parametros: { termos: ["segredo"], cidades: ["Natal RN"] }, qtd_lotes: 1 });
+  await db.doc("buscas/outra/lotes/0").set({ dono_uid: breno.uid, leads: [lead({ nome: "Lead Do Admin", categoria: "Segredo", cidade: "Natal", termo_que_encontrou: "segredo", id_lugar: "adm" })] });
   await db.doc(`estatisticas/${hoje}__${ana.uid}`).set({ dono_uid: ana.uid, buscas: 2, leads: 5, com_whatsapp: 2, com_telefone: 3, dia: hoje });
   await db.doc(`estatisticas/${hoje}__geral`).set({ buscas: 9, leads: 50, com_whatsapp: 10, dia: hoje });
   await db.doc(`usuarios/${ana.uid}`).set({ email: "ana@x.example", dia: hoje, contagem_dia: 2, limite_diario: 5 });
@@ -112,7 +117,16 @@ test("usuário comum: Hoje, nova busca com regiões e perfil, leads juntos, filt
   assert.equal(await p.locator("#cidades input:checked").count(), 3);
   await p.uncheck("#cidades input[data-cidade='Extremoz']");
   assert.match(await p.textContent("#qtd-cidades"), /2 de 3/);
+  // Sinônimos sugeridos e editáveis (confirmados antes de buscar)
+  await p.fill("#termos", "home care");
+  await p.waitForSelector("#caixa-sinonimos:not(.oculto)");
+  assert.ok((await p.textContent("#sinonimos")).includes("casa de repouso"));
+  await p.click("#sinonimos [aria-label='Tirar casa de repouso']");
+  assert.ok(!(await p.textContent("#sinonimos")).includes("casa de repouso"));
+  await p.click("#sin-restaurar");
+  assert.ok((await p.textContent("#sinonimos")).includes("casa de repouso"));
   await p.fill("#termos", "clínica");
+  assert.match(await p.textContent("#sinonimos"), /Sem sugestões/);
   await p.selectOption("#prof", "rapida");
   await p.waitForFunction(() => /Estimativa: 2 consulta/.test(document.querySelector("#estimativa").textContent));
   // Regiões imediatas: 11 opções
@@ -141,6 +155,7 @@ test("usuário comum: Hoje, nova busca com regiões e perfil, leads juntos, filt
   const criadas = await db.collection("buscas").where("dono_uid", "==", uids.ana).where("status", "==", "na_fila").get();
   assert.equal(criadas.size, 1);
   assert.deepEqual(criadas.docs[0].data().parametros.cidades, ["Natal RN", "Parnamirim RN"]);
+  assert.deepEqual(criadas.docs[0].data().parametros.sinonimos, []);
 
   // ---- Buscas: só as próprias; juntar duas buscas
   await p.click("nav [data-aba=buscas]");
@@ -150,9 +165,11 @@ test("usuário comum: Hoje, nova busca com regiões e perfil, leads juntos, filt
   await p.check("[data-selecionar=b1]");
   await p.check("[data-selecionar=b2]");
   await p.click("#abrir-selecionadas");
-  await p.waitForFunction(() => /de 4 leads/.test(document.querySelector("#leads-contagem").textContent));
-  // 5 leads - 1 repetido = 4; "só da cidade pedida" (ligado) esconde a Gama (Parnamirim, não confere)
-  assert.equal(await p.textContent("#leads-contagem"), "3 de 4 leads");
+  await p.waitForFunction(() => /de 6 leads/.test(document.querySelector("#leads-contagem").textContent));
+  // 7 leads - 1 repetido = 6. Por padrão: "só do segmento" esconde a loja; "só da cidade pedida" esconde a
+  // Gama (Parnamirim, não confere) e a sem endereço.
+  assert.equal(await p.textContent("#leads-contagem"), "3 de 6 leads");
+  assert.match(await p.textContent("#segmento-info"), /Segmento: clínica.*1 lead\(s\) fora do segmento escondido\(s\) – ver/);
   const alfa = p.locator("#tabela-leads tbody tr", { hasText: "Clínica Alfa" });
   assert.match(await alfa.textContent(), /Natal/);
   assert.match(await alfa.textContent(), /Tirol/);
@@ -161,16 +178,31 @@ test("usuário comum: Hoje, nova busca com regiões e perfil, leads juntos, filt
   assert.equal(await p.locator("#tabela-leads tbody b", { hasText: "Clínica Delta; & <b>" }).count(), 1);
   // Filtros
   await p.uncheck("#f-pedida");
-  assert.equal(await p.textContent("#leads-contagem"), "4 de 4 leads");
+  assert.equal(await p.textContent("#leads-contagem"), "5 de 6 leads");
   await p.check("#f-pedida");
+  await p.check("#f-semcidade");
+  assert.equal(await p.textContent("#leads-contagem"), "4 de 6 leads");
+  await p.uncheck("#f-semcidade");
+  await p.click("#ver-fora"); // "ver" os fora do segmento
+  assert.equal(await p.isChecked("#f-segmento"), false);
+  assert.equal(await p.textContent("#leads-contagem"), "4 de 6 leads");
+  assert.match(await p.locator("#tabela-leads tbody tr", { hasText: "Loja Exemplo" }).textContent(), /fora do segmento/);
+  await p.check("#f-segmento");
+  // Categorias do Google com contagem, marcar/desmarcar
+  await p.click("#caixa-categorias summary");
+  assert.deepEqual((await p.locator("#f-cat-lista label").allTextContents()).map((t) => t.trim()), ["✓ Clínica (3)", "Loja de materiais de construção (1)"]);
+  await p.uncheck("#f-cat-lista input[data-cat='Clínica']");
+  assert.equal(await p.textContent("#leads-contagem"), "0 de 6 leads");
+  await p.click("#cat-segmento");
+  assert.equal(await p.textContent("#leads-contagem"), "3 de 6 leads");
   await p.check("#f-whats");
-  assert.equal(await p.textContent("#leads-contagem"), "2 de 4 leads");
+  assert.equal(await p.textContent("#leads-contagem"), "2 de 6 leads");
   await p.uncheck("#f-whats");
   await p.check("#f-semsite");
-  assert.equal(await p.textContent("#leads-contagem"), "2 de 4 leads");
+  assert.equal(await p.textContent("#leads-contagem"), "2 de 6 leads");
   await p.uncheck("#f-semsite");
   await p.selectOption("#f-nota", "4");
-  assert.equal(await p.textContent("#leads-contagem"), "1 de 4 leads");
+  assert.equal(await p.textContent("#leads-contagem"), "1 de 6 leads");
   await p.selectOption("#f-nota", "");
   const opcoesCidade = await p.locator("#f-cidade option").allTextContents();
   assert.deepEqual(opcoesCidade, ["Todas", "Natal (2)", "Extremoz (1)"]);
@@ -192,7 +224,8 @@ test("usuário comum: Hoje, nova busca com regiões e perfil, leads juntos, filt
   const conteudo = readFileSync(await csv.path(), "utf8");
   const linhas = conteudo.replace(/^﻿/, "").trim().split("\r\n");
   assert.equal(linhas.length, 3); // cabeçalho + 2 leads de Natal
-  assert.ok(linhas[0].includes("microrregiao;regiao_imediata") && linhas[0].endsWith("cidade_confere"));
+  assert.ok(linhas[0].startsWith("nome;categoria;") && linhas[0].includes("microrregiao;regiao_imediata") && linhas[0].endsWith("cidade_confere;categorias;no_segmento"));
+  assert.ok(linhas[1].endsWith(";sim"));
   assert.ok(!linhas[0].includes("id_lugar"));
   assert.ok(conteudo.includes(";4,8;")); // nota com vírgula
   // Sem filtro de cidade, 2 buscas (Natal + Extremoz) -> várias cidades
@@ -224,9 +257,28 @@ test("admin: aba Admin com saúde do motor, usuários e RN inteiro", async () =>
   await p.fill("#rn-termos", "dentista");
   await p.click("#rn-estimar");
   await p.waitForFunction(() => /249 consultas/.test(document.querySelector("#msg-rn").textContent));
-  // Admin vê as buscas de todos
+  // Admin vê as buscas de todos e abre os leads da própria busca
   await p.click("nav [data-aba=buscas]");
   await p.waitForFunction(() => /segredo/.test(document.querySelector("#lista").textContent));
+  await p.click("[data-ver='outra']");
+  await p.waitForFunction(() => /Lead Do Admin/.test(document.querySelector("#tabela-leads").textContent));
+
+  // BUG DE SEGURANÇA (corrigido): sair e entrar com usuário comum NA MESMA ABA, sem F5.
+  await p.click("#sair");
+  await p.waitForFunction(() => !document.querySelector("#tabela-leads")?.textContent.includes("Lead Do Admin"), null, { timeout: 30000 });
+  await p.waitForSelector("#login:not(.oculto) #entrar:not([disabled])", { timeout: 30000 });
+  await p.fill("#le", "ana@x.example"); await p.fill("#ls", "senha-forte-2"); await p.click("#entrar");
+  await p.waitForSelector("#tela-hoje:not(.oculto)");
+  await p.waitForFunction(() => document.querySelector("#h-cota").textContent !== "–");
+  assert.equal(await p.isVisible("#selo"), false, "selo admin não pode aparecer");
+  assert.equal(await p.isVisible("#aba-admin"), false, "menu Admin não pode aparecer");
+  const corpo = await p.textContent("body");
+  assert.ok(!corpo.includes("Lead Do Admin"), "lead do admin não pode aparecer");
+  assert.equal(await p.textContent("#tabela-leads tbody"), "");
+  await p.click("nav [data-aba=buscas]");
+  await p.waitForSelector("#lista .busca");
+  assert.ok(!(await p.textContent("#lista")).includes("segredo"), "busca do admin não pode aparecer");
+  assert.equal(await p.textContent("#email"), "ana@x.example");
   assert.deepEqual(erros, []);
   await p.context().close();
 });

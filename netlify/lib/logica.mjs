@@ -88,7 +88,26 @@ export function validarBuscaComum(corpo) {
     cidades: cidades.length ? cidades : ["Natal RN"],
     extrair_email: corpo?.extrair_email === true,
     profundidade,
+    // Relevância (só marcam os leads; não mudam as consultas): sinônimos confirmados e categorias aceitas.
+    sinonimos: listaCurta(corpo?.sinonimos, MAX_SINONIMOS),
+    categorias_aceitas: listaCurta(corpo?.categorias_aceitas, MAX_CATEGORIAS_ACEITAS),
   };
+}
+
+// Limites técnicos (proteção contra abuso, não são regra de negócio).
+const MAX_SINONIMOS = 20;
+const MAX_CATEGORIAS_ACEITAS = 80;
+/** Lista (array ou texto separado por vírgula) → itens limpos, sem repetidos, até N itens de até 80 caracteres. */
+export function listaCurta(valor, max) {
+  const itens = Array.isArray(valor) ? valor.map(String) : String(valor ?? "").split(",");
+  const vistos = new Set(), saida = [];
+  for (const bruto of itens) {
+    const item = bruto.split(/\s+/).filter(Boolean).join(" ").slice(0, MAX_TAMANHO_TEXTO);
+    const chave = item.toLowerCase();
+    if (item && !vistos.has(chave)) { vistos.add(chave); saida.push(item); }
+    if (saida.length >= max) break;
+  }
+  return saida;
 }
 
 /** Consultas termo × cidade de uma busca comum (mesma regra do motor). */

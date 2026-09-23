@@ -1,10 +1,10 @@
 // POST /api/perfis  — perfis de busca salvos, por usuário (Fase 3a).
-// Ações: listar | salvar (cria ou atualiza pelo id) | apagar
+// Ações: listar | salvar (cria ou atualiza pelo id) | salvar_categorias | apagar
 // Cada usuário só enxerga e altera os PRÓPRIOS perfis (usuarios/{uid}/perfis).
 // O navegador nunca grava no Firestore: tudo passa por aqui.
 
 import { FieldValue } from "firebase-admin/firestore";
-import { MAX_PERFIS_POR_USUARIO, validarPerfil } from "../lib/logica.mjs";
+import { listaCurta, MAX_PERFIS_POR_USUARIO, validarPerfil } from "../lib/logica.mjs";
 import { ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
 
 export default handler(async (req) => {
@@ -39,6 +39,15 @@ export default handler(async (req) => {
       }
       const ref = await colecao.add({ ...perfil, criado_em: FieldValue.serverTimestamp() });
       return json(201, { id: ref.id });
+    }
+    case "salvar_categorias": {
+      // Guarda só as categorias aceitas (escolhidas pelo usuário entre as que apareceram nos leads).
+      const id = idValido(corpo.id);
+      if (!id) throw new ErroHttp(400, "Informe o perfil.");
+      const ref = colecao.doc(id);
+      if (!(await ref.get()).exists) throw new ErroHttp(404, "Perfil não encontrado.");
+      await ref.update({ categorias_aceitas: listaCurta(corpo.categorias_aceitas, 80), atualizado_em: FieldValue.serverTimestamp() });
+      return json(200, { id });
     }
     case "apagar": {
       const id = idValido(corpo.id);

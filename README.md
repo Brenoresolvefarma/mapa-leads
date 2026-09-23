@@ -51,6 +51,10 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
   (todas as cidades de uma região) ou `segmento-varias-cidades-data`.
   "Só da cidade pedida" esconde os leads cujo endereço mostra **outra** cidade; os sem cidade no
   endereço continuam. A região do lead vem da cidade do **endereço** (sem cidade = em branco).
+- **Segmento**: cada lead é marcado como "do segmento" ou "fora" (o Google devolve lojas, prefeituras etc. quando a
+  cidade não tem o segmento). **"Só do segmento" vem ligado**, com o contador dos escondidos; filtro de **categorias do
+  Google** com contagem; sinônimos sugeridos na Nova busca (você confirma); categorias aceitas guardadas no perfil.
+  Nada é apagado: só marcado e filtrado.
 - **Admin**: saúde do motor (últimas execuções no GitHub, despertador, fila, pausas do
   disjuntor, órfãs, tempos reais), RN inteiro, usuários, cota por usuário e uso de hoje.
 - Tema claro/escuro automático (segue o aparelho). Datas sempre no horário de Natal.

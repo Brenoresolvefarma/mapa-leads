@@ -45,8 +45,12 @@ test("limite diário: padrão 20, por usuário, e zera no dia seguinte", () => {
 
 test("validação da busca comum", () => {
   assert.deepEqual(L.validarBuscaComum({ termos: "home care" }), {
-    termos: ["home care"], cidades: ["Natal RN"], extrair_email: false, profundidade: "normal",
+    termos: ["home care"], cidades: ["Natal RN"], extrair_email: false, profundidade: "normal", sinonimos: [], categorias_aceitas: [],
   });
+  const comSin = L.validarBuscaComum({ termos: "home care", sinonimos: ["casa de repouso", "Casa de Repouso", " ", "x".repeat(200)],
+    categorias_aceitas: Array.from({ length: 100 }, (_, i) => `Categoria ${i}`) });
+  assert.deepEqual(comSin.sinonimos, ["casa de repouso", "x".repeat(80)]);
+  assert.equal(comSin.categorias_aceitas.length, 80);
   assert.throws(() => L.validarBuscaComum({ termos: " , " }), /pelo menos um termo/);
   assert.throws(() => L.validarBuscaComum({ termos: "x", profundidade: "turbo" }), /Profundidade/);
   assert.throws(() => L.validarBuscaComum({ termos: "x".repeat(81) }), /80 caracteres/);
@@ -125,7 +129,7 @@ test("perfil salvo: nome obrigatório, mesmos campos validados da busca comum", 
     profundidade: "rapida", tipo_regiao: "imediata", regioes: ["240001", "x"] });
   assert.deepEqual(p, {
     nome: "Clínicas Natal", termos: ["clínica", "dentista"], cidades: ["Natal RN", "Parnamirim RN"],
-    extrair_email: false, profundidade: "rapida", tipo_regiao: "imediata", regioes: ["240001"],
+    extrair_email: false, profundidade: "rapida", sinonimos: [], categorias_aceitas: [], tipo_regiao: "imediata", regioes: ["240001"],
   });
   assert.throws(() => L.validarPerfil({ termos: "x" }), /nome/);
   assert.throws(() => L.validarPerfil({ nome: "a", termos: "" }), /pelo menos um termo/);
