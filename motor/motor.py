@@ -17,7 +17,6 @@ IMPORTANTE (repositório público, logs visíveis para qualquer pessoa):
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -26,6 +25,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 import tratamento
+import vigia
 
 # Imagem do scraper com versão FIXA (nunca "latest").
 IMAGEM_SCRAPER = os.environ.get("SCRAPER_IMAGE", "gosom/google-maps-scraper:v1.18.1")
@@ -33,8 +33,7 @@ IMAGEM_SCRAPER = os.environ.get("SCRAPER_IMAGE", "gosom/google-maps-scraper:v1.1
 # Tempo máximo do job no workflow é 350 min; paramos de pegar novas buscas
 # antes disso para dar tempo de gravar resultados e marcar status.
 LIMITE_TOTAL_SEG = 320 * 60
-# Tempo máximo de uma única consulta (termo × cidade).
-LIMITE_CONSULTA_SEG = 45 * 60
+# O limite de cada consulta depende da profundidade: ver tratamento.LIMITE_CONSULTA_MIN.
 
 COLECAO = "buscas"
 
@@ -155,18 +154,27 @@ def reservar_proxima_busca(db):
 # ------------------------------------------------------------------ Scraper
 
 def rodar_consulta(consulta, parametros, pasta, limite_seg):
-    """Roda o scraper (Docker) para UMA consulta e devolve a lista de itens.
+    """Roda o scraper (Docker) para UMA consulta, sob a vigia de tempo.
+
+    Retorna (itens, motivo, codigo). "motivo" diz se o scraper terminou
+    sozinho ou se a vigia o encerrou (ver vigia.py).
 
     A saída do scraper (que contém nomes de lugares) vai para um arquivo
-    no runner, NUNCA para o log público.
+    no runner, NUNCA para o log público. No log só vai o diagnóstico em números.
     """
     entrada = os.path.join(pasta, f"{consulta['id']}.txt")
     with open(entrada, "w", encoding="utf-8") as arquivo:
         arquivo.write(f"{consulta['texto']} #!#{consulta['id']}\n")
 
     resultado_nome = f"{consulta['id']}.json"
+    arquivo_resultado = os.path.join(pasta, resultado_nome)
+    arquivo_log = os.path.join(pasta, f"{consulta['id']}.log")
+    # Nome único do container, para a vigia conseguir encerrá-lo de verdade.
+    nome_container = f"mapaleads-{consulta['id']}-{int(time.time())}"
     comando = [
         "docker", "run", "--rm",
+        "--name", nome_container,
+        "-e", "DISABLE_TELEMETRY=1",  # desliga a telemetria do scraper
         "-v", f"{pasta}:/dados",
         IMAGEM_SCRAPER,
         "-input", f"/dados/{consulta['id']}.txt",
@@ -180,15 +188,25 @@ def rodar_consulta(consulta, parametros, pasta, limite_seg):
     if parametros.get("extrair_email"):
         comando.append("-email")
 
-    with open(os.path.join(pasta, "scraper.log"), "a", encoding="utf-8") as saida:
-        processo = subprocess.run(
-            comando, stdout=saida, stderr=subprocess.STDOUT, timeout=limite_seg, check=False
-        )
+    motivo, codigo, segundos = vigia.executar_com_vigia(
+        comando,
+        arquivo_resultado=arquivo_resultado,
+        arquivo_log=arquivo_log,
+        parar=vigia.parar_container(nome_container),
+        limite_total=limite_seg,
+        limite_primeiro=tratamento.LIMITE_PRIMEIRO_LEAD_MIN * 60,
+        limite_sem_novo=tratamento.LIMITE_SEM_LEAD_NOVO_MIN * 60,
+    )
 
-    itens = ler_resultados(os.path.join(pasta, resultado_nome))
-    if processo.returncode != 0 and not itens:
-        raise RuntimeError(f"scraper saiu com código {processo.returncode}")
-    return itens
+    # Diagnóstico seguro: só números e sim/não.
+    try:
+        with open(arquivo_log, encoding="utf-8", errors="replace") as arquivo:
+            diag = vigia.diagnosticar_log(arquivo.read())
+    except OSError:
+        diag = vigia.diagnosticar_log("")
+    log(f"  {vigia.resumo_diagnostico(motivo, codigo, segundos, diag)}")
+
+    return ler_resultados(arquivo_resultado), motivo, codigo
 
 
 def ler_resultados(caminho):
@@ -241,7 +259,11 @@ def processar_busca(db, doc, inicio_execucao):
 
     pasta = tempfile.mkdtemp(prefix="mapaleads-")
     itens = []
-    falhas = 0
+    falhas = 0     # consultas sem nenhum lead por erro/travamento
+    parciais = 0   # consultas encerradas pela vigia, mas com leads aproveitados
+    limite_consulta = tratamento.limite_consulta_seg(
+        parametros["profundidade"], parametros.get("extrair_email")
+    )
     try:
         for numero, consulta in enumerate(consultas, start=1):
             restante = LIMITE_TOTAL_SEG - (time.time() - inicio_execucao)
@@ -250,15 +272,17 @@ def processar_busca(db, doc, inicio_execucao):
                     f"Tempo limite excedido: a busca foi grande demais para uma execução "
                     f"(parou na consulta {numero} de {total}). Divida em buscas menores."
                 )
+            log(f"Consulta {numero}/{total} iniciada.")
             try:
-                encontrados = rodar_consulta(
-                    consulta, parametros, pasta, min(LIMITE_CONSULTA_SEG, restante - 60)
+                encontrados, motivo, codigo = rodar_consulta(
+                    consulta, parametros, pasta, min(limite_consulta, restante - 60)
                 )
                 itens.extend((e, consulta["termo"]) for e in encontrados)
+                if motivo != vigia.TERMINOU and encontrados:
+                    parciais += 1
+                elif not encontrados and (motivo != vigia.TERMINOU or codigo != 0):
+                    falhas += 1
                 log(f"Consulta {numero}/{total}: {len(encontrados)} lugar(es).")
-            except subprocess.TimeoutExpired:
-                falhas += 1
-                log(f"Consulta {numero}/{total}: tempo limite excedido.")
             except Exception as erro:  # noqa: BLE001 - uma consulta com falha não derruba a busca
                 falhas += 1
                 log(f"Consulta {numero}/{total}: falhou ({type(erro).__name__}).")
@@ -269,7 +293,8 @@ def processar_busca(db, doc, inicio_execucao):
 
     if falhas == total:
         raise ErroBusca(
-            "O extrator falhou em todas as consultas. Pode ser um bloqueio temporário "
+            "O extrator falhou ou travou em todas as consultas, sem trazer nenhum lugar. "
+            "Pode ser um bloqueio temporário "
             "do Google ou instabilidade; tente novamente mais tarde."
         )
 
@@ -277,12 +302,17 @@ def processar_busca(db, doc, inicio_execucao):
     resumo = tratamento.calcular_resumo(leads)
     log(f"{len(itens)} lugar(es) brutos, {len(leads)} após remover duplicados.")
 
-    aviso = ""
+    avisos = []
     if falhas:
-        aviso = f"{falhas} de {total} consulta(s) falharam; o resultado pode estar incompleto."
+        avisos.append(f"{falhas} de {total} consulta(s) falharam.")
+    if parciais:
+        avisos.append(f"{parciais} de {total} consulta(s) encerrada(s) por tempo.")
+    if avisos:
+        avisos.append("O resultado pode estar incompleto.")
     elif not leads:
-        aviso = ("Nenhum lugar encontrado. Confira os termos e a cidade; se persistir, "
-                 "pode ser um bloqueio temporário do Google.")
+        avisos.append("Nenhum lugar encontrado. Confira os termos e a cidade; se persistir, "
+                      "pode ser um bloqueio temporário do Google.")
+    aviso = " ".join(avisos)
 
     gravar_resultado(db, ref, dados, dono, leads, resumo, aviso, time.time() - inicio)
     log("Busca concluída e gravada.")

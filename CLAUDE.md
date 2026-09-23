@@ -48,12 +48,26 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres.
 - Nota 0 do scraper = sem nota → `None`.
 - Inputs do formulário são lidos de `GITHUB_EVENT_PATH` (não aparecem no cabeçalho do log).
 - `firestore.rules` na Fase 1 nega tudo ao navegador.
+- **Vigia de tempo** (`motor/vigia.py`), aprovada pelo Breno após a 1ª execução real travar
+  (run 35865786166, cancelada após ~14 min parada na consulta 1):
+  - Causa provável (lida no código da v1.18.1/scrapemate v1.4.0): o scraper só encerra quando os contadores
+    lugares encontrados = concluídos batem; senão depende do `-exit-on-inactivity`, e mesmo assim espera
+    todos os workers/abas do navegador terminarem (`wg.Wait`) — uma aba travada prende o processo.
+    Além disso, o `subprocess.run(timeout=...)` antigo matava só o cliente `docker`, não o container.
+  - Limite rígido por consulta: rapida 6 / normal 12 / completa 20 min (×2 com e-mail).
+    Encerra também se nenhum lead em 5 min ou 3 min sem lead novo. Parada via `docker stop`/`kill`
+    pelo nome do container; leads já gravados são aproveitados (jsonwriter grava cada lead na hora).
+  - Consulta encerrada com leads → aviso "encerrada por tempo" (status `concluida`); todas sem leads → `erro`.
+  - `DISABLE_TELEMETRY=1` no container (scraper enviava telemetria ao PostHog por padrão).
+  - Diagnóstico no log só com números: motivo de término, código, segundos, etapas ok/falhas
+    (linhas "scrapemate stats"), inatividade sim/não, consentimento sim/não.
 
 ## Estado atual
 - Fase 1 implementada: `motor/`, `.github/workflows/motor.yml`, `.github/workflows/testes.yml`,
-  `firestore.rules`. 26 testes pytest passando (dados fictícios).
-- Pendente: execução real validada pelo Breno após merge na `main` (Run workflow só aparece na branch padrão)
-  e recalibração da tabela de tempos com `duracao_segundos` reais.
+  `firestore.rules`. Vigia de tempo adicionada (PR 2). 35 testes pytest passando (dados fictícios).
+- Firebase e secrets do GitHub já configurados pelo Breno; motor conecta e cria a busca.
+- Pendente: execução real completa após o merge da vigia; recalibrar tabela de tempos com
+  `duracao_segundos` reais e checar o diagnóstico (inatividade/consentimento).
 
 ## Próximos passos (Fase 2 — só após aprovação)
 - Perguntar ao Breno: limite diário padrão por usuário; fuso para "dia" (sugestão America/Fortaleza).
