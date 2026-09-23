@@ -23,6 +23,9 @@ const { default: criarBusca } = await import(funcao("criar-busca"));
 const { default: cancelarBusca } = await import(funcao("cancelar-busca"));
 const { default: adminUsuarios } = await import(funcao("admin-usuarios"));
 const { default: configPublica } = await import(funcao("config-publica"));
+const { default: perfis } = await import(funcao("perfis"));
+const { default: saudeMotor } = await import(funcao("saude-motor"));
+const { acordar } = await import(funcao("despertador"));
 const { firebase } = await import("../netlify/lib/servidor.mjs");
 
 const AUTH = process.env.FIREBASE_AUTH_EMULATOR_HOST;
@@ -204,4 +207,77 @@ test("config pública não expõe segredos", async () => {
   const r = await pedido(configPublica, null, null, "GET");
   assert.deepEqual(r.corpo, { apiKey: "chave-web-publica", authDomain: "demo-mapaleads.firebaseapp.com", projectId: "demo-mapaleads" });
   assert.ok(!JSON.stringify(r.corpo).includes("PRIVATE"));
+});
+
+test("perfis: cada usuário salva, lista, edita e apaga só os próprios", async () => {
+  assert.equal((await pedido(perfis, { acao: "listar" })).status, 401);
+  const perfil = { nome: "Clínicas", termos: "clínica", cidades: ["Natal RN", "Extremoz RN"], profundidade: "rapida", tipo_regiao: "micro", regioes: ["24018"] };
+  const criado = await pedido(perfis, { acao: "salvar", perfil }, tokens.ana);
+  assert.equal(criado.status, 201, JSON.stringify(criado.corpo));
+  assert.equal((await pedido(perfis, { acao: "salvar", perfil: { ...perfil, nome: "" } }, tokens.ana)).status, 400);
+
+  const lista = await pedido(perfis, { acao: "listar" }, tokens.ana);
+  assert.deepEqual(lista.corpo.perfis, [{
+    id: criado.corpo.id, nome: "Clínicas", termos: ["clínica"], cidades: ["Natal RN", "Extremoz RN"],
+    extrair_email: false, profundidade: "rapida", tipo_regiao: "micro", regioes: ["24018"],
+  }]);
+  // Outro usuário não vê nem altera.
+  assert.deepEqual((await pedido(perfis, { acao: "listar" }, tokens.breno)).corpo.perfis, []);
+  assert.equal((await pedido(perfis, { acao: "salvar", perfil: { ...perfil, id: criado.corpo.id } }, tokens.breno)).status, 404);
+  await pedido(perfis, { acao: "apagar", id: criado.corpo.id }, tokens.breno); // apaga só na coleção do breno (nada)
+  assert.equal((await pedido(perfis, { acao: "listar" }, tokens.ana)).corpo.perfis.length, 1);
+
+  const editado = await pedido(perfis, { acao: "salvar", perfil: { ...perfil, id: criado.corpo.id, nome: "Clínicas 2" } }, tokens.ana);
+  assert.equal(editado.status, 200);
+  assert.equal((await pedido(perfis, { acao: "listar" }, tokens.ana)).corpo.perfis[0].nome, "Clínicas 2");
+  assert.equal((await pedido(perfis, { acao: "apagar", id: criado.corpo.id }, tokens.ana)).status, 200);
+  assert.equal((await pedido(perfis, { acao: "listar" }, tokens.ana)).corpo.perfis.length, 0);
+  assert.equal((await pedido(perfis, { acao: "voar" }, tokens.ana)).status, 400);
+});
+
+test("saúde do motor: só admin; resume fila, órfãs e pausas sem expor termos", async () => {
+  const { db } = firebase();
+  assert.equal((await pedido(saudeMotor, {}, tokens.ana)).status, 403);
+  const agora = Date.now();
+  await db.doc("buscas/pausada1").set({ tipo: "rn_filha", mae_id: "m1", status: "na_fila", pausada_ate: new Date(agora + 20 * 60000), parametros: { termos: ["segredo"] } });
+  await db.doc("buscas/orfa1").set({ tipo: "comum", status: "rodando", batimento_em: new Date(agora - 60 * 60000) });
+  const r = await pedido(saudeMotor, {}, tokens.breno);
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.ok(r.corpo.fila.pausadas >= 1);
+  assert.ok(r.corpo.fila.orfas >= 1);
+  assert.ok(r.corpo.fila.rn_em_andamento >= 1);
+  assert.deepEqual(r.corpo.execucoes, { erro: "Token do GitHub não configurado no Netlify." });
+  assert.ok(!JSON.stringify(r.corpo).includes("segredo"));
+  await db.doc("buscas/pausada1").delete();
+  await db.doc("buscas/orfa1").delete();
+});
+
+test("despertador: dispara só quando há trabalho e registra em config/despertador", async () => {
+  const { db } = firebase();
+  // Limpa a fila dos testes anteriores.
+  for (const d of (await db.collection("buscas").get()).docs) await d.ref.delete();
+  const disparos = [];
+  const disparar = async (id) => { disparos.push(id); return true; };
+
+  let r = await acordar({ db, disparar });
+  assert.deepEqual(r, { disparar: false, motivo: "fila_vazia", elegiveis: 0, orfas: 0, disparou: false });
+  assert.equal((await db.doc("config/despertador").get()).data().motivo, "fila_vazia");
+
+  await db.doc("buscas/noite").set({ tipo: "rn_filha", status: "na_fila", agendada_para: new Date(Date.now() + 3600000) });
+  r = await acordar({ db, disparar });
+  assert.equal(r.disparou, false);
+
+  await db.doc("buscas/agora").set({ tipo: "comum", status: "na_fila" });
+  r = await acordar({ db, disparar });
+  assert.equal(r.motivo, "fila_com_trabalho");
+  assert.equal(r.disparou, true);
+  assert.equal(disparos.length, 1);
+
+  await db.doc("buscas/viva").set({ tipo: "comum", status: "rodando", batimento_em: new Date() });
+  r = await acordar({ db, disparar });
+  assert.equal(r.motivo, "motor_rodando");
+  assert.equal(disparos.length, 1);
+  const registro = (await db.doc("config/despertador").get()).data();
+  assert.equal(registro.disparou, false);
+  assert.ok(registro.ultima_execucao);
 });

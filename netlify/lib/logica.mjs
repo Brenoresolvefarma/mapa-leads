@@ -213,3 +213,59 @@ export function inserirNaFila(estado, novos) {
   }
   return { itens, rodando: estado?.rodando || [], aguardando: estado?.aguardando || [] };
 }
+
+// ---------------------------------------------------------------------------
+// Perfis de busca salvos (Fase 3a). Guardados no servidor, por usuário.
+// Limites técnicos (proteção contra abuso, não são regra de negócio).
+export const MAX_PERFIS_POR_USUARIO = 50;
+const MAX_NOME_PERFIL = 60;
+const MAX_CIDADES_PERFIL = 167; // todos os municípios do RN
+
+/** Valida um perfil salvo: nome + os mesmos campos de uma busca comum. */
+export function validarPerfil(corpo) {
+  const nome = String(corpo?.nome ?? "").split(/\s+/).filter(Boolean).join(" ");
+  if (!nome) throw new Error("Dê um nome ao perfil.");
+  if (nome.length > MAX_NOME_PERFIL) throw new Error(`O nome do perfil pode ter no máximo ${MAX_NOME_PERFIL} caracteres.`);
+  const cidadesTexto = Array.isArray(corpo?.cidades) ? corpo.cidades.join(",") : corpo?.cidades;
+  const busca = validarBuscaComum({ ...corpo, cidades: cidadesTexto });
+  if (busca.cidades.length > MAX_CIDADES_PERFIL) throw new Error("Cidades demais no perfil.");
+  const tipoRegiao = corpo?.tipo_regiao === "imediata" ? "imediata" : "micro";
+  const regioes = (Array.isArray(corpo?.regioes) ? corpo.regioes : [])
+    .map((r) => String(r).slice(0, 10)).filter((r) => /^\d+$/.test(r)).slice(0, 30);
+  return { nome, ...busca, tipo_regiao: tipoRegiao, regioes };
+}
+
+// ---------------------------------------------------------------------------
+// Despertador (Netlify Scheduled Function a cada 15 min): rede de segurança caso o
+// agendamento do GitHub atrase ou não dispare. Espelha motor/fila.py (elegivel / órfãs).
+export const MOTOR_VIVO_SEG = 45 * 60; // mesmo prazo de órfã do motor (ORFA_APOS_SEG)
+
+const segundos = (valor) => {
+  if (!valor) return 0;
+  if (typeof valor.toMillis === "function") return valor.toMillis() / 1000;
+  if (valor instanceof Date) return valor.getTime() / 1000;
+  return Number(valor) || 0;
+};
+
+/** A busca pode rodar agora? (na fila, não é mãe, não agendada para depois, não pausada) */
+export function elegivel(dados, agora = new Date()) {
+  if (dados?.status !== "na_fila" || dados?.tipo === "rn_mae") return false;
+  const ts = agora.getTime() / 1000;
+  return segundos(dados.agendada_para) <= ts && segundos(dados.pausada_ate) <= ts;
+}
+
+/**
+ * Decide se o despertador deve disparar o motor.
+ * buscas: documentos com status na_fila ou rodando (sem precisar de termos/cidades).
+ */
+export function decidirDespertar(buscas, agora = new Date()) {
+  const ts = agora.getTime() / 1000;
+  const rodando = buscas.filter((b) => b.status === "rodando" && b.tipo !== "rn_mae");
+  const vivas = rodando.filter((b) => ts - segundos(b.batimento_em || b.iniciada_em) < MOTOR_VIVO_SEG);
+  const orfas = rodando.length - vivas.length;
+  const elegiveis = buscas.filter((b) => elegivel(b, agora)).length;
+  if (vivas.length) return { disparar: false, motivo: "motor_rodando", elegiveis, orfas };
+  if (elegiveis) return { disparar: true, motivo: "fila_com_trabalho", elegiveis, orfas };
+  if (orfas) return { disparar: true, motivo: "busca_orfa", elegiveis, orfas };
+  return { disparar: false, motivo: "fila_vazia", elegiveis, orfas };
+}

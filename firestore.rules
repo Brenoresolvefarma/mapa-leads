@@ -53,7 +53,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Qualquer outra coisa: bloqueada.
+    // Números do dia (painel "Hoje"): {dia}__{uid} o próprio usuário lê; {dia}__geral só o admin.
+    // Só contagens (buscas, leads, com WhatsApp, com telefone), nunca dados de leads.
+    match /estatisticas/{id} {
+      allow read: if admin()
+        || (logado() && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__' + request.auth.uid + '$'));
+      allow write: if false;
+    }
+
+    // Qualquer outra coisa (inclui perfis salvos, métricas e despertador): bloqueada.
+    // Perfis são lidos e gravados só pela Function /api/perfis.
     match /{documento=**} {
       allow read, write: if false;
     }
