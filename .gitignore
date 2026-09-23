@@ -1,0 +1,19 @@
+# Nunca versionar credenciais
+*.json
+!package.json
+!package-lock.json
+.env
+.env.*
+
+# Nunca versionar resultados do scraper
+*.csv
+*.xlsx
+resultados/
+mapaleads-*/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/

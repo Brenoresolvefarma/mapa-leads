@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Regras de segurança do Firestore do MapaLeads.
+//
+// FASE 1: o navegador não tem acesso a NADA.
+// Só o motor (GitHub Actions) grava e lê, usando a conta de serviço
+// (Admin SDK), que ignora estas regras.
+//
+// Na Fase 2 estas regras serão ampliadas para:
+//  - usuário comum ler só as próprias buscas e lotes de leads;
+//  - admin (custom claim admin=true) ler tudo;
+//  - ninguém gravar leads pelo navegador, nunca.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}
