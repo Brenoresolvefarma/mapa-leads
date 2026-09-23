@@ -118,6 +118,9 @@ def finalizar_mae_se_pronta(db, mae_id, gravar_resultado, log):
     mensagem_erro = "Todos os lotes terminaram com erro." if status == "erro" else None
     gravar_resultado(mae_ref, mae, mae.get("dono_uid") or "", leads, resumo, aviso,
                      None, status=status, mensagem_erro=mensagem_erro)
+    if status != "erro":
+        from fila import registrar_estatisticas
+        registrar_estatisticas(db, mae.get("dono_uid"), resumo, log)
     log(f"Busca-mãe consolidada: {len(filhas)} lote(s), {len(leads)} lead(s) sem duplicados.")
     return True
 

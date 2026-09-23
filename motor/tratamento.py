@@ -297,6 +297,7 @@ def montar_lead(entrada, consulta):
         "site": site,
         "instagram": extrair_instagram(site),
         "endereco": (entrada.get("address") or "").strip(),
+        "bairro": (endereco_completo.get("borough") or "").strip(),
         "cidade": (endereco_completo.get("city") or "").strip(),
         "nota": nota,
         "qtd_avaliacoes": qtd,

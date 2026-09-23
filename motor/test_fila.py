@@ -93,3 +93,30 @@ def test_disjuntor_tres_vazias_seguidas():
     for _ in range(3):
         vazias, disparou = fila.aplicar_disjuntor(vazias, False)
     assert disparou
+
+
+# -------------------------------------- disjuntor x porte da cidade (24/09)
+
+def test_cidade_pequena_vazia_nao_conta_nem_zera():
+    pequena = {"cidade": "Viçosa", "texto": "x Viçosa RN"}          # 1.822 hab.
+    assert fila.vazia_conta_para_disjuntor(pequena, falhou=False) is False
+    assert fila.aplicar_disjuntor(2, False, 3, vazia_conta=False) == (2, False)
+
+
+def test_vazia_conta_se_falhou_ou_cidade_grande_ou_bairro():
+    assert fila.vazia_conta_para_disjuntor({"cidade": "Viçosa"}, falhou=True) is True
+    assert fila.vazia_conta_para_disjuntor({"cidade": "Caicó"}, falhou=False) is True  # 61 mil
+    assert fila.vazia_conta_para_disjuntor({"cidade": "Natal", "bairro": "Tirol"}, falhou=False) is True
+    assert fila.vazia_conta_para_disjuntor({"cidade": "Cidade Inventada"}, falhou=False) is True
+
+
+def test_populacao_pelo_nome_sem_acento():
+    assert fila.populacao_da_cidade("Natal") == 751300
+    assert fila.populacao_da_cidade("mossoro") == 264577
+    assert fila.populacao_da_cidade("Assú") == fila.populacao_da_cidade("Açu")
+
+
+def test_dia_fortaleza():
+    from datetime import datetime, timezone
+    assert fila.dia_fortaleza(datetime(2026, 9, 24, 2, 59, tzinfo=timezone.utc)) == "2026-09-23"
+    assert fila.dia_fortaleza(datetime(2026, 9, 24, 3, 0, tzinfo=timezone.utc)) == "2026-09-24"
