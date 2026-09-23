@@ -100,7 +100,7 @@
     <h2>Entrar</h2>
     <label for="le">E-mail</label><input id="le" type="email" autocomplete="username">
     <label for="ls">Senha</label><input id="ls" type="password" autocomplete="current-password">
-    <div class="linha"><button id="entrar">Entrar</button></div>
+    <div class="linha"><button id="entrar" disabled>Entrar</button><span class="suave" id="carregando">Carregando…</span></div>
     <div class="msg" id="msg-login"></div>
   </section>
 
@@ -338,6 +338,9 @@ $("entrar").onclick = async () => {
 };
 $("ls").onkeydown = (ev) => { if (ev.key === "Enter") $("entrar").click(); };
 $("sair").onclick = () => signOut(auth);
+// Só libera o "Entrar" quando a página terminou de carregar (evita clique perdido em internet lenta).
+$("entrar").disabled = false;
+$("carregando").remove();
 
 onAuthStateChanged(auth, async (u) => {
   usuario = u;

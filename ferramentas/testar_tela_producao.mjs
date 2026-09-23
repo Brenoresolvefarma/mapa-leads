@@ -102,9 +102,10 @@ try {
     p.on("console", (m) => { if (m.type() === "error") p.console.push(m.text()); });
     p.on("dialog", (d) => d.accept(d.type() === "prompt" ? "Perfil de teste" : undefined));
     await p.goto(SITE);
+    await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
     await p.fill("#le", u.email); await p.fill("#ls", u.senha); await p.click("#entrar");
     try {
-      await p.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 20000 });
+      await p.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 30000 });
     } catch {
       // Diagnóstico sem dados: mensagem da tela + códigos de erro do Firebase (ex.: auth/...).
       const codigos = [...new Set(p.console.join(" ").match(/(auth|firestore)\/[a-z-]+|HTTP \d{3}|status of \d{3}/g) || [])];

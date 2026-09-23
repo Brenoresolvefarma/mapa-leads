@@ -88,6 +88,7 @@ async function abrir(email, senha) {
   pagina.on("pageerror", (e) => erros.push(e.message));
   pagina.on("dialog", (d) => d.accept(d.type() === "prompt" ? "Clínicas Natal" : undefined));
   await pagina.goto(`${local.url}/?emulador=1`);
+  await pagina.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
   await pagina.fill("#le", email);
   await pagina.fill("#ls", senha);
   await pagina.click("#entrar");
