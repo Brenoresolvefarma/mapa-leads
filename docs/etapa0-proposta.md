@@ -1,7 +1,7 @@
 # Fase 3a v2 · Etapa 0 — proposta para aprovação
 
-Protótipo no ar (deploy preview do PR 12): **https://deploy-preview-12--mapaleads-rn.netlify.app/prototipo.html**
-— entre com o seu login; ele mostra os seus dados reais (só leitura). A tela em uso não muda.
+**Aprovada com ajustes** (visual, mapa, PIB per capita opção b). O protótipo foi substituído pela tela nova completa
+no PR 12: **https://deploy-preview-12--mapaleads-rn.netlify.app/**
 
 ## 1. Proposta visual
 

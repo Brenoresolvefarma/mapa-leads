@@ -13,9 +13,10 @@ import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join } from "node:path";
 import { chromium } from "playwright-core";
+import { medirLargura } from "../testes/rotas-cdn.mjs";
+import { carregarFuncoesLocais, rotearApiLocal } from "./api_local.mjs";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
@@ -25,19 +26,7 @@ const conta = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
 if (!conta.private_key) { console.log("ERRO: secret FIREBASE_SERVICE_ACCOUNT ausente."); process.exit(1); }
 const app = initializeApp({ credential: cert(conta) }, "teste-tela");
 const API_LOCAL = process.env.API_LOCAL === "1";
-const PRODUCAO = "https://mapaleads-rn.netlify.app";
-let funcoesLocais = null;
-if (API_LOCAL) {
-  // Mesmas variáveis que o Netlify usa (a chave com "\n" literal, como colada lá).
-  process.env.FIREBASE_PROJECT_ID = conta.project_id;
-  process.env.FIREBASE_CLIENT_EMAIL = conta.client_email;
-  process.env.FIREBASE_PRIVATE_KEY = conta.private_key.replace(/\n/g, "\\n");
-  funcoesLocais = {};
-  for (const nome of ["criar-busca", "cancelar-busca", "admin-usuarios", "perfis", "saude-motor"]) {
-    const caminho = resolve(".netlify/teste-empacotamento", nome, "netlify/functions", `${nome}.mjs`);
-    funcoesLocais[`/api/${nome}`] = (await import(pathToFileURL(caminho).href)).default;
-  }
-}
+const funcoesLocais = API_LOCAL ? await carregarFuncoesLocais(conta) : null;
 const auth = getAuth(app);
 const db = getFirestore(app);
 const sufixo = randomBytes(4).toString("hex");
@@ -67,7 +56,7 @@ try {
     bairro: "", cidade: "", nota: null, qtd_avaliacoes: null, link_maps: "", termo_que_encontrou: "teste tela", cidade_buscada: "Natal RN",
     cidade_confere: "sim", id_lugar: "", ...x });
   await db.doc(`buscas/${BUSCA}`).set({ tipo: "comum", lista: true, dono_uid: usuarios.comum.uid, dono_email: usuarios.comum.email, status: "concluida",
-    criada_em: new Date(), parametros: { termos: ["teste tela"], cidades: ["Natal RN"] }, qtd_lotes: 1,
+    criada_em: new Date(), finalizada_em: new Date(), parametros: { termos: ["teste tela"], cidades: ["Natal RN"] }, qtd_lotes: 1,
     resumo: { total: 3, com_telefone: 2, com_email: 0, com_site: 1, com_whatsapp: 1, na_cidade_buscada: 2 } });
   await db.doc(`buscas/${BUSCA}/lotes/0`).set({ dono_uid: usuarios.comum.uid, leads: [
     lead({ nome: "Fictício A", telefone: "(84) 90000-0001", whatsapp_link: "https://wa.me/5584900000001", cidade: "Natal", bairro: "Tirol", nota: 4.5, qtd_avaliacoes: 10, id_lugar: "fa" }),
@@ -78,24 +67,11 @@ try {
   await db.doc(`estatisticas/${hoje}__${usuarios.comum.uid}`).set({ dono_uid: usuarios.comum.uid, buscas: 1, leads: 3, com_whatsapp: 1, dia: hoje });
 
   navegador = await chromium.launch({ executablePath: process.env.NAVEGADOR || "/usr/bin/google-chrome" });
-  const abrir = async (u) => {
-    const ctx = await navegador.newContext({ acceptDownloads: true, locale: "pt-BR" });
-    if (API_LOCAL) {
-      await ctx.route(`${SITE}/api/**`, async (rota) => {
-        const req = rota.request();
-        const caminho = new URL(req.url()).pathname;
-        if (caminho === "/api/config-publica") {
-          const r = await fetch(`${PRODUCAO}/api/config-publica`);
-          return rota.fulfill({ status: r.status, contentType: "application/json", body: await r.text() });
-        }
-        const fn = funcoesLocais[caminho];
-        if (!fn) return rota.fulfill({ status: 404, body: "{}" });
-        const resposta = await fn(new Request(`http://local${caminho}`, {
-          method: req.method(), headers: await req.allHeaders(), body: req.method() === "POST" ? req.postData() : undefined,
-        }));
-        return rota.fulfill({ status: resposta.status, contentType: "application/json", body: await resposta.text() });
-      });
-    }
+  const abrir = async (u, viewport = { width: 1366, height: 768 }) => {
+    const ctx = await navegador.newContext({ acceptDownloads: true, locale: "pt-BR", viewport, hasTouch: viewport.width < 500 });
+    // Sem o tour do primeiro acesso.
+    await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
+    if (API_LOCAL) await rotearApiLocal(ctx, SITE, funcoesLocais);
     const p = await ctx.newPage();
     p.erros = [];
     p.console = [];
@@ -106,7 +82,7 @@ try {
     await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
     await p.fill("#le", u.email); await p.fill("#ls", u.senha); await p.click("#entrar");
     try {
-      await p.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 30000 });
+      await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)", { timeout: 30000 });
     } catch {
       // Diagnóstico sem dados: mensagem da tela + códigos de erro do Firebase (ex.: auth/...).
       const codigos = [...new Set(p.console.join(" ").match(/(auth|firestore)\/[a-z-]+|HTTP \d{3}|status of \d{3}/g) || [])];
@@ -115,52 +91,61 @@ try {
     }
     return p;
   };
+  const esperar = (pg, sel, re, timeout = 15000) => pg.waitForFunction(([s, r]) => new RegExp(r).test(document.querySelector(s)?.textContent || ""), [sel, re.source], { timeout });
+  const esperarHash = (pg, h) => pg.waitForFunction((x) => decodeURIComponent(location.hash) === x, h, { timeout: 15000 });
 
   // ---------- usuário comum
   const p = await abrir(usuarios.comum);
-  await etapa("login e painel Hoje (cota)", async () => {
-    await p.waitForFunction(() => document.querySelector("#h-cota").textContent !== "–", null, { timeout: 15000 });
-    confere(/^0 \/ \d+$/.test(await p.textContent("#h-cota")), "cota");
-    confere(!(await p.isVisible("#aba-admin")), "aba admin visível para comum");
+  await etapa("login e Início (cota, leads da semana, % WhatsApp)", async () => {
+    await esperar(p, "#cota-txt", /^0 de \d+$/);
+    confere(!(await p.locator("#menu [data-ir=admin]").count()), "menu admin visível para comum");
+    await esperar(p, "#kpis", /Leads da semana\s*i?3/);
+    confere(/Com WhatsApp\s*i?33%/.test(await p.textContent("#kpis")), "% WhatsApp");
   });
-  await etapa("painel Hoje (leads da semana, regra de estatisticas)", async () => {
-    await p.waitForFunction(() => document.querySelector("#h-leads").textContent !== "–" || /Não foi possível/.test(document.querySelector("#h-geral").textContent), null, { timeout: 15000 });
-    if (/permission-denied/.test(await p.textContent("#h-geral"))) {
-      throw new Error("permission-denied: publique o firestore.rules novo no console do Firebase");
-    }
-    confere(await p.textContent("#h-leads") === "3", "leads da semana");
-    confere(await p.textContent("#h-whats") === "33%", "% WhatsApp");
+  await etapa("cartão 'Leads da semana' abre Meus leads filtrado", async () => {
+    await p.click("#kpis [data-detalhe=semana]");
+    await esperar(p, "#conta", /^4 de 4 leads$/);
+    confere(/Últimos 7 dias/.test(await p.textContent("#chips")), "chip do período");
+    await p.click("#trilha-leads a");
+    await esperarHash(p, "#inicio");
   });
   await etapa("nova busca: região, cidades e estimativa", async () => {
-    await p.click("nav [data-aba=nova]");
+    await p.click("[data-ir=nova]");
+    await p.fill("#termo-input", "teste tela"); await p.press("#termo-input", "Enter");
+    await p.click("[data-passo-conteudo='1'] [data-ir-passo='2']");
     await p.check("#regioes input[data-regiao='24018']");
-    await p.uncheck("#cidades input[data-cidade='Extremoz']");
-    await p.fill("#termos", "teste tela");
-    await p.selectOption("#prof", "rapida");
-    await p.waitForFunction(() => /Estimativa: 2 consulta/.test(document.querySelector("#estimativa").textContent), null, { timeout: 15000 });
+    await p.uncheck("#lista-cidades input[data-cidade='Extremoz']");
+    await p.click("[data-passo-conteudo='2'] [data-ir-passo='3']");
+    await p.check("input[name=prof][value=rapida]");
+    await esperar(p, "#r-consultas", /^2$/);
   });
   await etapa("perfil salvo, carregado e apagado", async () => {
+    await p.click("#passos [data-passo='1']");
     await p.click("#perfil-salvar");
-    await p.waitForFunction(() => document.querySelector("#msg-nova").textContent === "Perfil salvo.", null, { timeout: 15000 });
+    await p.waitForFunction(() => document.querySelector("#perfil-sel").value !== "", null, { timeout: 15000 });
     const id = await p.inputValue("#perfil-sel");
+    await p.click("#passos [data-passo='2']");
     await p.click("#limpar-cidades");
+    await p.click("#passos [data-passo='1']");
     await p.selectOption("#perfil-sel", ""); await p.selectOption("#perfil-sel", id);
-    confere(await p.locator("#cidades input:checked").count() === 2, "cidades do perfil");
+    await p.click("#passos [data-passo='2']");
+    confere(await p.locator("#lista-cidades input:checked").count() === 2, "cidades do perfil");
+    await p.click("#passos [data-passo='1']");
     await p.click("#perfil-apagar");
-    await p.waitForFunction(() => document.querySelector("#msg-nova").textContent === "Perfil apagado.", null, { timeout: 15000 });
+    await p.waitForFunction(() => document.querySelector("#perfil-sel").value === "", null, { timeout: 15000 });
   });
-  await etapa("leads: tabela, filtro padrão e ficha", async () => {
-    await p.click("nav [data-aba=buscas]");
-    await p.click(`[data-ver='${BUSCA}']`);
-    await p.waitForFunction(() => /de 4 leads/.test(document.querySelector("#leads-contagem").textContent), null, { timeout: 15000 });
-    confere(await p.textContent("#leads-contagem") === "2 de 4 leads", "filtros 'só do segmento' e 'só da cidade pedida'");
+  await etapa("leads: busca clicada no Início, filtro padrão e ficha", async () => {
+    await p.click("[data-ir=inicio]");
+    await p.click(`#ultimas .busca-item[data-ver-busca='${BUSCA}'] >> text=Natal RN`);
+    await esperar(p, "#conta", /^2 de 4 leads$/);
     confere(/1 lead\(s\) fora do segmento/.test(await p.textContent("#segmento-info")), "contador de fora do segmento");
-    await p.locator("#tabela-leads tbody tr", { hasText: "Fictício A" }).locator("td").first().click();
-    await p.waitForSelector("#ficha[open]");
-    confere(/Microrregião\s*Natal/.test(await p.textContent("#ficha-dados")), "ficha");
-    await p.click("#ficha-fechar");
+    await p.locator("#tabela-leads tbody tr", { hasText: "Fictício A" }).locator("td").nth(1).click();
+    await p.waitForSelector("#ficha:not(.oculto)");
+    confere(/Microrregião\s*Natal/.test(await p.textContent("#ficha")), "ficha");
+    await p.click("#ficha [data-fechar]");
   });
   await etapa("download .csv e .xlsx (SheetJS do CDN oficial)", async () => {
+    await p.selectOption("#f-cidade", "Natal");
     const [csv] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-csv")]);
     confere(csv.suggestedFilename() === `teste-tela-natal-${hoje}.csv`, `nome do csv: ${csv.suggestedFilename().replace(/[^a-z0-9.-]/gi, "")}`);
     confere(readFileSync(await csv.path(), "utf8").trim().split("\r\n").length === 3, "linhas do csv");
@@ -170,16 +155,37 @@ try {
     const xml = execFileSync("unzip", ["-p", join(pasta, "t.xlsx")], { encoding: "utf8" });
     confere(xml.includes("cidade_confere") && !xml.includes("id_lugar") && xml.includes("Fictício A"), "conteúdo do xlsx");
   });
+  await etapa("mapa (Leaflet do CDN): RN › Natal › Natal pelo painel e categoria → tabela", async () => {
+    await p.click("[data-ir=mapa]");
+    await p.waitForSelector("#mapa-painel [data-ir-micro='24018']", { timeout: 20000 });
+    await p.click("#mapa-painel [data-ir-micro='24018']");
+    await esperarHash(p, "#mapa/natal");
+    await p.click("#mapa-painel [data-ir-mun='2408102']");
+    await esperarHash(p, "#mapa/natal/natal");
+    await esperar(p, "#migalhas", /RN\s*›\s*Natal\s*›\s*Natal/);
+    confere(await p.locator("#mapa-leaflet .leaflet-tile-loaded").count() > 0, "mosaicos do mapa de fundo não carregaram");
+    const cat = p.locator("#mapa-painel [data-categoria]").first();
+    const n = (await cat.locator(".num").textContent()).trim();
+    await cat.click();
+    await esperar(p, "#conta", new RegExp(`^${n} de 4 leads$`));
+  });
+  await etapa("mercado (Chart.js do CDN): ranking → mapa e gráfico desenhado", async () => {
+    await p.click("[data-ir=mercado]");
+    await p.waitForSelector("#ranking tr[data-cod='2408102']", { timeout: 20000 });
+    await p.waitForFunction(() => window.Chart?.getChart(document.querySelector("#graf-micro")), null, { timeout: 20000 });
+    await p.click("#ranking tr[data-cod='2408102']");
+    await esperarHash(p, "#mapa/natal/natal");
+  });
   if (process.env.MODO === "criar_e_cancelar") {
     await etapa("Buscar de verdade e cancelar pela tela", async () => {
-      await p.click("nav [data-aba=nova]");
+      await p.click("[data-ir=nova]");
+      await p.click("#passos [data-passo='3']");
       await p.click("#buscar");
-      await p.waitForFunction(() => /Busca criada/.test(document.querySelector("#msg-nova").textContent), null, { timeout: 20000 });
+      await esperarHash(p, "#inicio");
       const snap = await db.collection("buscas").where("dono_uid", "==", usuarios.comum.uid).where("status", "in", ["na_fila", "rodando"]).get();
       confere(snap.size === 1, "busca criada no banco");
       criadas.push(snap.docs[0].id);
-      await p.click("nav [data-aba=buscas]");
-      await p.click(`[data-cancelar='${snap.docs[0].id}']`);
+      await p.click(`#ultimas [data-cancelar='${snap.docs[0].id}']`);
       await new Promise((r) => setTimeout(r, 4000));
       const st = (await db.doc(`buscas/${snap.docs[0].id}`).get()).data();
       confere(st.status === "cancelada" || st.cancelar_solicitado === true, "cancelamento");
@@ -187,30 +193,44 @@ try {
   }
   await etapa("sem erros de JavaScript (comum)", async () => confere(!p.erros.length, `${p.erros.length} erro(s)`));
 
+  // ---------- celular (390 px): nada passa da largura da tela
+  const c = await abrir(usuarios.comum, { width: 390, height: 844 });
+  await etapa("celular 390 px: largura da página = largura da tela em todas as telas", async () => {
+    for (const pag of ["inicio", "nova", "leads", "mapa", "mercado"]) {
+      await c.evaluate((h) => { location.hash = h; }, `#${pag}`);
+      await c.waitForSelector(`[data-pagina=${pag}]:not(.oculto)`);
+      await c.waitForTimeout(1500);
+      const m = await medirLargura(c);
+      confere(m.rolagem === m.largura && !m.fora.length, `#${pag}: ${m.rolagem}px > ${m.largura}px`);
+    }
+  });
+  await etapa("sem erros de JavaScript (celular)", async () => confere(!c.erros.length, `${c.erros.length} erro(s)`));
+
   // ---------- admin temporário
   const a = await abrir(usuarios.admin);
   await etapa("admin: saúde do motor com execuções do GitHub", async () => {
-    await a.click("#aba-admin");
-    await a.waitForFunction(() => /Últimas execuções/.test(document.querySelector("#saude").textContent), null, { timeout: 20000 });
+    await a.click("#menu [data-ir=admin]");
+    await a.waitForFunction(() => /Últimas execuções|Token do GitHub|Não foi possível/.test(document.querySelector("#saude").textContent), null, { timeout: 20000 });
     const txt = await a.textContent("#saude");
     confere(!/Token do GitHub|GitHub respondeu|Não foi possível consultar/.test(txt), "execuções do GitHub indisponíveis");
     confere(await a.locator("#saude table tr").count() > 1, "lista de execuções vazia");
   });
-  await etapa("admin: usuários e estimativa do RN inteiro", async () => {
-    await a.waitForSelector("#u-tabela tr:nth-child(2)", { timeout: 15000 });
+  await etapa("admin: usuários e estimativa do Estado inteiro", async () => {
+    await a.waitForSelector("#u-tabela tbody tr:nth-child(2)", { timeout: 15000 });
     await a.fill("#rn-termos", "teste");
     await a.click("#rn-estimar");
-    await a.waitForFunction(() => /249 consultas/.test(document.querySelector("#msg-rn").textContent), null, { timeout: 15000 });
+    await esperar(a, "#msg-rn", /249 consultas/);
   });
   await etapa("sem erros de JavaScript (admin)", async () => confere(!a.erros.length, `${a.erros.length} erro(s)`));
   await etapa("troca de usuário na mesma aba: admin sai, comum entra, nada do admin aparece", async () => {
+    await a.click("#avatar");
     await a.click("#sair");
-    await a.waitForSelector("#login:not(.oculto) #entrar:not([disabled])", { timeout: 30000 });
+    await a.waitForSelector("#tela-login:not(.oculto) #entrar:not([disabled])", { timeout: 30000 });
     await a.fill("#le", usuarios.comum.email); await a.fill("#ls", usuarios.comum.senha); await a.click("#entrar");
-    await a.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 30000 });
-    await a.waitForFunction(() => document.querySelector("#h-cota").textContent !== "–", null, { timeout: 15000 });
-    confere(!(await a.isVisible("#selo")) && !(await a.isVisible("#aba-admin")), "selo/menu admin visível para usuário comum");
-    confere((await a.textContent("#email")) === usuarios.comum.email, "usuário errado na tela");
+    await a.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)", { timeout: 30000 });
+    await esperar(a, "#cota-txt", /\d de \d+/);
+    confere(!(await a.isVisible("#selo")) && !(await a.locator("#menu [data-ir=admin]").count()), "selo/menu admin visível para usuário comum");
+    confere((await a.textContent("#menu-email")) === usuarios.comum.email, "usuário errado na tela");
   });
 } catch (e) {
   falhas++;

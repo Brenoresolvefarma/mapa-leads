@@ -270,6 +270,15 @@ def id_do_lugar(entrada):
     return f"cid:{cid}" if cid else ""
 
 
+def _coordenada(valor):
+    """Número de latitude/longitude válido, ou None (0 ou vazio = sem coordenada)."""
+    try:
+        v = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return v if v and -180 <= v <= 180 else None
+
+
 def montar_lead(entrada, consulta):
     """Converte um item da saída JSON do scraper no formato de lead do MapaLeads."""
     consulta = _como_consulta(consulta)
@@ -304,6 +313,9 @@ def montar_lead(entrada, consulta):
         "nota": nota,
         "qtd_avaliacoes": qtd,
         "link_maps": (entrada.get("link") or "").strip(),
+        # Coordenadas do Google (o scraper grava "longtitude", com erro de digitação): para o mapa.
+        "latitude": _coordenada(entrada.get("latitude")),
+        "longitude": _coordenada(entrada.get("longitude", entrada.get("longtitude"))),
         "termo_que_encontrou": consulta.get("termo") or "",
         # Campos da Fase 2:
         "cidade_buscada": consulta.get("cidade") or "",

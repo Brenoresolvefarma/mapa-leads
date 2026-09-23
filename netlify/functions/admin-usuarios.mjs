@@ -37,6 +37,17 @@ async function listar(auth, db) {
   ]);
   const perfis = new Map(docs.docs.map((d) => [d.id, d.data()]));
   const hoje = diaFortaleza();
+  // Uso da semana por vendedor: estatisticas/{dia}__{uid} dos últimos 7 dias (7 leituras por usuário).
+  const dias = Array.from({ length: 7 }, (_, i) => diaFortaleza(new Date(Date.now() - i * 86400000)));
+  const refs = contas.users.flatMap((u) => dias.map((d) => db.doc(`estatisticas/${d}__${u.uid}`)));
+  const stats = refs.length ? await db.getAll(...refs) : [];
+  const semana = new Map();
+  for (const s of stats) {
+    if (!s.exists) continue;
+    const x = s.data(), uid = x.dono_uid, atual = semana.get(uid) || { buscas: 0, leads: 0, com_whatsapp: 0 };
+    atual.buscas += x.buscas || 0; atual.leads += x.leads || 0; atual.com_whatsapp += x.com_whatsapp || 0;
+    semana.set(uid, atual);
+  }
   const usuarios = contas.users.map((u) => {
     const p = perfis.get(u.uid) || {};
     perfis.delete(u.uid);
@@ -47,6 +58,7 @@ async function listar(auth, db) {
       admin: u.customClaims?.admin === true,
       limite_diario: Number.isInteger(p.limite_diario) ? p.limite_diario : null,
       buscas_hoje: p.dia === hoje ? p.contagem_dia || 0 : 0,
+      semana: semana.get(u.uid) || { buscas: 0, leads: 0, com_whatsapp: 0 },
       removido: false,
     };
   });

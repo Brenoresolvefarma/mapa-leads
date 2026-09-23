@@ -20,8 +20,11 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.2",
     "@netlify/zip-it-and-ship-it": "16.0.0",
+    "chart.js": "4.4.1",
     "firebase": "12.19.0",
     "firebase-tools": "15.30.2",
+    "leaflet": "1.9.4",
+    "leaflet.markercluster": "1.5.3",
     "playwright-core": "1.63.0"
   }
 }
