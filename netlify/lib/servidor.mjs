@@ -7,16 +7,56 @@ import { getFirestore } from "firebase-admin/firestore";
 
 let firestoreConfigurado = false;
 
+/**
+ * Normaliza a chave privada colada no Netlify. Aceita os jeitos comuns de colar:
+ * com "\n" literais, com quebras de linha reais, com aspas nas pontas, com a linha
+ * inteira `"private_key": "..."` ou até o JSON completo da conta de serviço.
+ */
+export function normalizarChavePrivada(bruta) {
+  let chave = String(bruta ?? "").trim();
+  if (chave.startsWith("{")) {
+    try {
+      chave = String(JSON.parse(chave).private_key ?? chave);
+    } catch {
+      /* não era JSON completo */
+    }
+  }
+  chave = chave.replace(/^"?private_key"?\s*:\s*/, "").replace(/,\s*$/, "").trim();
+  while (/^(["']).*\1$/s.test(chave)) chave = chave.slice(1, -1).trim();
+  return chave.replace(/\\r\\n|\\n/g, "\n").replace(/\r\n/g, "\n");
+}
+
+/** Descreve o FORMATO da chave (nunca o conteúdo) para uma mensagem de erro útil. */
+export function descreverFormatoDaChave(bruta) {
+  const texto = String(bruta ?? "");
+  const chave = normalizarChavePrivada(texto);
+  const partes = [
+    `tamanho ${texto.length}`,
+    `começa com BEGIN PRIVATE KEY: ${chave.startsWith("-----BEGIN PRIVATE KEY-----") ? "sim" : "não"}`,
+    `termina com END PRIVATE KEY: ${/-----END PRIVATE KEY-----\s*$/.test(chave) ? "sim" : "não"}`,
+    `linhas: ${chave.split("\n").length}`,
+  ];
+  return partes.join(", ");
+}
+
 export function firebase() {
   if (!getApps().length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    // O Netlify guarda a chave com "\n" literais: convertemos para quebras de linha.
-    const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+    const projectId = (process.env.FIREBASE_PROJECT_ID || "").trim();
+    const clientEmail = (process.env.FIREBASE_CLIENT_EMAIL || "").trim().replace(/^"|"$/g, "");
+    const bruta = process.env.FIREBASE_PRIVATE_KEY || "";
+    const privateKey = normalizarChavePrivada(bruta);
     if (!projectId || !clientEmail || !privateKey) {
       throw new ErroHttp(500, "Servidor sem credenciais do Firebase configuradas.");
     }
-    initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+    try {
+      initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+    } catch (erro) {
+      // Mensagem acionável para o admin, sem expor a chave (só o formato).
+      console.error("Credencial do Firebase inválida:", JSON.stringify({ codigo: erro?.code, formato: descreverFormatoDaChave(bruta) }));
+      throw new ErroHttp(500,
+        "Credencial do Firebase inválida no Netlify (FIREBASE_PRIVATE_KEY / FIREBASE_CLIENT_EMAIL). " +
+        `Formato recebido: ${descreverFormatoDaChave(bruta)}.`);
+    }
   }
   const db = getFirestore();
   if (!firestoreConfigurado) {

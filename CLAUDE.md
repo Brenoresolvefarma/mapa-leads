@@ -13,7 +13,9 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
 - Nunca colocar tokens/chaves/senhas no código (secrets do GitHub / env vars do Netlify).
 - Código simples, comentado em português.
 - Ao fim de cada fase: atualizar README.md e CLAUDE.md; passar passo a passo de configuração.
-- Trabalhar na branch designada, abrir PR para `main` e **nunca fazer merge sozinho** (o Breno faz).
+- Trabalhar na branch designada e abrir PR para `main`. **Merge (regra de 24/09):** posso fazer merge sozinho
+  quando o CI estiver verde E o teste real em produção passar (ex.: workflow "Diagnosticar Functions" /
+  "Verificar Functions" contra https://mapaleads-rn.netlify.app). Sem isso, o Breno faz o merge.
 - Repositório PÚBLICO: nunca logar dados de leads, termos, cidades, UID ou tokens; sem upload-artifact;
   sem commit de CSV/JSON de resultados; temporários apagados do runner.
 - Só dados reais (IBGE oficial + leads coletados); nada estimado apresentado como dado.
@@ -96,6 +98,11 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   (o log antigo só registrava "Error"); REST tira o gRPC/HTTP2 do caminho (recomendação do Google p/ serverless).
   Hipótese "OpenTelemetry global da extensão de observabilidade do Netlify" testada localmente: NÃO reproduziu.
   O handler agora loga nome/código/mensagem do erro e devolve `codigo` no 500.
+  **Causa real encontrada depois (PR 6):** `codigo: app/invalid-credential` — o `cert()` não conseguia ler a
+  `FIREBASE_PRIVATE_KEY` como colada no Netlify (o erro acontecia ao iniciar o Firebase, ANTES de verificar o
+  token; por isso "sem login" dava 401 e a config-publica funcionava). `normalizarChavePrivada()` aceita
+  "\n" literal, quebras reais, aspas, a linha `"private_key": ...` e o JSON inteiro; se ainda for inválida,
+  o 500 diz o FORMATO recebido (começa/termina com BEGIN/END, nº de linhas), nunca o conteúdo.
   Workflow manual "Diagnosticar Functions" (login de teste temporário, só `simular`) testa produção de ponta a ponta.
 - **Netlify**: credencial do Firebase em 3 variáveis (limite de tamanho das env vars de Functions);
   token GitHub fine-grained só com Actions RW. Config web pública via `/api/config-publica`.
