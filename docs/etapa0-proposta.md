@@ -1,6 +1,6 @@
 # Fase 3a v2 · Etapa 0 — proposta para aprovação
 
-Protótipo no ar (deploy preview do PR 10): **https://deploy-preview-10--mapaleads-rn.netlify.app/prototipo.html**
+Protótipo no ar (deploy preview do PR 12): **https://deploy-preview-12--mapaleads-rn.netlify.app/prototipo.html**
 — entre com o seu login; ele mostra os seus dados reais (só leitura). A tela em uso não muda.
 
 ## 1. Proposta visual
