@@ -1,5 +1,6 @@
 # TEMPORÁRIO: baixa do IBGE (API oficial de localidades) a microrregião e a região
-# geográfica imediata de cada município do RN e imprime no log. Removido antes do merge.
+# geográfica imediata de cada município do RN e grava dados/microrregioes_rn.json.
+# Removido antes do merge.
 import gzip, json, urllib.request
 
 def get(url):
@@ -11,12 +12,28 @@ def get(url):
     return json.loads(dados.decode("utf-8"))
 
 muns = get("https://servicodados.ibge.gov.br/api/v1/localidades/estados/24/municipios")
-saida = []
+micros, imeds = {}, {}
 for m in muns:
-    micro = m.get("microrregiao") or {}
-    imed = m.get("regiao-imediata") or {}
-    saida.append({"c": str(m["id"]), "mi": str(micro.get("id")), "mn": micro.get("nome"),
-                  "ii": str(imed.get("id")), "in": imed.get("nome")})
-print("===REGIOES===")
-print(json.dumps(saida, ensure_ascii=False, separators=(",", ":")))
-print("===FIM===")
+    micro = m["microrregiao"]
+    imed = m["regiao-imediata"]
+    micros.setdefault(str(micro["id"]), {"id": str(micro["id"]), "nome": micro["nome"], "municipios": []})
+    imeds.setdefault(str(imed["id"]), {"id": str(imed["id"]), "nome": imed["nome"], "municipios": []})
+    micros[str(micro["id"])]["municipios"].append(str(m["id"]))
+    imeds[str(imed["id"])]["municipios"].append(str(m["id"]))
+
+def ordenar(d):
+    lista = sorted(d.values(), key=lambda r: r["nome"])
+    for r in lista:
+        r["municipios"].sort()
+    return lista
+
+saida = {
+    "fonte": "IBGE: API de Localidades (servicodados.ibge.gov.br/api/v1/localidades/estados/24/municipios), "
+             "campos microrregiao e regiao-imediata. Coletado em 2026-09-23.",
+    "microrregioes": ordenar(micros),
+    "regioes_imediatas": ordenar(imeds),
+}
+with open("dados/microrregioes_rn.json", "w", encoding="utf-8") as f:
+    json.dump(saida, f, ensure_ascii=False, indent=1)
+    f.write("\n")
+print(f"municipios={len(muns)} microrregioes={len(micros)} regioes_imediatas={len(imeds)}")
