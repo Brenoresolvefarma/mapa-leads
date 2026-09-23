@@ -502,3 +502,23 @@ test("admin: Admin com saúde do motor, usuários e Estado inteiro; sair e entra
   assert.deepEqual(erros, []);
   await p.context().close();
 });
+
+test("config-publica instável: tenta de novo; se não voltar, mostra 'Tentar de novo' (nunca fica em Carregando…)", async () => {
+  for (const falhas of [1, 99]) {
+    const ctx = await navegador.newContext({ locale: "pt-BR" });
+    await rotearCdn(ctx);
+    let chamadas = 0;
+    await ctx.route(`${local.url}/api/config-publica`, (rota) => (++chamadas <= falhas ? rota.fulfill({ status: 500, body: "{}" }) : rota.continue()));
+    const p = await ctx.newPage();
+    await p.goto(`${local.url}/?emulador=1`);
+    if (falhas === 1) {
+      await p.waitForSelector("#entrar:not([disabled])", { timeout: 20000 });
+      assert.equal(chamadas, 2);
+    } else {
+      await p.waitForFunction(() => /Não foi possível conectar/.test(document.querySelector("#msg-login")?.textContent || ""), null, { timeout: 20000 });
+      assert.ok(await p.isVisible("#msg-login button"));
+      assert.equal(chamadas, 3);
+    }
+    await ctx.close();
+  }
+});

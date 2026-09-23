@@ -43,6 +43,14 @@ jobs:
                    "https://mapaleads-rn.netlify.app/" "https://mapaleads-rn.netlify.app/api/config-publica"; do
             echo "$(curl -s -o /dev/null -w '%{http_code}' "$u")  $u"
           done
+          # config-publica da produção 15 vezes: código, tempo e, se não for 200, o começo do texto do erro
+          # (a resposta 200 não é impressa; o erro nunca tem dados).
+          for i in $(seq 1 15); do
+            r=$(curl -s -w '\n%{http_code} %{time_total}s' https://mapaleads-rn.netlify.app/api/config-publica)
+            cod=$(echo "$r" | tail -1)
+            case "$cod" in 200*) echo "$i: $cod";; *) echo "$i: $cod $(echo "$r" | head -1 | tr -d '\n' | cut -c1-160)";; esac
+            sleep 2
+          done
       - name: Empacotar as Functions como no Netlify
         run: node testes/empacotar.mjs
       - name: Teste real da tela no preview (API local)

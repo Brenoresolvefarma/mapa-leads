@@ -904,12 +904,32 @@ aplicarTema(params.get("tema") || ler("mapaleads.tema", "auto"));
 $("#tema").onclick = (ev) => { const t = ev.target.dataset.tema; if (!t) return; guardar("mapaleads.tema", t); aplicarTema(t); if (M.mapa) M.mapa.remove(), (M.mapa = null), irPara(); };
 
 // ============================================================ DADOS FIXOS DO IBGE (cacheados pelo navegador)
-const pegar = (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); });
-const [config, municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson] = await Promise.all([
-  pegar("/api/config-publica"), pegar("/dados/municipios_rn.json"), pegar("/dados/microrregioes_rn.json"),
-  pegar("/dados/malha_rn_municipio_minima.geojson.json"), pegar("/dados/malha_rn_microrregiao_minima.geojson.json"),
-  pegar("/dados/ibge_rn_indicadores.json"),
-]);
+// Até 3 tentativas (1 s e 2 s de espera): o servidor às vezes falha na primeira chamada (Function "fria").
+async function pegar(u, tentativas = 3) {
+  for (let i = 1; ; i++) {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      if (i >= tentativas) throw e;
+      await new Promise((ok) => setTimeout(ok, 1000 * i));
+    }
+  }
+}
+let config, municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson;
+try {
+  [config, municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson] = await Promise.all([
+    pegar("/api/config-publica"), pegar("/dados/municipios_rn.json"), pegar("/dados/microrregioes_rn.json"),
+    pegar("/dados/malha_rn_municipio_minima.geojson.json"), pegar("/dados/malha_rn_microrregiao_minima.geojson.json"),
+    pegar("/dados/ibge_rn_indicadores.json"),
+  ]);
+} catch (e) {
+  // Nunca fica parado em "Carregando…": explica e oferece tentar de novo.
+  $("#tela-login").classList.remove("oculto");
+  $("#msg-login").innerHTML = `Não foi possível conectar ao servidor agora. <button class="btn btn-sec btn-mini" onclick="location.reload()">Tentar de novo</button>`;
+  throw e;
+}
 const IND = ibgeJson.indicadores;
 const porCodigo = new Map(municipiosJson.municipios.map((m) => [m.codigo_ibge, { codigo: m.codigo_ibge, nome: m.nome, ind: ibgeJson.municipios[m.codigo_ibge] || {} }]));
 const REGIOES = { micro: regioesJson.microrregioes, imediata: regioesJson.regioes_imediatas };
