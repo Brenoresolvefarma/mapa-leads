@@ -36,6 +36,13 @@ jobs:
             sleep 10
           done
           echo "preview não ficou pronto"; exit 1
+      - name: Diagnóstico (só códigos HTTP)
+        if: always()
+        run: |
+          for u in "$PREVIEW/" "$PREVIEW/dados/ibge_rn_indicadores.json" "$PREVIEW/api/config-publica" \
+                   "https://mapaleads-rn.netlify.app/" "https://mapaleads-rn.netlify.app/api/config-publica"; do
+            echo "$(curl -s -o /dev/null -w '%{http_code}' "$u")  $u"
+          done
       - name: Empacotar as Functions como no Netlify
         run: node testes/empacotar.mjs
       - name: Teste real da tela no preview (API local)

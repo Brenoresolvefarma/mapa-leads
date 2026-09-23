@@ -79,7 +79,10 @@ try {
     p.on("console", (m) => { if (m.type() === "error") p.console.push(m.text()); });
     p.on("dialog", (d) => d.accept(d.type() === "prompt" ? "Perfil de teste" : undefined));
     await p.goto(SITE);
-    await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+    await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 }).catch((e) => {
+      // Diagnóstico sem dados: só a primeira linha dos erros de JavaScript da página.
+      throw new Error(`a tela de login não ficou pronta; erros JS: ${p.erros.map((x) => x.split("\n")[0].slice(0, 120)).join(" | ") || "nenhum"}`);
+    });
     await p.fill("#le", u.email); await p.fill("#ls", u.senha); await p.click("#entrar");
     try {
       await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)", { timeout: 30000 });
