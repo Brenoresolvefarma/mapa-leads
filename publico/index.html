@@ -423,7 +423,9 @@ $("entrar").onclick = async () => {
 };
 $("ls").onkeydown = (ev) => { if (ev.key === "Enter") $("entrar").click(); };
 // Sair: cancela os listeners, sai e RECARREGA a página (nada do usuário anterior fica em memória).
+let saindo = false;
 $("sair").onclick = async () => {
+  saindo = true;
   pararLista?.(); pararFila?.();
   try { await signOut(auth); } finally { location.reload(); }
 };
@@ -435,6 +437,7 @@ $("carregando").remove();
 // assim leads, buscas, perfis, filtros, cache e "admin" do usuário anterior nunca aparecem para o próximo.
 let uidDaPagina = null;
 onAuthStateChanged(auth, async (u) => {
+  if (saindo) return; // o botão Sair já recarrega a página
   if (uidDaPagina && (u?.uid || null) !== uidDaPagina) {
     pararLista?.(); pararFila?.();
     document.body.innerHTML = "";

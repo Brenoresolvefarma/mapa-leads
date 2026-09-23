@@ -63,7 +63,7 @@ try {
     u.uid = (await auth.createUser({ email: u.email, password: u.senha })).uid;
     if (papel === "admin") await auth.setCustomUserClaims(u.uid, { admin: true });
   }
-  const lead = (x) => ({ nome: "", categoria: "Teste", telefone: "", whatsapp_link: "", email: "", site: "", instagram: "", endereco: "Endereço fictício",
+  const lead = (x) => ({ nome: "", categoria: "Serviço de teste tela", telefone: "", whatsapp_link: "", email: "", site: "", instagram: "", endereco: "Endereço fictício",
     bairro: "", cidade: "", nota: null, qtd_avaliacoes: null, link_maps: "", termo_que_encontrou: "teste tela", cidade_buscada: "Natal RN",
     cidade_confere: "sim", id_lugar: "", ...x });
   await db.doc(`buscas/${BUSCA}`).set({ tipo: "comum", lista: true, dono_uid: usuarios.comum.uid, dono_email: usuarios.comum.email, status: "concluida",
@@ -73,6 +73,7 @@ try {
     lead({ nome: "Fictício A", telefone: "(84) 90000-0001", whatsapp_link: "https://wa.me/5584900000001", cidade: "Natal", bairro: "Tirol", nota: 4.5, qtd_avaliacoes: 10, id_lugar: "fa" }),
     lead({ nome: "Fictício B", telefone: "(84) 3000-0002", site: "https://example.com", cidade: "Natal", id_lugar: "fb" }),
     lead({ nome: "Fictício C", cidade: "Parnamirim", cidade_confere: "nao", id_lugar: "fc" }),
+    lead({ nome: "Fictício Fora", categoria: "Loja de materiais de construção", cidade: "Natal", id_lugar: "fd" }),
   ] });
   await db.doc(`estatisticas/${hoje}__${usuarios.comum.uid}`).set({ dono_uid: usuarios.comum.uid, buscas: 1, leads: 3, com_whatsapp: 1, dia: hoje });
 
@@ -151,8 +152,9 @@ try {
   await etapa("leads: tabela, filtro padrão e ficha", async () => {
     await p.click("nav [data-aba=buscas]");
     await p.click(`[data-ver='${BUSCA}']`);
-    await p.waitForFunction(() => /de 3 leads/.test(document.querySelector("#leads-contagem").textContent), null, { timeout: 15000 });
-    confere(await p.textContent("#leads-contagem") === "2 de 3 leads", "filtro 'só da cidade pedida'");
+    await p.waitForFunction(() => /de 4 leads/.test(document.querySelector("#leads-contagem").textContent), null, { timeout: 15000 });
+    confere(await p.textContent("#leads-contagem") === "2 de 4 leads", "filtros 'só do segmento' e 'só da cidade pedida'");
+    confere(/1 lead\(s\) fora do segmento/.test(await p.textContent("#segmento-info")), "contador de fora do segmento");
     await p.locator("#tabela-leads tbody tr", { hasText: "Fictício A" }).locator("td").first().click();
     await p.waitForSelector("#ficha[open]");
     confere(/Microrregião\s*Natal/.test(await p.textContent("#ficha-dados")), "ficha");
@@ -201,6 +203,15 @@ try {
     await a.waitForFunction(() => /249 consultas/.test(document.querySelector("#msg-rn").textContent), null, { timeout: 15000 });
   });
   await etapa("sem erros de JavaScript (admin)", async () => confere(!a.erros.length, `${a.erros.length} erro(s)`));
+  await etapa("troca de usuário na mesma aba: admin sai, comum entra, nada do admin aparece", async () => {
+    await a.click("#sair");
+    await a.waitForSelector("#login:not(.oculto) #entrar:not([disabled])", { timeout: 30000 });
+    await a.fill("#le", usuarios.comum.email); await a.fill("#ls", usuarios.comum.senha); await a.click("#entrar");
+    await a.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 30000 });
+    await a.waitForFunction(() => document.querySelector("#h-cota").textContent !== "–", null, { timeout: 15000 });
+    confere(!(await a.isVisible("#selo")) && !(await a.isVisible("#aba-admin")), "selo/menu admin visível para usuário comum");
+    confere((await a.textContent("#email")) === usuarios.comum.email, "usuário errado na tela");
+  });
 } catch (e) {
   falhas++;
   console.log(`FALHOU  preparação: ${String(e?.message || e).split("\n")[0].slice(0, 160)}`);

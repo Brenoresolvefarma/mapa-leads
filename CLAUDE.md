@@ -149,6 +149,23 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   `7,22,37,52 * * * *` + **despertador** (Netlify Scheduled Function `*/15`, plano Free): lê buscas na_fila e
   rodando (só campos de controle), dispara o motor só se houver elegível (mesma regra de `elegivel`) ou órfã
   (> 45 min sem batimento) e nada vivo; grava `config/despertador`.
+- **Sessão (bug corrigido no PR 11)**: sair com admin e entrar com usuário comum na MESMA aba mostrava selo/menu
+  admin e leads do admin (estado em memória; o Firestore não vazava). Agora: "Sair" cancela listeners e recarrega a
+  página; qualquer troca de uid no `onAuthStateChanged` também recarrega; "admin" nunca é herdado (só a claim do token
+  recém-atualizado). Teste no Chromium cobre admin → sair → comum na mesma aba; servidor recusa ações de admin (403).
+- **Relevância do segmento (PR 11, pedido do Breno)**: o Google devolve "parecidos" em cidade pequena (busca HOME CARE
+  em 30 cidades: 406 leads, só 50 do segmento e só 7 nas cidades pedidas). Cada lead é **marcado** (nunca apagado)
+  como `no_segmento` sim/não, na tela: termo + sinônimos + categorias aceitas comparados com nome e categoria do Google
+  (sem acento/maiúsculas; frase = todas as palavras; plural só em palavras de 5+ letras). Filtro **"Só do segmento"
+  ligado** com contador "x fora do segmento escondidos – ver"; filtro de **Categorias do Google** com contagem,
+  busca, marcar/desmarcar, "Só as ✓" e "Guardar no perfil" (`perfis` ação `salvar_categorias` → `categorias_aceitas`).
+  **Sinônimos**: dicionário curto no bloco `<relevancia>` do `index.html` (testado por `testes/relevancia.test.mjs`),
+  sugeridos e editáveis na Nova busca; guardados na busca (`parametros.sinonimos`, `parametros.categorias_aceitas` —
+  só marcam, não mudam as consultas) e no perfil; opção "Buscar também pelos sinônimos" (desligada; soma consultas).
+  Buscas antigas sem sinônimos usam as sugestões do dicionário. Motor grava `categorias` (lista do Google) em cada lead.
+  Exportação ganhou `categorias` e `no_segmento`.
+- **Sem cidade (PR 11)**: com "Só da cidade pedida" ligado, leads sem cidade no endereço também ficam escondidos
+  (antes apareciam), com a opção "Mostrar leads sem cidade".
 - **Testes da tela**: `npm run test:tela` (Playwright + Chromium contra emuladores; SDK do Firebase servido do
   node_modules; `.xlsx` real só no CI com `TESTAR_XLSX=1`). Produção: workflow manual "Testar tela em
   produção" (logins temporários comum+admin, busca fictícia, tudo apagado). Com `api_local=true` testa o
@@ -163,6 +180,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   2º teste: login ok, criar-busca 500 no acesso ao Firestore → PR 5 (Firestore via REST + log detalhado + diagnóstico).
 - PRs 5–8: Firestore REST, chave privada normalizada, diagnóstico criar_e_cancelar — Fase 2 validada em produção.
 - **Fase 3a (PR 9)**: tela definitiva + perfis + saúde do motor + despertador + disjuntor novo + estatísticas.
+- **PR 11**: bug de sessão corrigido + relevância do segmento (categorias, sinônimos, sem cidade).
+- **Fase 3a v2 (tela nova)**: Etapa 0 (proposta, protótipo `publico/prototipo.html`, fontes do IBGE conferidas, preview de
+  link) no PR 10, **pausado** para o PR 11 passar antes; volta num PR novo, aguardando aprovação do Breno.
   Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 
