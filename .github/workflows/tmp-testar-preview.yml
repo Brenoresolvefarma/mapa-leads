@@ -1,5 +1,5 @@
 # TEMPORÁRIO (removido antes do merge): roda "Testar tela em produção" no deploy preview do PR 9
-# com as Functions deste commit no runner (api_local), porque workflow_dispatch só vale na main. (tentativa 2)
+# com as Functions deste commit no runner (api_local), porque workflow_dispatch só vale na main. (tentativa 3)
 name: TMP testar preview
 on:
   push:

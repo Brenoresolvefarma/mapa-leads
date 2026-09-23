@@ -116,12 +116,18 @@ try {
 
   // ---------- usuário comum
   const p = await abrir(usuarios.comum);
-  await etapa("login e painel Hoje", async () => {
-    await p.waitForFunction(() => document.querySelector("#h-leads").textContent !== "–", null, { timeout: 15000 });
-    confere(await p.textContent("#h-leads") === "3", "leads da semana");
-    confere(await p.textContent("#h-whats") === "33%", "% WhatsApp");
+  await etapa("login e painel Hoje (cota)", async () => {
+    await p.waitForFunction(() => document.querySelector("#h-cota").textContent !== "–", null, { timeout: 15000 });
     confere(/^0 \/ \d+$/.test(await p.textContent("#h-cota")), "cota");
     confere(!(await p.isVisible("#aba-admin")), "aba admin visível para comum");
+  });
+  await etapa("painel Hoje (leads da semana, regra de estatisticas)", async () => {
+    await p.waitForFunction(() => document.querySelector("#h-leads").textContent !== "–" || /Não foi possível/.test(document.querySelector("#h-geral").textContent), null, { timeout: 15000 });
+    if (/permission-denied/.test(await p.textContent("#h-geral"))) {
+      throw new Error("permission-denied: publique o firestore.rules novo no console do Firebase");
+    }
+    confere(await p.textContent("#h-leads") === "3", "leads da semana");
+    confere(await p.textContent("#h-whats") === "33%", "% WhatsApp");
   });
   await etapa("nova busca: região, cidades e estimativa", async () => {
     await p.click("nav [data-aba=nova]");

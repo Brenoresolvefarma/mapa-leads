@@ -366,29 +366,31 @@ async function carregarHoje() {
     const x = d.data() || {};
     return { leads: t.leads + (x.leads || 0), whats: t.whats + (x.com_whatsapp || 0), buscas: t.buscas + (x.buscas || 0) };
   }, { leads: 0, whats: 0, buscas: 0 });
+  // Cota e estatísticas carregam separadas: se uma falhar, a outra aparece mesmo assim.
   try {
-    const [meus, perfil, geral] = await Promise.all([
-      Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__${usuario.uid}`)))),
-      getDoc(doc(db, `usuarios/${usuario.uid}`)),
-      getDoc(doc(db, "config/geral")),
-    ]);
-    const s = somar(meus);
-    $("h-leads").textContent = numero(s.leads);
-    $("h-leads-det").textContent = `${s.buscas} busca(s) concluída(s)`;
-    $("h-whats").textContent = s.leads ? `${Math.round((100 * s.whats) / s.leads)}%` : "–";
-    $("h-whats-det").textContent = s.leads ? `${numero(s.whats)} de ${numero(s.leads)} leads` : "sem leads na semana";
+    const [perfil, geral] = await Promise.all([getDoc(doc(db, `usuarios/${usuario.uid}`)), getDoc(doc(db, "config/geral"))]);
     const p = perfil.data() || {};
     const usadas = p.dia === dias[0] ? p.contagem_dia || 0 : 0;
     const limite = Number.isInteger(p.limite_diario) ? p.limite_diario : (geral.data()?.limite_padrao ?? 20);
     $("h-cota").textContent = `${usadas} / ${limite}`;
     $("h-cota-det").textContent = `restam ${Math.max(0, limite - usadas)} busca(s) hoje${ehAdmin ? " · RN inteiro não conta" : ""}`;
+  } catch (e) {
+    $("h-cota-det").textContent = `não foi possível ler a cota (${e.code || e.message})`;
+  }
+  try {
+    const s = somar(await Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__${usuario.uid}`)))));
+    $("h-leads").textContent = numero(s.leads);
+    $("h-leads-det").textContent = `${s.buscas} busca(s) concluída(s)`;
+    $("h-whats").textContent = s.leads ? `${Math.round((100 * s.whats) / s.leads)}%` : "–";
+    $("h-whats-det").textContent = s.leads ? `${numero(s.whats)} de ${numero(s.leads)} leads` : "sem leads na semana";
     if (ehAdmin) {
       const todos = somar(await Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__geral`)))));
       $("h-geral").textContent = `Todos os usuários (7 dias): ${numero(todos.leads)} leads em ${todos.buscas} busca(s), ` +
         `${todos.leads ? Math.round((100 * todos.whats) / todos.leads) : 0}% com WhatsApp.`;
     }
   } catch (e) {
-    $("h-geral").textContent = `Não foi possível carregar os números (${e.code || e.message}).`;
+    $("h-leads-det").textContent = $("h-whats-det").textContent = "indisponível";
+    $("h-geral").textContent = `Não foi possível carregar os números da semana (${e.code || e.message}).`;
   }
   desenharFilaHoje();
 }
