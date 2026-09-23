@@ -52,12 +52,29 @@ try {
 
   const corpo = JSON.stringify({ termos: "diagnostico", cidades: "Natal RN", profundidade: "rapida", simular: true });
 
-  // 2) Firestore direto (Admin SDK aqui no runner).
+  // 2) Firestore direto (Admin SDK aqui no runner, gRPC) — app separado para não misturar configurações.
   try {
-    const doc = await getFirestore(app).doc("config/metricas").get();
+    const appGrpc = initializeApp({ credential: cert(conta) }, "diagnostico-grpc");
+    const doc = await getFirestore(appGrpc).doc("config/metricas").get();
     log(`Firestore direto (runner): ok, config/metricas existe=${doc.exists}`);
   } catch (erro) {
     log(`Firestore direto (runner): ERRO code=${erro.code} msg=${erro.message}`);
+    resultado = 1;
+  }
+
+  // 2b) Transação via REST (como as Functions fazem agora) num documento de teste, apagado em seguida.
+  try {
+    const dbRest = getFirestore(app);
+    dbRest.settings({ preferRest: true });
+    const ref = dbRest.doc("diagnostico/transacao");
+    await dbRest.runTransaction(async (t) => {
+      const atual = await t.get(ref);
+      t.set(ref, { n: (atual.data()?.n || 0) + 1 });
+    });
+    await ref.delete();
+    log("Firestore via REST (runner): transação ok");
+  } catch (erro) {
+    log(`Firestore via REST (runner): ERRO code=${erro.code} msg=${erro.message}`);
     resultado = 1;
   }
 

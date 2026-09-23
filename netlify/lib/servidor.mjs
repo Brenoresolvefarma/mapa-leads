@@ -5,6 +5,8 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+let firestoreConfigurado = false;
+
 export function firebase() {
   if (!getApps().length) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -16,7 +18,15 @@ export function firebase() {
     }
     initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
   }
-  return { auth: getAuth(), db: getFirestore() };
+  const db = getFirestore();
+  if (!firestoreConfigurado) {
+    // Firestore via REST (HTTP/1.1) em vez de gRPC (HTTP/2): recomendado pelo Google para
+    // ambientes serverless e evita a camada gRPC no runtime das Functions do Netlify.
+    // (Só "ouvir em tempo real" exige gRPC, e as Functions não usam isso.)
+    db.settings({ preferRest: true });
+    firestoreConfigurado = true;
+  }
+  return { auth: getAuth(), db };
 }
 
 export class ErroHttp extends Error {
