@@ -2,7 +2,7 @@
 #  - pytest: tratamento, vigia e fila do motor;
 #  - node: lógica das Netlify Functions (limite diário, RN inteiro, fila);
 #  - emuladores do Firebase: regras de segurança do Firestore, Functions (login + banco)
-#    e o motor inteiro com scraper falso. Nada disso toca no Firebase de verdade.
+#    o motor inteiro com scraper falso e a TELA no Chrome. Nada disso toca no Firebase de verdade.
 name: Testes
 
 on:
@@ -27,7 +27,7 @@ jobs:
 
   node-e-emuladores:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -53,3 +53,8 @@ jobs:
         run: npm run test:empacotadas
       - name: Motor contra o emulador (scraper falso)
         run: npm run test:motor
+      - name: Tela no Chrome contra os emuladores (inclui .xlsx com o SheetJS do CDN oficial)
+        env:
+          NAVEGADOR: /usr/bin/google-chrome
+          TESTAR_XLSX: "1"
+        run: npm run test:tela

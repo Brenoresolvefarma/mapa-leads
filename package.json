@@ -11,7 +11,8 @@
     "test:regras": "firebase emulators:exec --only firestore --project demo-mapaleads \"node --test testes/regras.test.mjs\"",
     "test:funcoes": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/funcoes.test.mjs\"",
     "test:motor": "firebase emulators:exec --only firestore --project demo-mapaleads \"cd motor && python -m pytest -q test_integracao_emulador.py\"",
-    "test:empacotadas": "node testes/empacotar.mjs && FUNCOES_EMPACOTADAS=.netlify/teste-empacotamento firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --no-experimental-require-module --test --test-concurrency=1 testes/funcoes.test.mjs\""
+    "test:empacotadas": "node testes/empacotar.mjs && FUNCOES_EMPACOTADAS=.netlify/teste-empacotamento firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --no-experimental-require-module --test --test-concurrency=1 testes/funcoes.test.mjs\"",
+    "test:tela": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/tela.test.mjs\""
   },
   "dependencies": {
     "firebase-admin": "13.10.0"
@@ -20,6 +21,7 @@
     "@firebase/rules-unit-testing": "5.0.2",
     "@netlify/zip-it-and-ship-it": "16.0.0",
     "firebase": "12.19.0",
-    "firebase-tools": "15.30.2"
+    "firebase-tools": "15.30.2",
+    "playwright-core": "1.63.0"
   }
 }

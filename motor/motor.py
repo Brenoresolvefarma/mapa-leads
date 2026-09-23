@@ -329,6 +329,7 @@ class Motor:
                 self.pausar_entre_consultas()
                 log(f"Consulta {indice + 1}/{total} iniciada.")
                 encontrados = []
+                falhou = True  # consulta com erro ou cortada pela vigia (sinal para o disjuntor)
                 try:
                     encontrados, motivo, codigo, segundos = rodar_consulta(
                         consulta, extrair_email, pasta, limite, f"q{indice}"
@@ -336,6 +337,7 @@ class Motor:
                     self.duracoes[tratamento.chave_metrica(consulta["profundidade"], extrair_email)].append(segundos)
                     resultado["itens"].extend((e, consulta) for e in encontrados)
                     normal = motivo in vigia.MOTIVOS_NORMAIS
+                    falhou = not normal or (motivo == vigia.TERMINOU and codigo not in (0, None))
                     if encontrados and not normal:
                         resultado["parciais"] += 1  # vigia cortou, mas aproveitamos os leads
                     elif not encontrados and (not normal or (motivo == vigia.TERMINOU and codigo not in (0, None))):
@@ -352,7 +354,7 @@ class Motor:
                     "batimento_em": firestore.SERVER_TIMESTAMP,
                 })
                 if depois:
-                    resultado["parada"] = depois(indice, encontrados)
+                    resultado["parada"] = depois(indice, encontrados, falhou)
                     if resultado["parada"]:
                         break
         finally:
@@ -424,6 +426,7 @@ class Motor:
         else:
             status, aviso = "concluida", self.montar_aviso(resultado, total, leads)
         gravar_resultado(ref, dados, dono, leads, resumo, aviso, time.time() - inicio, status=status)
+        fila.registrar_estatisticas(self.db, dono, resumo, log)
         log(f"Busca {status} e gravada.")
 
     # ------------------------------------------------ RN inteiro (lote)
@@ -480,8 +483,9 @@ class Motor:
                 return "cancelada"
             return None
 
-        def depois(indice, encontrados):
-            vazias, disparou = fila.aplicar_disjuntor(estado["vazias"], bool(encontrados), DISJUNTOR_VAZIAS)
+        def depois(indice, encontrados, falhou):
+            conta = fila.vazia_conta_para_disjuntor(consultas[indice], falhou)
+            vazias, disparou = fila.aplicar_disjuntor(estado["vazias"], bool(encontrados), DISJUNTOR_VAZIAS, conta)
             estado["vazias"] = vazias
             mae_ref.update({
                 "consultas_feitas": firestore.Increment(1),

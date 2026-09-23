@@ -1,15 +1,23 @@
 # CLAUDE.md — contexto do projeto MapaLeads
 
 ## O que é
-Sistema multiusuário de prospecção B2B via Google Maps para o Breno (prospecção comercial, RN).
-Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e "RN inteiro" (só admin).
+Sistema multiusuário de prospecção B2B via Google Maps para o Breno (prospecção comercial; começou no RN,
+vai para os **9 estados do Nordeste** — ver "Fase 3 — Nordeste"). Admin (Breno) + usuários comuns.
+Buscas sob demanda: termos e cidades livres, e "RN inteiro" (só admin; vira "Estado inteiro").
+Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita aprovada pelo Breno).
 
 ## Regras de trabalho combinadas com o Breno
 - Mostrar o plano e esperar autorização antes de criar/alterar arquivos.
 - Perguntar quando algo for ambíguo; **não definir valores de negócio** sem perguntar.
-- **Custo ZERO obrigatório**: só repo público (Actions grátis), Firebase **Spark** (sem cartão, sem Blaze,
-  sem Cloud Functions), Netlify Free. Qualquer coisa que exija plano pago: avisar antes e propor alternativa.
+- **Custo: priorizar SEMPRE a cota gratuita; custo acima dela só com aprovação prévia do Breno.**
+  Atualização do Breno: o projeto Firebase `mapaleads` foi migrado para o plano **Blaze** (conta de faturamento
+  RESOLVE FARMA) com **alerta de orçamento de R$ 20/mês**. Continua: repo público (Actions grátis), Netlify Free.
+  Qualquer recurso que possa gerar custo acima da cota gratuita (Cloud Functions, Storage, leituras/gravações
+  além da cota, outro serviço pago) → **avisar e esperar aprovação antes** de implementar, com a estimativa
+  de custo e a alternativa gratuita. **Motor continua no GitHub Actions até a Fase 4.**
 - Respeitar a cota grátis do Firestore (50 mil leituras / 20 mil gravações por dia) no motor e na tela.
+  Atenção: no Blaze, passar da cota **cobra** (não bloqueia mais como no Spark), e o alerta de orçamento
+  só AVISA — não corta o gasto. Por isso os limites de leitura/gravação do código continuam valendo.
 - Nunca colocar tokens/chaves/senhas no código (secrets do GitHub / env vars do Netlify).
 - Código simples, comentado em português.
 - Ao fim de cada fase: atualizar README.md e CLAUDE.md; passar passo a passo de configuração.
@@ -21,11 +29,12 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
 - Só dados reais (IBGE oficial + leads coletados); nada estimado apresentado como dado.
 
 ## Arquitetura
-1. Tela HTML single-file (CDN) no Netlify — Fase 3 (hoje: `publico/index.html` = página de TESTE da Fase 2).
+1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a feita**).
 2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
-3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/admin-usuarios`, `/api/config-publica`):
-   guardam token do GitHub e credencial admin do Firebase; validam ID token (checkRevoked) — **Fase 2 (feito)**.
-4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` */15) — Fases 1 e 2 (feito).
+3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
+   `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
+   Firebase; validam ID token (checkRevoked) — Fases 2 e 3a (feito).
+4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify.
 5. Banco: Firestore.
 
 ## Decisões tomadas
@@ -68,8 +77,11 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   Com paralelo (desligado), órfã após 45 min sem `batimento_em`.
 - **2 motores em paralelo**: código pronto, DESLIGADO (`MOTOR_PARALELO: "false"`). Ligar só após semanas
   sem sinais de bloqueio (e mudar o `concurrency` do workflow).
-- **Disjuntor**: 3 consultas seguidas sem nenhum lead no RN → pausa de 30 min (mãe + filhas na fila com
-  `pausada_ate`), consultas restantes voltam à fila. Município pequeno sem resultado também conta.
+- **Disjuntor**: 3 consultas "vazias" seguidas no RN → pausa de 30 min (mãe + filhas na fila com
+  `pausada_ate`), consultas restantes voltam à fila. **Vazia (regra de 24/09, feita na 3a)** = sem lead E
+  (scraper com falha/erro — motivo da vigia fora do fim normal ou código de erro — OU cidade > 20 mil hab.
+  no Censo 2022; bairros de Natal/Mossoró/Parnamirim contam como > 20 mil). Cidade pequena vazia sem falha
+  é **neutra**: não conta e NÃO zera a sequência (só lead encontrado zera). **Aprovado pelo Breno** (PR 9).
 - **Agendar para a noite**: 22h America/Fortaleza (= 01h UTC).
 - **Cancelar**: dono ou admin. Na fila → cancelada; rodando → `cancelar_solicitado` e o motor para antes
   da próxima consulta, guardando os leads parciais. Mãe → filhas na fila canceladas, mãe consolidada.
@@ -108,11 +120,39 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   token GitHub fine-grained só com Actions RW. Config web pública via `/api/config-publica`.
 - Datas na tela sempre em America/Fortaleza.
 
-## Pendente para o próximo PR (decidido pelo Breno em 24/09)
-- **Disjuntor**: cidade pequena sem resultado NÃO conta como sinal de bloqueio. Só contar consulta vazia se
-  o scraper também teve falha/erro (motivo da vigia ≠ fim normal, ou código de erro) OU se a cidade tem
-  mais de 20 mil habitantes (Censo 2022). Consultas por bairro (Natal/Mossoró/Parnamirim) contam como > 20 mil.
-- Somar a isso o que aparecer no teste real da Fase 2.
+### Fase 3a (tela definitiva)
+- **Abas**: Hoje | Nova busca | Buscas | Leads | Admin (só com a claim). Tema claro/escuro automático.
+- **Hoje**: minhas buscas na fila/rodando + fila geral; leads dos últimos 7 dias (fuso Fortaleza) e % com
+  WhatsApp, lidos de `estatisticas/{dia}__{uid}` (admin também `{dia}__geral`); cota do dia (`usuarios/{uid}`
+  + `config/geral`). O motor soma as estatísticas ao concluir busca comum e ao consolidar a mãe (2 gravações).
+  Regra: `{dia}__{uid}` o dono lê (por ID, mesmo sem documento); resto só admin.
+- **Regiões**: `dados/microrregioes_rn.json` (API de Localidades do IBGE: 19 microrregiões + 11 regiões
+  imediatas, cada uma com os códigos dos municípios; coletado por workflow temporário, removido).
+  A escolha micro/imediata é uma só (guardada no navegador) e vale para Nova busca, filtro e coluna da tabela.
+  Cidades enviadas como "Nome RN" em ordem alfabética; cidades fora do RN em texto livre.
+- **Perfis salvos**: `usuarios/{uid}/perfis/{id}` só pela Function `/api/perfis` (listar/salvar/apagar);
+  máx. 50 por usuário e nome até 60 caracteres (aprovado pelo Breno). Regras bloqueiam leitura direta.
+- **Leads**: 1 ou várias buscas juntas (1 leitura por lote), sem duplicados (id_lugar → nome+telefone,
+  termos juntados; se algum dos repetidos confere a cidade, fica "sim"). Região do lead = cidade do
+  ENDEREÇO (sem cidade = em branco; nada inferido). "Só da cidade pedida" (ligado) esconde só
+  `cidade_confere = nao` (os "indefinido" continuam — aprovado pelo Breno). Filtros: região, cidade com contagem, WhatsApp,
+  sem site (nem site nem Instagram), nota mínima, nome. Tabela mostra 300 por vez. Ficha no clique.
+- **Exportar**: .xlsx (SheetJS 0.20.3 do cdn.sheetjs.com, carregado só no clique) e .csv (`;` + BOM, nota com
+  vírgula), respeitando os filtros. Colunas: nome, categoria, telefone, whatsapp_link, email, site, instagram,
+  endereco, bairro, cidade, microrregiao, regiao_imediata, nota, qtd_avaliacoes, link_maps,
+  termo_que_encontrou, cidade_buscada, cidade_confere (sem id_lugar). Nome: filtro de cidade → cidade;
+  RN inteiro → RN; cidades pedidas = todas de uma região (do tipo escolhido) → região; 1 cidade → cidade;
+  senão varias-cidades. Segmento = até 3 termos em slug. Data = hoje em Fortaleza.
+- **Admin**: saúde do motor (`/api/saude-motor`: últimas 15 execuções do motor.yml via token do GitHub,
+  despertador, fila, pausadas, agendadas, órfãs, métricas, números de hoje), RN inteiro, usuários/cota/uso.
+- **Agendamento**: o `*/15` do GitHub nunca disparou (0 execuções por schedule). Cron re-registrado em
+  `7,22,37,52 * * * *` + **despertador** (Netlify Scheduled Function `*/15`, plano Free): lê buscas na_fila e
+  rodando (só campos de controle), dispara o motor só se houver elegível (mesma regra de `elegivel`) ou órfã
+  (> 45 min sem batimento) e nada vivo; grava `config/despertador`.
+- **Testes da tela**: `npm run test:tela` (Playwright + Chromium contra emuladores; SDK do Firebase servido do
+  node_modules; `.xlsx` real só no CI com `TESTAR_XLSX=1`). Produção: workflow manual "Testar tela em
+  produção" (logins temporários comum+admin, busca fictícia, tudo apagado). Com `api_local=true` testa o
+  **deploy preview** de um PR com as Functions do commit rodando no runner (o preview não tem os secrets).
 
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
@@ -121,14 +161,42 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
 - Configuração da Fase 2 feita pelo Breno (site: https://mapaleads-rn.netlify.app). 1º teste real: login falhou
   (502 em /api/config-publica, ERR_REQUIRE_ESM) → corrigido no PR 4 (firebase-admin 13.10.0).
   2º teste: login ok, criar-busca 500 no acesso ao Firestore → PR 5 (Firestore via REST + log detalhado + diagnóstico).
-- Pendente: validação real
-  (busca comum pela página, limite, 403 no RN para usuário comum, preempção durante RN, cancelamento).
+- PRs 5–8: Firestore REST, chave privada normalizada, diagnóstico criar_e_cancelar — Fase 2 validada em produção.
+- **Fase 3a (PR 9)**: tela definitiva + perfis + saúde do motor + despertador + disjuntor novo + estatísticas.
+  Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 
-## Pendências da Fase 3 (não implementar antes)
-- Tela definitiva single-file (login, nova busca, minhas buscas com filtro "só da cidade pedida" ligado
-  por padrão, tabela de leads, download .xlsx no navegador `segmento-cidade-data.xlsx` / `segmento-RN-data.xlsx`
-  com coluna `cidade_confere`, painel admin).
+## Fase 3 — Nordeste (decisão do Breno; próximo PR depois da 3a — apresentar plano antes de implementar)
+- O sistema **não pode ficar travado no RN**. **UF vira campo** em buscas (parâmetros e consultas), leads
+  (`uf`), regiões, filtros, estatísticas e nomes de arquivo (`segmento-UF-data` no lugar de `segmento-RN-data`).
+- Carregar municípios e microrregiões (e regiões imediatas) dos **9 estados do Nordeste** (AL, BA, CE, MA, PB,
+  PE, PI, RN, SE) pela **API oficial de Localidades do IBGE** em `dados/ibge_nordeste.json` (coleta por workflow
+  temporário, como no RN; o proxy do ambiente de dev bloqueia o IBGE).
+- Tela: seletor **Estado → Microrregião → Cidade** (mantendo micro/imediata e o desmarcar cidade a cidade).
+- **"RN inteiro" vira "Estado inteiro"** (só admin, bloqueado no servidor; não conta no limite diário).
+- **Só os estados que o Breno ativar** aparecem na tela: lista de UFs ativas numa config (ex.: `config/geral.ufs_ativas`,
+  gravada só pelo servidor/admin) e conferida também no servidor ao criar busca.
+- Cuidados já identificados: nomes de município repetidos entre estados (ex.: Santa Cruz RN/PE, "Santa Luzia")
+  → cidade sempre identificada por **código IBGE + UF**; `cidade_confere` passa a comparar cidade **e** UF;
+  dedup continua por id_lugar. Dados atuais do RN (buscas/leads sem `uf`) contam como RN.
+- **Decisão do Breno (após o PR 9): por enquanto SÓ O RN ativo.** Deixar a estrutura pronta — campo UF,
+  cidade por código IBGE + UF, config de estados ativos (só `RN` ligado) — sem ativar outro estado.
+- **Adiado para quando o Breno for ativar outro estado** (perguntar nessa hora, não antes): (1) faixas de
+  profundidade por população (Censo 2022, SIDRA t4709) fora do RN — mesmas do RN?; (2) quais capitais/cidades
+  grandes por bairro (malha de bairros IBGE CD2022) e a partir de qual população; (3) limite ou aviso de tempo
+  para estados grandes (ex.: BA, 417 municípios, muitas horas por termo). "Estado inteiro" de outra UF só
+  depois dessas respostas.
+- Fase 3c (Oportunidades x IBGE, mapa) passa a valer por estado.
+
+## Fase 3b (registrada, NÃO implementar antes de aprovar)
+- **Enriquecimento por CNPJ** (Receita Federal, Dados Abertos do CNPJ): baixar/filtrar só o RN no GitHub
+  Actions; casar lead ↔ estabelecimento por telefone, por nome + município e por CEP; mostrar selo de
+  **confiança** do casamento; **nunca mostrar sócios**. Custo zero (arquivos públicos + Actions).
+- **Pontuação de leads (lead scoring)**: regras e pesos definidos pelo Breno (perguntar antes).
+- **Mini-CRM**: status do lead (ex.: novo / contatado / negociando / cliente / descartado) — gravação só
+  pelo servidor (Function), respeitando a cota do Firestore.
+
+## Fase 3c (registrada, NÃO implementar antes de aprovar)
 - **Aba "Oportunidades x IBGE"** (pedido do Breno em 23/09): cruza os leads de um segmento com dados do IBGE
   por município do RN — qtd de leads, leads por 10 mil habitantes, % com WhatsApp, destaque de cidades com
   poucos estabelecimentos para o tamanho da população (possível mercado pouco atendido). Tabela ordenável +
@@ -137,3 +205,25 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   leads coletados), nada estimado. **Antes de implementar: perguntar ao Breno quais indicadores do IBGE usar
   (população, PIB per capita, etc.) e a fonte exata de cada um.** A malha geográfica do mapa também
   precisa de fonte oficial (IBGE) — confirmar com ele.
+- **Relatório de mercado em PDF** gerado no navegador (mesmas regras: só dados reais, fontes citadas).
+
+## Fase 4 — Comercialização (registrada; NÃO implementar agora)
+Objetivo do Breno: vender o sistema por **assinatura de R$ 19,99/mês**.
+**Antes de começar a Fase 4: apresentar ao Breno a análise de custo x receita por nº de clientes, para ele decidir.**
+- **Cadastro público** (hoje só o admin cria usuários) com confirmação de e-mail.
+- **Cobrança recorrente**: Asaas, Mercado Pago ou Stripe (comparar taxas por transação/Pix/boleto/cartão,
+  webhooks, split, custo fixo) — escolha do Breno.
+- **Bloqueio de acesso por assinatura vencida** (conferido no servidor em toda Function, não só na tela;
+  status da assinatura atualizado por webhook do meio de pagamento).
+- **Plano de cotas por assinante** (buscas/dia, profundidade, e-mail, estados liberados, "Estado inteiro"?) —
+  valores de negócio definidos pelo Breno.
+- **Política de privacidade (LGPD) e termos de uso**: base legal para tratar dados de estabelecimentos,
+  direitos do titular, retenção/exclusão, encarregado (DPO), uso aceitável.
+- **Migração de infraestrutura**: motor **fora do GitHub Actions gratuito** (uso comercial e escala: ex.
+  VPS/Cloud Run/fila própria), Firebase **Blaze** (já ativo) com cotas e alertas, Netlify (limites do Free),
+  repositório possivelmente privado (Actions deixa de ser ilimitado).
+- **Estimativa de custo mensal por nº de clientes** (ex.: 10 / 50 / 100 / 500): execução do motor (horas de
+  máquina por busca medidas em `config/metricas`), leituras/gravações do Firestore, Functions, e-mail,
+  taxas do meio de pagamento e impostos → margem por assinante x R$ 19,99.
+- Riscos a apresentar junto com a análise: termos de uso do Google Maps para coleta automatizada, bloqueios
+  por volume maior (IPs/proxies), e responsabilidade sobre os dados vendidos.

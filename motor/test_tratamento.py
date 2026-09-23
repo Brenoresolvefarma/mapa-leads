@@ -112,6 +112,7 @@ def test_montar_lead_campos_completos():
         "site": "https://ficticia.example",
         "instagram": "",
         "endereco": "Rua Exemplo, 100 - Natal, RN",
+        "bairro": "",
         "cidade": "Natal",
         "nota": 4.7,
         "qtd_avaliacoes": 32,
@@ -317,3 +318,9 @@ def test_estimativa_usa_media_inicial_e_metricas_reais():
     metricas = {"rapida_sem_email": {"media_seg": 50, "n": 3}}
     assert t.estimar_consultas_seg(consultas, False, metricas) == 130
     assert t.estimar_consultas_seg([], False) == 0
+
+
+def test_bairro_vem_do_endereco_estruturado():
+    lead = t.montar_lead(entrada_ficticia(complete_address={"city": "Natal", "borough": " Ponta Negra "}), "x")
+    assert lead["bairro"] == "Ponta Negra"
+    assert t.montar_lead(entrada_ficticia(complete_address={}), "x")["bairro"] == ""

@@ -126,12 +126,50 @@ def montar_estado_fila(buscas, agora, metricas=None):
     return {"itens": itens, "rodando": rodando, "aguardando": aguardando}
 
 
-def aplicar_disjuntor(vazias_seguidas, teve_leads, limite=3):
-    """Conta consultas seguidas sem nenhum lead. Retorna (novo_contador, disparou)."""
+def aplicar_disjuntor(vazias_seguidas, teve_leads, limite=3, vazia_conta=True):
+    """Conta consultas seguidas sem nenhum lead. Retorna (novo_contador, disparou).
+
+    vazia_conta=False (cidade pequena sem resultado, scraper sem falha): não é sinal de
+    bloqueio — a contagem fica como está (nem sobe nem zera).
+    """
     if teve_leads:
         return 0, False
+    if not vazia_conta:
+        return vazias_seguidas, False
     vazias_seguidas += 1
     return vazias_seguidas, vazias_seguidas >= limite
+
+
+# População do Censo 2022 (dados/municipios_rn.json), para o disjuntor saber o porte da cidade.
+_POPULACAO = None
+CIDADE_GRANDE_ACIMA_DE = 20000  # aprovado pelo Breno (24/09)
+
+
+def populacao_da_cidade(nome):
+    """População (Censo 2022) de um município do RN pelo nome; None se não achar."""
+    global _POPULACAO
+    if _POPULACAO is None:
+        caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dados", "municipios_rn.json")
+        try:
+            with open(caminho, encoding="utf-8") as arquivo:
+                dados = json.load(arquivo)
+            _POPULACAO = {tratamento.normalizar_nome(m["nome"]): m["populacao_2022"] for m in dados["municipios"]}
+        except (OSError, ValueError, KeyError):
+            _POPULACAO = {}
+    return _POPULACAO.get(tratamento.normalizar_nome(nome))
+
+
+def vazia_conta_para_disjuntor(consulta, falhou):
+    """Consulta vazia só é sinal de bloqueio se o scraper falhou OU a cidade é grande.
+
+    Regra do Breno (24/09): cidade pequena (até 20 mil hab.) sem resultado não conta.
+    Consulta por bairro (Natal, Mossoró, Parnamirim) conta como cidade grande.
+    Cidade que não está na lista do IBGE conta (por segurança).
+    """
+    if falhou or consulta.get("bairro"):
+        return True
+    populacao = populacao_da_cidade(consulta.get("cidade"))
+    return populacao is None or populacao > CIDADE_GRANDE_ACIMA_DE
 
 
 # ------------------------------------------------------------- Firestore
@@ -259,6 +297,40 @@ def recuperar_orfas(db, paralelo, log):
     if recuperadas:
         log(f"{recuperadas} busca(s) interrompida(s) recuperada(s).")
     return recuperadas
+
+
+def dia_fortaleza(agora=None):
+    """Data AAAA-MM-DD no fuso de Fortaleza/Natal (mesmo "dia" do limite diário)."""
+    from zoneinfo import ZoneInfo
+
+    return (agora or agora_utc()).astimezone(ZoneInfo("America/Fortaleza")).strftime("%Y-%m-%d")
+
+
+def registrar_estatisticas(db, dono_uid, resumo, log=None):
+    """Soma a busca concluída nas estatísticas do dia (painel "Hoje"): 2 gravações.
+
+    estatisticas/{dia}__{uid}  -> o próprio usuário lê (regra do Firestore);
+    estatisticas/{dia}__geral  -> só o admin lê.
+    """
+    from firebase_admin import firestore
+
+    if not dono_uid:
+        return
+    dia = dia_fortaleza()
+    soma = {
+        "buscas": firestore.Increment(1),
+        "leads": firestore.Increment(int(resumo.get("total") or 0)),
+        "com_whatsapp": firestore.Increment(int(resumo.get("com_whatsapp") or 0)),
+        "com_telefone": firestore.Increment(int(resumo.get("com_telefone") or 0)),
+        "dia": dia,
+    }
+    try:
+        col = db.collection("estatisticas")
+        col.document(f"{dia}__{dono_uid}").set({**soma, "dono_uid": dono_uid}, merge=True)
+        col.document(f"{dia}__geral").set(soma, merge=True)
+    except Exception as erro:  # noqa: BLE001 - estatística não pode derrubar a busca
+        if log:
+            log(f"Não foi possível gravar as estatísticas ({type(erro).__name__}).")
 
 
 def ha_pendentes_elegiveis(db):

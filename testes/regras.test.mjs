@@ -34,6 +34,10 @@ beforeEach(async () => {
     await setDoc(doc(db, "fila/estado"), { itens: [{ id: "ana1", tipo: "comum", estimativa_seg: 40 }] });
     await setDoc(doc(db, "config/geral"), { limite_padrao: 20 });
     await setDoc(doc(db, "config/metricas"), { rapida_sem_email: { media_seg: 40 } });
+    await setDoc(doc(db, "estatisticas/2026-09-23__ana"), { dono_uid: "ana", leads: 10 });
+    await setDoc(doc(db, "estatisticas/2026-09-23__bia"), { dono_uid: "bia", leads: 5 });
+    await setDoc(doc(db, "estatisticas/2026-09-23__geral"), { leads: 15 });
+    await setDoc(doc(db, "usuarios/ana/perfis/p1"), { nome: "Perfil", termos: ["x"] });
   });
 });
 
@@ -94,4 +98,25 @@ test("fila e config geral: só logado; métricas e resto: bloqueado", async () =
   await assertFails(getDoc(doc(anonimo(), "buscas/ana1")));
   await assertFails(getDoc(doc(ana(), "config/metricas")));
   await assertFails(getDoc(doc(ana(), "qualquer/coisa")));
+});
+
+test("estatísticas do dia: usuário lê só as próprias (mesmo sem documento); admin lê todas", async () => {
+  await assertSucceeds(getDoc(doc(ana(), "estatisticas/2026-09-23__ana")));
+  await assertSucceeds(getDoc(doc(ana(), "estatisticas/2026-09-20__ana"))); // dia sem busca
+  await assertFails(getDoc(doc(ana(), "estatisticas/2026-09-23__bia")));
+  await assertFails(getDoc(doc(ana(), "estatisticas/2026-09-23__geral")));
+  await assertFails(getDoc(doc(ana(), "estatisticas/x__ana__bia")));
+  await assertFails(getDocs(collection(ana(), "estatisticas")));
+  await assertSucceeds(getDoc(doc(admin(), "estatisticas/2026-09-23__geral")));
+  await assertSucceeds(getDoc(doc(admin(), "estatisticas/2026-09-23__bia")));
+  await assertFails(getDoc(doc(anonimo(), "estatisticas/2026-09-23__ana")));
+  for (const db of [ana(), admin()]) {
+    await assertFails(setDoc(doc(db, "estatisticas/2026-09-23__ana"), { leads: 999 }));
+  }
+});
+
+test("perfis salvos e despertador: só pelo servidor (nem o dono lê direto)", async () => {
+  await assertFails(getDoc(doc(ana(), "usuarios/ana/perfis/p1")));
+  await assertFails(setDoc(doc(ana(), "usuarios/ana/perfis/p2"), { nome: "x" }));
+  await assertFails(getDoc(doc(ana(), "config/despertador")));
 });
