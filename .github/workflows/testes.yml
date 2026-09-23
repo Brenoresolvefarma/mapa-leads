@@ -1,0 +1,22 @@
+# Roda os testes do tratamento de dados (só dados fictícios) a cada push e PR.
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r motor/requirements.txt -r motor/requirements-dev.txt
+      - working-directory: motor
+        run: pytest -q
