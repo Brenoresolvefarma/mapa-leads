@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test testes/logica.test.mjs testes/credencial.test.mjs",
+    "test": "node --test testes/logica.test.mjs testes/credencial.test.mjs testes/relevancia.test.mjs",
     "test:regras": "firebase emulators:exec --only firestore --project demo-mapaleads \"node --test testes/regras.test.mjs\"",
     "test:funcoes": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/funcoes.test.mjs\"",
     "test:motor": "firebase emulators:exec --only firestore --project demo-mapaleads \"cd motor && python -m pytest -q test_integracao_emulador.py\"",

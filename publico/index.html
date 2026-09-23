@@ -293,6 +293,62 @@ const normalizar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "
   .replace(/[-–]\s*rn$|\s+rn$|\/rn$/, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/^assu$/, "acu");
 const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+// <relevancia> ------------------------------------------------ RELEVÂNCIA DO SEGMENTO (bloco puro)
+// Marca cada lead como "no segmento" ou "fora do segmento" comparando o termo buscado, os
+// sinônimos e as categorias aceitas com o NOME e a CATEGORIA do Google do lead (sem acento,
+// sem maiúsculas). Não apaga nada: só marca e filtra (regra "marcar, nunca apagar").
+// Este bloco não usa nada de fora dele: os testes (testes/relevancia.test.mjs) e a análise
+// rodam exatamente este mesmo código.
+const SINONIMOS = {
+  "home care": ["atendimento domiciliar", "assistência domiciliar", "internação domiciliar", "enfermagem domiciliar",
+    "cuidador de idosos", "cuidado de idosos", "casa de repouso", "residência geriátrica", "clínica geriátrica"],
+  "dentista": ["odontologia", "clínica odontológica", "consultório odontológico", "ortodontia", "implante dentário"],
+  "farmácia": ["drogaria", "farmácia de manipulação"],
+  "fisioterapia": ["fisioterapeuta", "clínica de fisioterapia", "pilates"],
+  "psicólogo": ["psicologia", "clínica de psicologia", "psicoterapia"],
+  "laboratório": ["laboratório de análises clínicas", "análises clínicas"],
+  "clínica médica": ["consultório médico", "centro médico", "policlínica"],
+  "pet shop": ["banho e tosa", "clínica veterinária", "veterinário", "agropet"],
+  "academia": ["academia de ginástica", "musculação", "crossfit", "pilates"],
+  "salão de beleza": ["cabeleireiro", "barbearia", "estética", "manicure"],
+  "supermercado": ["mercadinho", "atacarejo", "minimercado"],
+  "contabilidade": ["contador", "escritório de contabilidade", "escritório contábil"],
+  "advogado": ["advocacia", "escritório de advocacia"],
+  "hospital": ["pronto atendimento", "pronto socorro", "maternidade"],
+  "ótica": ["óculos", "optometrista"],
+};
+const semAcento = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const PALAVRAS_VAZIAS = new Set(["de", "da", "do", "das", "dos", "e", "em", "para", "a", "o", "as", "os", "com", "no", "na"]);
+const palavras = (s) => semAcento(s).split(/[^a-z0-9]+/).filter((p) => p && !PALAVRAS_VAZIAS.has(p));
+/** Sinônimos sugeridos para os termos (o usuário confirma/edita antes de buscar). */
+function sugerirSinonimos(termos) {
+  const saida = [];
+  for (const t of termos || []) {
+    const chave = semAcento(t);
+    for (const [base, lista] of Object.entries(SINONIMOS)) {
+      if (semAcento(base) === chave) for (const s of lista) if (!saida.some((x) => semAcento(x) === semAcento(s))) saida.push(s);
+    }
+  }
+  return saida.filter((s) => !(termos || []).some((t) => semAcento(t) === semAcento(s)));
+}
+/** A frase casa com o texto se TODAS as palavras dela aparecem (aceita plural: "idoso" casa "idosos"). */
+function casaFrase(frase, palavrasTexto) {
+  const ps = palavras(frase);
+  return ps.length > 0 && ps.every((p) => palavrasTexto.some((t) => t === p || (p.length >= 4 && t.startsWith(p))));
+}
+/** Critério do segmento a partir de termos, sinônimos e categorias aceitas. */
+function criterioSegmento({ termos = [], sinonimos = [], categorias = [] } = {}) {
+  return { frases: [...termos, ...sinonimos].filter(Boolean), categorias: new Set(categorias.map(semAcento).filter(Boolean)) };
+}
+/** true = lead do segmento; false = fora (Google devolveu algo "parecido"). */
+function noSegmento(lead, criterio) {
+  const cats = [lead?.categoria, ...(Array.isArray(lead?.categorias) ? lead.categorias : [])].filter(Boolean);
+  if (cats.some((c) => criterio.categorias.has(semAcento(c)))) return true;
+  const texto = palavras([lead?.nome, ...cats].join(" "));
+  return criterio.frases.some((f) => casaFrase(f, texto));
+}
+// </relevancia>
+
 async function api(caminho, corpo) {
   const token = await usuario.getIdToken();
   const r = await fetch(`/api/${caminho}`, {

@@ -1,0 +1,33 @@
+# TEMPORÁRIO (removido antes do merge): análise de relevância da busca HOME CARE (30 cidades).
+# A saída é CIFRADA (chave pública em ferramentas/tmp_chave_publica.pem; a privada só existe na sessão do Claude).
+name: TMP analise relevancia
+on:
+  push:
+    branches: [claude/great-darwin-pt5gmw]
+    paths: [ferramentas/tmp_analise_relevancia.mjs]
+permissions:
+  contents: write
+jobs:
+  analise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: "22", cache: npm }
+      - run: npm ci
+      - name: Analisar (saída cifrada)
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SAIDA: ${{ runner.temp }}/analise.txt
+        run: |
+          node ferramentas/tmp_analise_relevancia.mjs
+          cd "$RUNNER_TEMP"
+          openssl rand -out chave.bin 32
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in analise.txt -out analise.enc -pass file:chave.bin
+          openssl pkeyutl -encrypt -pubin -inkey "$GITHUB_WORKSPACE/ferramentas/tmp_chave_publica.pem" -pkeyopt rsa_padding_mode:oaep -in chave.bin -out analise.chave.enc
+          rm -f analise.txt chave.bin
+          mkdir -p "$GITHUB_WORKSPACE/tmp" && mv analise.enc analise.chave.enc "$GITHUB_WORKSPACE/tmp/"
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tmp && git commit -qm "TMP: analise de relevancia (cifrada)" && git pull -q --rebase origin claude/great-darwin-pt5gmw && git push -q
