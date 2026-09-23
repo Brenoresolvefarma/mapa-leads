@@ -81,8 +81,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   `pausada_ate`), consultas restantes voltam à fila. **Vazia (regra de 24/09, feita na 3a)** = sem lead E
   (scraper com falha/erro — motivo da vigia fora do fim normal ou código de erro — OU cidade > 20 mil hab.
   no Censo 2022; bairros de Natal/Mossoró/Parnamirim contam como > 20 mil). Cidade pequena vazia sem falha
-  é **neutra**: não conta e NÃO zera a sequência (só lead encontrado zera). Obs.: o plano aprovado dizia
-  "zera"; implementei neutra (mais seguro contra bloqueio) — avisado ao Breno no resumo do PR.
+  é **neutra**: não conta e NÃO zera a sequência (só lead encontrado zera). **Aprovado pelo Breno** (PR 9).
 - **Agendar para a noite**: 22h America/Fortaleza (= 01h UTC).
 - **Cancelar**: dono ou admin. Na fila → cancelada; rodando → `cancelar_solicitado` e o motor para antes
   da próxima consulta, guardando os leads parciais. Mãe → filhas na fila canceladas, mãe consolidada.
@@ -132,11 +131,11 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   A escolha micro/imediata é uma só (guardada no navegador) e vale para Nova busca, filtro e coluna da tabela.
   Cidades enviadas como "Nome RN" em ordem alfabética; cidades fora do RN em texto livre.
 - **Perfis salvos**: `usuarios/{uid}/perfis/{id}` só pela Function `/api/perfis` (listar/salvar/apagar);
-  máx. 50 por usuário e nome até 60 caracteres (limites técnicos). Regras bloqueiam leitura direta.
+  máx. 50 por usuário e nome até 60 caracteres (aprovado pelo Breno). Regras bloqueiam leitura direta.
 - **Leads**: 1 ou várias buscas juntas (1 leitura por lote), sem duplicados (id_lugar → nome+telefone,
   termos juntados; se algum dos repetidos confere a cidade, fica "sim"). Região do lead = cidade do
   ENDEREÇO (sem cidade = em branco; nada inferido). "Só da cidade pedida" (ligado) esconde só
-  `cidade_confere = nao` (os "indefinido" continuam). Filtros: região, cidade com contagem, WhatsApp,
+  `cidade_confere = nao` (os "indefinido" continuam — aprovado pelo Breno). Filtros: região, cidade com contagem, WhatsApp,
   sem site (nem site nem Instagram), nota mínima, nome. Tabela mostra 300 por vez. Ficha no clique.
 - **Exportar**: .xlsx (SheetJS 0.20.3 do cdn.sheetjs.com, carregado só no clique) e .csv (`;` + BOM, nota com
   vírgula), respeitando os filtros. Colunas: nome, categoria, telefone, whatsapp_link, email, site, instagram,
@@ -180,10 +179,13 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - Cuidados já identificados: nomes de município repetidos entre estados (ex.: Santa Cruz RN/PE, "Santa Luzia")
   → cidade sempre identificada por **código IBGE + UF**; `cidade_confere` passa a comparar cidade **e** UF;
   dedup continua por id_lugar. Dados atuais do RN (buscas/leads sem `uf`) contam como RN.
-- **Perguntar ao Breno antes de implementar**: (1) quais UFs ativar primeiro; (2) "Estado inteiro" fora do RN:
-  população do Censo 2022 (SIDRA t4709) para as faixas de profundidade — mesmas faixas do RN?; (3) capitais e
-  cidades grandes por bairro (malha de bairros IBGE CD2022) — quais cidades e a partir de qual população;
-  (4) tempo: um estado grande (BA 417 municípios) leva muitas horas por termo — limite/aviso?
+- **Decisão do Breno (após o PR 9): por enquanto SÓ O RN ativo.** Deixar a estrutura pronta — campo UF,
+  cidade por código IBGE + UF, config de estados ativos (só `RN` ligado) — sem ativar outro estado.
+- **Adiado para quando o Breno for ativar outro estado** (perguntar nessa hora, não antes): (1) faixas de
+  profundidade por população (Censo 2022, SIDRA t4709) fora do RN — mesmas do RN?; (2) quais capitais/cidades
+  grandes por bairro (malha de bairros IBGE CD2022) e a partir de qual população; (3) limite ou aviso de tempo
+  para estados grandes (ex.: BA, 417 municípios, muitas horas por termo). "Estado inteiro" de outra UF só
+  depois dessas respostas.
 - Fase 3c (Oportunidades x IBGE, mapa) passa a valer por estado.
 
 ## Fase 3b (registrada, NÃO implementar antes de aprovar)
