@@ -808,7 +808,9 @@ function casaFrase(frase, palavrasTexto) {
 }
 /** Critério do segmento a partir de termos, sinônimos e categorias aceitas. */
 function criterioSegmento({ termos = [], sinonimos = [], categorias = [] } = {}) {
-  return { frases: [...termos, ...sinonimos].filter(Boolean), categorias: new Set(categorias.map(semAcento).filter(Boolean)) };
+  // "HOME CARE. CUIDADO DE IDOSOS" (separado por ponto ou ponto e vírgula) = duas frases, não uma só.
+  const frases = [...termos, ...sinonimos].flatMap((t) => String(t || "").split(/[.;]+/)).map((t) => t.trim()).filter(Boolean);
+  return { frases, categorias: new Set(categorias.map(semAcento).filter(Boolean)) };
 }
 /** true = lead do segmento; false = fora (Google devolveu algo "parecido"). */
 function noSegmento(lead, criterio) {
@@ -1964,7 +1966,7 @@ function itensLegenda(cl, valores, met) {
   const lim = cl.faixas;
   for (let j = 0; j <= lim.length; j++) {
     const lo = j ? lim[j - 1] : 0, hi = j < lim.length ? lim[j] : cl.max;
-    if (hi > lo || (j === 0 && hi > 0)) itens.push(`<span><i style="background:${cor(2 + j)}"></i>${j ? `acima de ${f(lo)} até ${f(hi)}` : `até ${f(hi)}`}</span>`);
+    if (hi > lo || (j === 0 && hi > 0)) itens.push(`<span><i style="background:${cor(2 + j)}"></i>${!j ? `até ${f(hi)}` : f(lo) === f(hi) ? `≈ ${f(hi)}` : `acima de ${f(lo)} até ${f(hi)}`}</span>`);
   }
   if (met.lead) itens.push(`<span><i style="background:var(--sem-busca)"></i>sem busca</span>`);
   return itens.join("");

@@ -156,7 +156,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Relevância do segmento (PR 11, pedido do Breno)**: o Google devolve "parecidos" em cidade pequena (busca HOME CARE
   em 30 cidades: 406 leads, só 50 do segmento e só 7 nas cidades pedidas). Cada lead é **marcado** (nunca apagado)
   como `no_segmento` sim/não, na tela: termo + sinônimos + categorias aceitas comparados com nome e categoria do Google
-  (sem acento/maiúsculas; frase = todas as palavras; plural só em palavras de 5+ letras). Filtro **"Só do segmento"
+  (sem acento/maiúsculas; frase = todas as palavras; plural só em palavras de 5+ letras; termo com "." ou ";" vira
+  frases separadas — ex.: "HOME CARE. CUIDADO DE IDOSOS" dava 0 no segmento, visto em 23/09). Filtro **"Só do segmento"
   ligado** com contador "x fora do segmento escondidos – ver"; filtro de **Categorias do Google** com contagem,
   busca, marcar/desmarcar, "Só as ✓" e "Guardar no perfil" (`perfis` ação `salvar_categorias` → `categorias_aceitas`).
   **Sinônimos**: dicionário curto no bloco `<relevancia>` do `index.html` (testado por `testes/relevancia.test.mjs`),
