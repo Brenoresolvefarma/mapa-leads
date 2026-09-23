@@ -90,6 +90,13 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   A 13.x usa `jwks-rsa` 3 + `jose` 4 (CommonJS). Não subir para 14 sem rodar `npm run test:empacotadas`
   (empacota com o zip-it-and-ship-it do Netlify e roda com `--no-experimental-require-module`; está no CI).
   `ferramentas/verificar_functions.mjs` + workflow "Verificar Functions" checam as Functions no ar (só status HTTP).
+- **Functions usam o Firestore via REST** (`preferRest: true` em `netlify/lib/servidor.mjs`). Motivo: em produção
+  (24/09) o `criar-busca` dava 500 ao acessar o Firestore, enquanto o MESMO pacote (idêntico ao do Netlify,
+  1041 arquivos) e as MESMAS credenciais funcionavam no runner do GitHub. Causa exata no Netlify não observada
+  (o log antigo só registrava "Error"); REST tira o gRPC/HTTP2 do caminho (recomendação do Google p/ serverless).
+  Hipótese "OpenTelemetry global da extensão de observabilidade do Netlify" testada localmente: NÃO reproduziu.
+  O handler agora loga nome/código/mensagem do erro e devolve `codigo` no 500.
+  Workflow manual "Diagnosticar Functions" (login de teste temporário, só `simular`) testa produção de ponta a ponta.
 - **Netlify**: credencial do Firebase em 3 variáveis (limite de tamanho das env vars de Functions);
   token GitHub fine-grained só com Actions RW. Config web pública via `/api/config-publica`.
 - Datas na tela sempre em America/Fortaleza.
@@ -106,6 +113,7 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   + 11 Functions no emulador) + teste de fumaça da página no Chromium com emuladores.
 - Configuração da Fase 2 feita pelo Breno (site: https://mapaleads-rn.netlify.app). 1º teste real: login falhou
   (502 em /api/config-publica, ERR_REQUIRE_ESM) → corrigido no PR 4 (firebase-admin 13.10.0).
+  2º teste: login ok, criar-busca 500 no acesso ao Firestore → PR 5 (Firestore via REST + log detalhado + diagnóstico).
 - Pendente: validação real
   (busca comum pela página, limite, 403 no RN para usuário comum, preempção durante RN, cancelamento).
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.

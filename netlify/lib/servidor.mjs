@@ -5,6 +5,8 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+let firestoreConfigurado = false;
+
 export function firebase() {
   if (!getApps().length) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -16,7 +18,15 @@ export function firebase() {
     }
     initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
   }
-  return { auth: getAuth(), db: getFirestore() };
+  const db = getFirestore();
+  if (!firestoreConfigurado) {
+    // Firestore via REST (HTTP/1.1) em vez de gRPC (HTTP/2): recomendado pelo Google para
+    // ambientes serverless e evita a camada gRPC no runtime das Functions do Netlify.
+    // (Só "ouvir em tempo real" exige gRPC, e as Functions não usam isso.)
+    db.settings({ preferRest: true });
+    firestoreConfigurado = true;
+  }
+  return { auth: getAuth(), db };
 }
 
 export class ErroHttp extends Error {
@@ -41,9 +51,27 @@ export function handler(fn, { metodo = "POST" } = {}) {
       return await fn(req);
     } catch (erro) {
       if (erro instanceof ErroHttp) return json(erro.status, { erro: erro.message });
-      console.error("Erro inesperado na Function:", erro?.name || "Erro"); // sem dados do usuário
-      return json(500, { erro: "Erro inesperado no servidor. Tente novamente." });
+      // Log técnico (vai só para o log privado do Netlify): nome, código e mensagem do erro.
+      // Nunca inclui o corpo do pedido, o token nem dados de leads.
+      console.error("Erro inesperado na Function:", JSON.stringify(resumoDoErro(erro)));
+      // Para quem chamou, só o código técnico (ex.: 7 = PERMISSION_DENIED do Firestore).
+      return json(500, {
+        erro: "Erro inesperado no servidor. Tente novamente.",
+        codigo: erro?.code === undefined ? null : String(erro.code).slice(0, 40),
+      });
     }
+  };
+}
+
+/** Resumo seguro de um erro para o log: nome, código, mensagem e detalhes (cortados). */
+export function resumoDoErro(erro) {
+  const cortar = (v, n = 400) => (v === undefined || v === null ? null : String(v).slice(0, n));
+  return {
+    nome: cortar(erro?.name, 80),
+    codigo: cortar(erro?.code, 80),
+    mensagem: cortar(erro?.message),
+    detalhes: cortar(erro?.details),
+    causa: cortar(erro?.cause?.message ?? erro?.cause?.code),
   };
 }
 
