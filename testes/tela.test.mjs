@@ -229,6 +229,10 @@ test("Mapa: aprofunda RN › microrregião › município pelo painel; categoria
   await p.click("#mapa-painel-btn");
   assert.equal(await p.isVisible("#mapa-painel"), false);
   await p.click("#mapa-painel-btn");
+  // Abrir o mapa direto pelo link (página recarregada): redesenha quando as buscas chegam
+  await p.reload();
+  await esperarTexto(p, "#mapa-painel", /Município\s*Extremoz[\s\S]*1 de 1 município\(s\) pesquisado\(s\)/);
+  assert.match(await texto(p, "#mapa-origem"), /Segmento: clínica/);
   assert.deepEqual(erros, []);
   await p.context().close();
 });

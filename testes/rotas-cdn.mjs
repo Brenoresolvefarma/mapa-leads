@@ -1,5 +1,5 @@
 // Nos testes, as bibliotecas do CDN vêm do node_modules (mesmas versões fixadas na tela), sem depender da rede:
-// SDK do Firebase, Leaflet, MarkerCluster e Chart.js. Fontes e mapas de fundo (CARTO) são respondidos vazios.
+// SDK do Firebase, Leaflet, MarkerCluster e Chart.js. Fontes e mapas de fundo (OpenStreetMap) são respondidos vazios.
 // O SheetJS (.xlsx) só é testado no CI, que tem internet (TESTAR_XLSX=1).
 const ARQUIVOS = {
   "leaflet.min.js": "node_modules/leaflet/dist/leaflet.js",
@@ -23,7 +23,7 @@ export async function rotearCdn(contexto) {
     if (!local) return rota.fulfill({ status: 404, body: "" });
     rota.fulfill({ path: local, contentType: arquivo.endsWith(".css") ? "text/css" : "text/javascript" });
   });
-  await contexto.route(/basemaps\.cartocdn\.com/, (rota) => rota.fulfill({ body: PNG_VAZIO, contentType: "image/png" }));
+  await contexto.route(/tile\.openstreetmap\.org/, (rota) => rota.fulfill({ body: PNG_VAZIO, contentType: "image/png" }));
   await contexto.route(/fonts\.(googleapis|gstatic)\.com/, (rota) => rota.fulfill({ body: "", contentType: "text/css" }));
 }
 

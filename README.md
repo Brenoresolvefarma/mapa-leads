@@ -54,7 +54,7 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
   colunas fixas: nome, categoria, telefone, whatsapp_link, email, site, instagram, endereco, bairro, cidade,
   microrregiao, regiao_imediata, nota, qtd_avaliacoes, link_maps, termo_que_encontrou, cidade_buscada,
   cidade_confere, categorias, no_segmento (sem `id_lugar`).
-- **Mapa** (Leaflet + mapa de fundo CARTO): cores por município (leads do segmento, por 10 mil hab., população,
+- **Mapa** (Leaflet + mapa de fundo OpenStreetMap, gratuito e sem chave; escurecido no tema escuro): cores por município (leads do segmento, por 10 mil hab., população,
   PIB per capita 2022, empresas CEMPRE), pontos dos leads, contornos de microrregião, legenda. **Aprofundamento**:
   RN › microrregião › município (trilha, "Voltar" e Esc; estado na URL, ex.: `#mapa/serido-oriental/currais-novos`).
   Painel do nível: indicadores com fonte e ano, comparação com a média do RN e da microrregião, top categorias e

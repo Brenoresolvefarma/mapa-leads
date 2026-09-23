@@ -356,6 +356,9 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .ind { display:grid; grid-template-columns:1fr auto; gap:3px 10px; font-size:12.5px; }
 .ind dt { color:var(--ink-2); } .ind dd { margin:0; text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
 .leaflet-container { font:inherit; }
+/* Tema escuro: mosaicos do OpenStreetMap escurecidos (o OSM não tem versão escura) */
+:root[data-tema="escuro"] .leaflet-tile-pane { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .leaflet-tile-pane { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); } }
 .leaflet-tooltip { font-size:12px; }
 @media (max-width: 900px) {
   /* mapa ocupa a tela entre o título e a barra inferior; o painel vira gaveta de baixo */
@@ -972,7 +975,7 @@ async function api(caminho, corpo) {
   return dados;
 }
 let usuario = null, ehAdmin = false, buscas = [], estadoFila = null, cota = null, perfis = [];
-let pararBuscas = null, pararFila = null, saindo = false, uidDaPagina = null;
+let pararBuscas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
 const pararOuvintes = () => { pararBuscas?.(); pararFila?.(); pararBuscas = pararFila = null; };
 
 $("#entrar").onclick = async () => {
@@ -1063,6 +1066,10 @@ function ouvirDados() {
     buscas = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (paginaAtual === "inicio") desenharInicio();
     if (paginaAtual === "leads") abrirLeads();
+    // Mapa/Mercado abertos direto pelo link desenham antes das buscas chegarem: redesenha quando as buscas com
+    // leads mudam (não a cada progresso de busca rodando, para não mexer no zoom à toa).
+    const chave = buscas.filter((b) => (b.qtd_lotes || 0) > 0).map((b) => `${b.id}:${b.qtd_lotes}`).join(",");
+    if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
     desenharCaixaBuscas();
   }, (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
   pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...(d.data() || {}), lidoEm: Date.now() }; desenharStatus(); if (paginaAtual === "admin") desenharFilaViva(); });
@@ -1824,7 +1831,7 @@ async function abrirFicha(l) {
   $("#ficha").innerHTML = `<div class="painel-cab"><div style="flex:1;min-width:0"><div class="small muted">Ficha do lead</div><h2 id="ficha-nome" style="font-size:18px">${pii(l.nome || "(sem nome)")}</h2></div>
     <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>
     <div class="painel-corpo"><dl class="dados">${campos.filter(([, v]) => v && v !== '<span class="pii"></span>').map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
-    ${c ? `<div class="mini-mapa" id="mini-mapa"></div><p class="fonte">Localização do Google Maps. Mapa: © OpenStreetMap © CARTO</p>` : `<p class="fonte">Sem coordenadas deste lugar.</p>`}</div>
+    ${c ? `<div class="mini-mapa" id="mini-mapa"></div><p class="fonte">Localização do Google Maps. Mapa: © OpenStreetMap</p>` : `<p class="fonte">Sem coordenadas deste lugar.</p>`}</div>
     <div class="painel-acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : `<span></span>`}
     ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : `<span></span>`}
     ${link(l.link_maps) ? `<a class="btn btn-sec" href="${link(l.link_maps)}" target="_blank" rel="noopener">${icone("mapa")} Google Maps</a>` : `<span></span>`}
@@ -1966,8 +1973,10 @@ const vezes = (a, b) => (a !== null && b ? `${num1(a / b)}×` : "–");
 
 // ============================================================ MAPA (Leaflet, com aprofundamento)
 const M = { mapa: null, mun: null, micro: null, pontos: null, nivel: { micro: "", cod: "" }, metrica: "seg", porCod: new Map() };
-const urlTiles = () => (getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.slice(0, 3).reduce((t, v) => t + Number(v), 0) < 200
-  ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png");
+// Mapa de fundo: OpenStreetMap (gratuito, sem chave; exige só o crédito). No tema escuro o CSS escurece os mosaicos.
+// (O CARTO passou a exigir chave — aparecia "API KEY REQUIRED" por cima do mapa.)
+const urlTiles = () => "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const CREDITO_MAPA = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 $("#mapa-metrica").innerHTML = Object.entries(METRICAS).map(([k, v]) => `<option value="${k}">${v.rot}</option>`).join("");
 async function abrirMapa(resto) {
   try { await prepararLeads(); } catch { /* sem buscas: mapa só com IBGE */ }
@@ -1981,7 +1990,7 @@ async function abrirMapa(resto) {
 function criarMapa() {
   M.mapa = L.map("mapa-leaflet", { zoomSnap: 0.25, zoomControl: false, attributionControl: true }).setView([-5.8, -36.6], 7.5);
   L.control.zoom({ position: "bottomright" }).addTo(M.mapa); // no alto fica a trilha (RN › microrregião › município)
-  L.tileLayer(urlTiles(), { maxZoom: 19, attribution: "© OpenStreetMap © CARTO · Contornos: IBGE" }).addTo(M.mapa);
+  L.tileLayer(urlTiles(), { maxZoom: 19, attribution: `${CREDITO_MAPA} · Contornos: IBGE` }).addTo(M.mapa);
   M.mun = L.geoJSON(malhaMun, {
     style: () => ({ weight: 0.7, color: "#fff", fillOpacity: 0.75 }),
     onEachFeature: (f, camada) => {

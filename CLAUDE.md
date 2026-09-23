@@ -186,7 +186,10 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   Mercado: cartões (indicador → ranking; leads → tabela), ranking e gráficos → mapa; ficha: cidade/microrregião → mapa.
 - **Mapa** Leaflet: RN › microrregião › município (bairro só como chips do painel), estado na URL
   (`#mapa/<micro>/<municipio>` em slug), Esc/Voltar, tela cheia, painel recolhível (gaveta no celular), zoom embaixo
-  à direita, zoom máximo 11 (contorno simplificado). Cinza = "sem busca". Sem índice de oportunidade (proposta só
+  à direita, zoom máximo 11 (contorno simplificado). Mapa de fundo **OpenStreetMap** (gratuito, sem chave, com crédito;
+  escurecido por filtro CSS no tema escuro) — o CARTO passou a exigir chave ("API KEY REQUIRED" nas capturas de 23/09).
+  Abrir o mapa/mercado direto pelo link redesenha quando as buscas com leads chegam.
+  Tela: `config-publica` com até 3 tentativas e "Tentar de novo" (500 intermitente visto em 23/09 antes dos créditos). Cinza = "sem busca". Sem índice de oportunidade (proposta só
   com aprovação da fórmula).
 - **Início (ajustes do Breno)**: saudação com o NOME (`usuarios/{uid}.nome` ou displayName; sem nome = "Olá!", nunca o
   e-mail); admin edita o nome (`admin-usuarios` ação `definir_nome`, até 60 caracteres, grava doc + displayName).
