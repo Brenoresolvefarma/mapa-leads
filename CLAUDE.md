@@ -195,6 +195,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   compartilhado com Meus leads; 1 leitura por lote por visita — o Início não lê mais `estatisticas`), cada recorte com
   o segmento das suas buscas, igual ao detalhe. Gráfico: até 7 dias com busca nos últimos 30 → só esses dias.
 - **Exportação**: colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
+  **Aprovado pelo Breno (23/09)**, junto com: "Sair" volta o endereço ao Início (sem #leads/#mapa do usuário anterior)
+  e ranking do Mercado só com indicadores lado a lado (sem nota/índice calculado).
 - **Duplicados**: o mesmo lugar em outra busca completa os campos vazios (dado real do Google).
 - `admin-usuarios` listar devolve `semana` (7 dias de `estatisticas/{dia}__{uid}`: 7 leituras por usuário).
 - Motor grava `latitude`/`longitude` (campo "longtitude" do scraper); leads antigos: coordenadas do `link_maps`.
