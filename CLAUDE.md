@@ -1,15 +1,23 @@
 # CLAUDE.md — contexto do projeto MapaLeads
 
 ## O que é
-Sistema multiusuário de prospecção B2B via Google Maps para o Breno (prospecção comercial, RN).
-Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e "RN inteiro" (só admin).
+Sistema multiusuário de prospecção B2B via Google Maps para o Breno (prospecção comercial; começou no RN,
+vai para os **9 estados do Nordeste** — ver "Fase 3 — Nordeste"). Admin (Breno) + usuários comuns.
+Buscas sob demanda: termos e cidades livres, e "RN inteiro" (só admin; vira "Estado inteiro").
+Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita aprovada pelo Breno).
 
 ## Regras de trabalho combinadas com o Breno
 - Mostrar o plano e esperar autorização antes de criar/alterar arquivos.
 - Perguntar quando algo for ambíguo; **não definir valores de negócio** sem perguntar.
-- **Custo ZERO obrigatório**: só repo público (Actions grátis), Firebase **Spark** (sem cartão, sem Blaze,
-  sem Cloud Functions), Netlify Free. Qualquer coisa que exija plano pago: avisar antes e propor alternativa.
+- **Custo: priorizar SEMPRE a cota gratuita; custo acima dela só com aprovação prévia do Breno.**
+  Atualização do Breno: o projeto Firebase `mapaleads` foi migrado para o plano **Blaze** (conta de faturamento
+  RESOLVE FARMA) com **alerta de orçamento de R$ 20/mês**. Continua: repo público (Actions grátis), Netlify Free.
+  Qualquer recurso que possa gerar custo acima da cota gratuita (Cloud Functions, Storage, leituras/gravações
+  além da cota, outro serviço pago) → **avisar e esperar aprovação antes** de implementar, com a estimativa
+  de custo e a alternativa gratuita. **Motor continua no GitHub Actions até a Fase 4.**
 - Respeitar a cota grátis do Firestore (50 mil leituras / 20 mil gravações por dia) no motor e na tela.
+  Atenção: no Blaze, passar da cota **cobra** (não bloqueia mais como no Spark), e o alerta de orçamento
+  só AVISA — não corta o gasto. Por isso os limites de leitura/gravação do código continuam valendo.
 - Nunca colocar tokens/chaves/senhas no código (secrets do GitHub / env vars do Netlify).
 - Código simples, comentado em português.
 - Ao fim de cada fase: atualizar README.md e CLAUDE.md; passar passo a passo de configuração.
@@ -159,6 +167,25 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 
+## Fase 3 — Nordeste (decisão do Breno; próximo PR depois da 3a — apresentar plano antes de implementar)
+- O sistema **não pode ficar travado no RN**. **UF vira campo** em buscas (parâmetros e consultas), leads
+  (`uf`), regiões, filtros, estatísticas e nomes de arquivo (`segmento-UF-data` no lugar de `segmento-RN-data`).
+- Carregar municípios e microrregiões (e regiões imediatas) dos **9 estados do Nordeste** (AL, BA, CE, MA, PB,
+  PE, PI, RN, SE) pela **API oficial de Localidades do IBGE** em `dados/ibge_nordeste.json` (coleta por workflow
+  temporário, como no RN; o proxy do ambiente de dev bloqueia o IBGE).
+- Tela: seletor **Estado → Microrregião → Cidade** (mantendo micro/imediata e o desmarcar cidade a cidade).
+- **"RN inteiro" vira "Estado inteiro"** (só admin, bloqueado no servidor; não conta no limite diário).
+- **Só os estados que o Breno ativar** aparecem na tela: lista de UFs ativas numa config (ex.: `config/geral.ufs_ativas`,
+  gravada só pelo servidor/admin) e conferida também no servidor ao criar busca.
+- Cuidados já identificados: nomes de município repetidos entre estados (ex.: Santa Cruz RN/PE, "Santa Luzia")
+  → cidade sempre identificada por **código IBGE + UF**; `cidade_confere` passa a comparar cidade **e** UF;
+  dedup continua por id_lugar. Dados atuais do RN (buscas/leads sem `uf`) contam como RN.
+- **Perguntar ao Breno antes de implementar**: (1) quais UFs ativar primeiro; (2) "Estado inteiro" fora do RN:
+  população do Censo 2022 (SIDRA t4709) para as faixas de profundidade — mesmas faixas do RN?; (3) capitais e
+  cidades grandes por bairro (malha de bairros IBGE CD2022) — quais cidades e a partir de qual população;
+  (4) tempo: um estado grande (BA 417 municípios) leva muitas horas por termo — limite/aviso?
+- Fase 3c (Oportunidades x IBGE, mapa) passa a valer por estado.
+
 ## Fase 3b (registrada, NÃO implementar antes de aprovar)
 - **Enriquecimento por CNPJ** (Receita Federal, Dados Abertos do CNPJ): baixar/filtrar só o RN no GitHub
   Actions; casar lead ↔ estabelecimento por telefone, por nome + município e por CEP; mostrar selo de
@@ -177,3 +204,24 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
   (população, PIB per capita, etc.) e a fonte exata de cada um.** A malha geográfica do mapa também
   precisa de fonte oficial (IBGE) — confirmar com ele.
 - **Relatório de mercado em PDF** gerado no navegador (mesmas regras: só dados reais, fontes citadas).
+
+## Fase 4 — Comercialização (registrada; NÃO implementar agora)
+Objetivo do Breno: vender o sistema por **assinatura de R$ 19,99/mês**.
+**Antes de começar a Fase 4: apresentar ao Breno a análise de custo x receita por nº de clientes, para ele decidir.**
+- **Cadastro público** (hoje só o admin cria usuários) com confirmação de e-mail.
+- **Cobrança recorrente**: Asaas, Mercado Pago ou Stripe (comparar taxas por transação/Pix/boleto/cartão,
+  webhooks, split, custo fixo) — escolha do Breno.
+- **Bloqueio de acesso por assinatura vencida** (conferido no servidor em toda Function, não só na tela;
+  status da assinatura atualizado por webhook do meio de pagamento).
+- **Plano de cotas por assinante** (buscas/dia, profundidade, e-mail, estados liberados, "Estado inteiro"?) —
+  valores de negócio definidos pelo Breno.
+- **Política de privacidade (LGPD) e termos de uso**: base legal para tratar dados de estabelecimentos,
+  direitos do titular, retenção/exclusão, encarregado (DPO), uso aceitável.
+- **Migração de infraestrutura**: motor **fora do GitHub Actions gratuito** (uso comercial e escala: ex.
+  VPS/Cloud Run/fila própria), Firebase **Blaze** (já ativo) com cotas e alertas, Netlify (limites do Free),
+  repositório possivelmente privado (Actions deixa de ser ilimitado).
+- **Estimativa de custo mensal por nº de clientes** (ex.: 10 / 50 / 100 / 500): execução do motor (horas de
+  máquina por busca medidas em `config/metricas`), leituras/gravações do Firestore, Functions, e-mail,
+  taxas do meio de pagamento e impostos → margem por assinante x R$ 19,99.
+- Riscos a apresentar junto com a análise: termos de uso do Google Maps para coleta automatizada, bloqueios
+  por volume maior (IPs/proxies), e responsabilidade sobre os dados vendidos.

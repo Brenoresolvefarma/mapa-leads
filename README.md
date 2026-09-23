@@ -1,7 +1,9 @@
 # MapaLeads
 
-Prospecção B2B multiusuário via Google Maps, 100% na nuvem e com **custo zero**
-(GitHub Actions em repositório público + Firebase plano **Spark** + Netlify **Free**).
+Prospecção B2B multiusuário via Google Maps, 100% na nuvem, feito para caber nas **cotas gratuitas**
+(GitHub Actions em repositório público + Firebase + Netlify **Free**). O Firebase está no plano **Blaze**
+(com alerta de orçamento de R$ 20/mês): o código continua dentro da cota grátis, e qualquer custo acima
+dela precisa de aprovação antes.
 
 > **Estado atual: Fase 3a** — tela definitiva: painel "Hoje", nova busca por regiões do IBGE
 > com perfis salvos, tabela de leads (uma ou várias buscas juntas) com filtros e ficha,
@@ -109,14 +111,15 @@ O log público mostra só números, ex.:
   como grandes). Cidade pequena sem resultado é **neutra**: não conta nem zera a sequência.
 - 2 execuções em paralelo: código pronto, **desligado** (`MOTOR_PARALELO: "false"` no workflow).
 
-### Custo zero e cotas do Firestore (50 mil leituras / 20 mil gravações por dia)
+### Cotas gratuitas do Firestore (50 mil leituras / 20 mil gravações por dia)
 - Leads gravados em **lotes de 300 por documento**: uma busca de 300 leads = 1 gravação.
 - A lista de buscas lê só os 20 documentos mais recentes (o resumo fica no documento da busca).
 - Um RN inteiro ≈ 600–800 gravações. O agendamento de 15 em 15 min com fila vazia ≈ 8 leituras
   por execução e não grava nada se a fila não mudou. O despertador ≈ 200 leituras e 96 gravações/dia.
 - Tela: "Hoje" ≈ 9 leituras; abrir leads = 1 leitura por lote de 300; estatísticas do dia =
   2 gravações por busca concluída.
-- Se a cota estourar, o plano Spark só bloqueia até o dia seguinte — nunca cobra.
+- **Atenção (plano Blaze):** se a cota diária estourar, o excedente é **cobrado** (não bloqueia mais).
+  O alerta de orçamento só avisa, não corta. Por isso o código continua econômico em leituras/gravações.
 
 ## Privacidade (repositório público)
 - Logs do Actions: **só contagens e status**. Nunca leads, termos, cidades, UID ou tokens.
