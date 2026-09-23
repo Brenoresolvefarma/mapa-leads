@@ -4,6 +4,7 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { createPrivateKey } from "node:crypto";
 
 let firestoreConfigurado = false;
 
@@ -23,7 +24,35 @@ export function normalizarChavePrivada(bruta) {
   }
   chave = chave.replace(/^"?private_key"?\s*:\s*/, "").replace(/,\s*$/, "").trim();
   while (/^(["']).*\1$/s.test(chave)) chave = chave.slice(1, -1).trim();
-  return chave.replace(/\\r\\n|\\n/g, "\n").replace(/\r\n/g, "\n");
+  chave = chave.replace(/\\r\\n|\\n/g, "\n").replace(/\r\n/g, "\n").trim();
+  if (chaveValida(chave)) return `${chave}\n`;
+  // Reconstrói o PEM: ignora o que vier antes do cabeçalho (ou um cabeçalho mal colado)
+  // e usa só as linhas base64 do corpo, quebrando de 64 em 64 como manda o formato.
+  const reconstruida = reconstruirPem(chave);
+  return reconstruida && chaveValida(reconstruida) ? reconstruida : chave;
+}
+
+function chaveValida(pem) {
+  // O firebase-admin exige o PEM começando exatamente pelo cabeçalho.
+  if (!/^-----BEGIN PRIVATE KEY-----\n/.test(pem)) return false;
+  try {
+    createPrivateKey(pem);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function reconstruirPem(texto) {
+  const fim = texto.search(/-+\s*END\s+PRIVATE\s+KEY\s*-+/);
+  if (fim < 0) return null;
+  let antes = texto.slice(0, fim);
+  const inicio = antes.match(/-+\s*BEGIN\s+PRIVATE\s+KEY\s*-+/);
+  if (inicio) antes = antes.slice(inicio.index + inicio[0].length);
+  const corpo = antes.split("\n").map((l) => l.trim()).filter((l) => /^[A-Za-z0-9+/=]+$/.test(l)).join("");
+  if (!corpo) return null;
+  const linhas = corpo.match(/.{1,64}/g).join("\n");
+  return `-----BEGIN PRIVATE KEY-----\n${linhas}\n-----END PRIVATE KEY-----\n`;
 }
 
 /** Descreve o FORMATO da chave (nunca o conteúdo) para uma mensagem de erro útil. */
@@ -35,6 +64,8 @@ export function descreverFormatoDaChave(bruta) {
     `começa com BEGIN PRIVATE KEY: ${chave.startsWith("-----BEGIN PRIVATE KEY-----") ? "sim" : "não"}`,
     `termina com END PRIVATE KEY: ${/-----END PRIVATE KEY-----\s*$/.test(chave) ? "sim" : "não"}`,
     `linhas: ${chave.split("\n").length}`,
+    `BEGIN na posição: ${String(bruta ?? "").search(/BEGIN\s+PRIVATE\s+KEY/)}`,
+    `chave válida após normalizar: ${chaveValida(chave) ? "sim" : "não"}`,
   ];
   return partes.join(", ");
 }
