@@ -12,10 +12,17 @@ process.env.FIREBASE_CLIENT_EMAIL = "teste@demo-mapaleads.iam.gserviceaccount.co
 process.env.FIREBASE_PRIVATE_KEY = privateKey.export({ type: "pkcs8", format: "pem" }).replace(/\n/g, "\\n");
 delete process.env.MAPALEADS_GITHUB_TOKEN; // sem disparo real do GitHub
 
-const { default: criarBusca } = await import("../netlify/functions/criar-busca.mjs");
-const { default: cancelarBusca } = await import("../netlify/functions/cancelar-busca.mjs");
-const { default: adminUsuarios } = await import("../netlify/functions/admin-usuarios.mjs");
-const { default: configPublica } = await import("../netlify/functions/config-publica.mjs");
+// Com FUNCOES_EMPACOTADAS, testa o código já empacotado como o Netlify faz (npm run test:empacotadas).
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+const EMPACOTADAS = process.env.FUNCOES_EMPACOTADAS;
+const funcao = (nome) => EMPACOTADAS
+  ? pathToFileURL(resolve(EMPACOTADAS, nome, "netlify/functions", `${nome}.mjs`)).href
+  : `../netlify/functions/${nome}.mjs`;
+const { default: criarBusca } = await import(funcao("criar-busca"));
+const { default: cancelarBusca } = await import(funcao("cancelar-busca"));
+const { default: adminUsuarios } = await import(funcao("admin-usuarios"));
+const { default: configPublica } = await import(funcao("config-publica"));
 const { firebase } = await import("../netlify/lib/servidor.mjs");
 
 const AUTH = process.env.FIREBASE_AUTH_EMULATOR_HOST;
