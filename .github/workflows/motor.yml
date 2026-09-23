@@ -81,4 +81,7 @@ jobs:
 
       - name: Limpar arquivos temporários
         if: always()
-        run: sudo rm -rf /tmp/mapaleads-* "${RUNNER_TEMP:?}"/mapaleads-* || true
+        run: |
+          # Encerra qualquer container do scraper que tenha sobrado.
+          docker ps -q --filter "name=mapaleads-" | xargs -r docker kill > /dev/null 2>&1 || true
+          sudo rm -rf /tmp/mapaleads-* "${RUNNER_TEMP:?}"/mapaleads-* || true

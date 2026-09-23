@@ -34,6 +34,25 @@ Por consulta (termo × cidade), além de ~1,5 min de preparo por execução:
 | Normal (~60) | ~3–4 min | ~5–7 min |
 | Completa (~120) | ~5–7 min | ~9–13 min |
 
+### Vigia de tempo (nenhuma consulta fica presa)
+
+O scraper às vezes não encerra sozinho. Cada consulta roda sob uma vigia que encerra o
+container e **aproveita os leads já coletados** (o scraper grava cada lead assim que o encontra):
+
+| Profundidade | Limite sem e-mail | Limite com e-mail |
+|---|---|---|
+| Rápida | 6 min | 12 min |
+| Normal | 12 min | 24 min |
+| Completa | 20 min | 40 min |
+
+Além do limite, a consulta é encerrada se **não gravar nenhum lead nos primeiros 5 min** ou se
+ficar **3 min sem gravar lead novo**. Consulta encerrada com leads = aviso "encerrada por tempo"
+na busca (status `concluida`); só vira `erro` se todas as consultas terminarem sem nenhum lugar.
+
+Para cada consulta, o log mostra só um diagnóstico em números, por exemplo:
+`término: sozinha (código 0), 142s, etapas ok=21 falhas=0, inatividade=não, consentimento=não`.
+A telemetria do scraper fica desligada (`DISABLE_TELEMETRY=1`).
+
 Cada busca grava `duracao_segundos` no Firestore para calibrarmos esses números com dados reais.
 Minutos do Actions são gratuitos e ilimitados em repositório público; uma execução pode durar
 até ~5h50 (limite configurado).
@@ -113,6 +132,7 @@ Os testes usam somente dados fictícios e rodam automaticamente no workflow **Te
 .github/workflows/testes.yml  # pytest a cada push/PR
 motor/motor.py                # fila, status, scraper, gravação no Firestore
 motor/tratamento.py           # limpeza dos dados (funções puras)
-motor/test_tratamento.py      # testes
+motor/vigia.py                # vigia de tempo do scraper + diagnóstico em números
+motor/test_*.py               # testes
 firestore.rules               # regras de segurança (Fase 1: navegador sem acesso)
 ```

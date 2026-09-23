@@ -23,6 +23,24 @@ PROFUNDIDADES = {
     "completa": 10,  # até ~120 lugares (teto do Google)
 }
 
+# Limite rígido de tempo por consulta (minutos), aprovado pelo Breno.
+# Com extração de e-mail o limite dobra (o scraper visita o site de cada lugar).
+LIMITE_CONSULTA_MIN = {
+    "rapida": 6,
+    "normal": 12,
+    "completa": 20,
+}
+# Vigia de travamento: encerra a consulta se não gravar nenhum lead nos
+# primeiros 5 min, ou se ficar 3 min sem gravar lead novo.
+LIMITE_PRIMEIRO_LEAD_MIN = 5
+LIMITE_SEM_LEAD_NOVO_MIN = 3
+
+
+def limite_consulta_seg(profundidade, extrair_email):
+    """Limite rígido de uma consulta, em segundos."""
+    minutos = LIMITE_CONSULTA_MIN[profundidade] * (2 if extrair_email else 1)
+    return minutos * 60
+
 
 def dividir_lista(texto):
     """Transforma "home care, cuidador , ,home care" em ["home care", "cuidador"].
