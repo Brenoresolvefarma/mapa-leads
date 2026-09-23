@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>MapaLeads · protótipo visual (Etapa 0)</title>
+<!--
+  PROTÓTIPO VISUAL DA TELA NOVA (Etapa 0 da Fase 3a v2) — só para aprovação do Breno.
+  A tela em uso continua sendo publico/index.html. Este arquivo lê os dados REAIS do usuário
+  logado (regras do Firestore valem igual) e os arquivos fixos do IBGE em /dados/.
+  ?captura=1  → esconde nome/telefone/endereço/site dos leads com tarjas (para capturas públicas).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================ TOKENS (claro) */
+:root {
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f2f4f7; --surface-3:#e9edf2;
+  --ink:#0e1726; --ink-2:#475467; --muted:#667085; --line:#e4e7ec; --line-2:#d0d5dd;
+  --brand:#1f5fd6; --brand-ink:#1a4fb3; --brand-soft:#eaf1fe; --on-brand:#ffffff;
+  --ok:#067647; --ok-soft:#ecfdf3; --warn:#b54708; --warn-soft:#fffaeb; --bad:#b42318; --bad-soft:#fef3f2;
+  --whats:#0e8a45;
+  --shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --shadow-lg:0 12px 32px rgba(16,24,40,.14);
+  /* mapa coroplético: rampa sequencial azul (validada), claro -> escuro = menos -> mais */
+  --seq-1:#cde2fb; --seq-2:#9ec5f4; --seq-3:#6da7ec; --seq-4:#3987e5; --seq-5:#256abf; --seq-6:#184f95; --seq-7:#0d366b;
+  --map-empty:#eef1f5; --map-stroke:#ffffff; --map-region:#0e1726;
+  --r-sm:8px; --r:12px; --r-lg:16px;
+  --sidebar:252px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+/* ============================================================ TOKENS (escuro) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --bg:#0a0f1c; --surface:#111827; --surface-2:#172033; --surface-3:#1e293f;
+    --ink:#f2f4f7; --ink-2:#c3cad6; --muted:#98a2b3; --line:#232e45; --line-2:#2f3b55;
+    --brand:#3b7be3; --brand-ink:#8ab4f8; --brand-soft:#16264a; --on-brand:#ffffff;
+    --ok:#47cd89; --ok-soft:#0d2a1c; --warn:#fdb022; --warn-soft:#2e2208; --bad:#f97066; --bad-soft:#35110e;
+    --whats:#16a34a;
+    --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lg:0 16px 40px rgba(0,0,0,.5);
+    --seq-1:#16305a; --seq-2:#1c4580; --seq-3:#2459a6; --seq-4:#3272cc; --seq-5:#5598e7; --seq-6:#86b6ef; --seq-7:#cde2fb;
+    --map-empty:#1b2438; --map-stroke:#0a0f1c; --map-region:#f2f4f7;
+  }
+}
+:root[data-tema="escuro"] {
+  --bg:#0a0f1c; --surface:#111827; --surface-2:#172033; --surface-3:#1e293f;
+  --ink:#f2f4f7; --ink-2:#c3cad6; --muted:#98a2b3; --line:#232e45; --line-2:#2f3b55;
+  --brand:#3b7be3; --brand-ink:#8ab4f8; --brand-soft:#16264a; --on-brand:#ffffff;
+  --ok:#47cd89; --ok-soft:#0d2a1c; --warn:#fdb022; --warn-soft:#2e2208; --bad:#f97066; --bad-soft:#35110e;
+  --whats:#16a34a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lg:0 16px 40px rgba(0,0,0,.5);
+  --seq-1:#16305a; --seq-2:#1c4580; --seq-3:#2459a6; --seq-4:#3272cc; --seq-5:#5598e7; --seq-6:#86b6ef; --seq-7:#cde2fb;
+  --map-empty:#1b2438; --map-stroke:#0a0f1c; --map-region:#f2f4f7;
+}
+
+/* ============================================================ BASE */
+* { box-sizing:border-box; }
+html, body { margin:0; background:var(--bg); color:var(--ink); }
+body { font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+a { color:var(--brand-ink); }
+h1, h2, h3 { margin:0; letter-spacing:-.02em; }
+h1 { font-size:28px; font-weight:800; line-height:1.2; }
+h2 { font-size:18px; font-weight:700; }
+h3 { font-size:15px; font-weight:600; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color:var(--muted); } .ink2 { color:var(--ink-2); }
+.small { font-size:13px; }
+.oculto { display:none !important; }
+:focus-visible { outline:3px solid var(--brand); outline-offset:2px; border-radius:6px; }
+button, input, select { font:inherit; color:inherit; }
+
+/* botões (área de toque >= 44 px) */
+.btn { min-height:44px; padding:0 18px; border-radius:var(--r-sm); border:1px solid transparent; font-weight:600;
+  display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; text-decoration:none; white-space:nowrap; }
+.btn-primario { background:var(--brand); color:var(--on-brand); }
+.btn-primario:hover { filter:brightness(1.07); }
+.btn-sec { background:var(--surface); border-color:var(--line-2); color:var(--ink); }
+.btn-sec:hover { background:var(--surface-2); }
+.btn-whats { background:var(--whats); color:#fff; }
+.btn-fantasma { background:transparent; color:var(--ink-2); }
+.btn-fantasma:hover { background:var(--surface-2); }
+.btn-icone { min-width:44px; padding:0; }
+.btn svg { width:18px; height:18px; flex:none; }
+
+input[type=text], input[type=email], input[type=password], input[type=search], select {
+  width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--surface);
+}
+label.campo { display:block; font-size:13px; font-weight:600; color:var(--ink-2); margin:14px 0 6px; }
+.ajuda { font-size:12.5px; color:var(--muted); margin-top:4px; }
+
+/* ============================================================ LOGIN */
+.login { min-height:100dvh; display:grid; grid-template-columns: 1.1fr 1fr; }
+.login-marca { background:#0b1b3a; color:#fff; padding:48px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; }
+.login-marca h1 { font-size:44px; max-width:16ch; }
+.login-marca p { color:#c7d4ec; max-width:44ch; font-size:17px; }
+.login-marca svg.rn { position:absolute; right:-40px; bottom:40px; width:78%; opacity:.9; }
+.login-form { display:flex; flex-direction:column; justify-content:center; padding:48px; max-width:480px; margin:0 auto; width:100%; }
+.credito { font-size:12.5px; color:var(--muted); letter-spacing:.01em; }
+.credito b { font-weight:600; color:var(--ink-2); }
+.login-marca .credito, .login-marca .credito b { color:#a9b8d6; }
+@media (max-width: 860px) {
+  .login { grid-template-columns:1fr; }
+  .login-marca { padding:28px 20px; min-height:260px; }
+  .login-marca h1 { font-size:30px; }
+  .login-marca svg.rn { width:70%; right:-20px; bottom:10px; opacity:.5; }
+  .login-form { padding:28px 20px 40px; }
+}
+
+/* ============================================================ CASCA (menu lateral / barra inferior) */
+.app { display:grid; grid-template-columns: var(--sidebar) 1fr; min-height:100dvh; }
+.lateral { position:sticky; top:0; height:100dvh; background:var(--surface); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:20px 14px; }
+.logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; letter-spacing:-.02em; padding:4px 8px 20px; }
+.logo-marca { width:32px; height:32px; border-radius:9px; background:var(--brand); display:grid; place-items:center; }
+.logo-marca svg { width:18px; height:18px; color:#fff; }
+.menu { display:flex; flex-direction:column; gap:2px; }
+.menu a { display:flex; align-items:center; gap:12px; min-height:44px; padding:0 12px; border-radius:var(--r-sm); color:var(--ink-2); text-decoration:none; font-weight:500; }
+.menu a svg { width:20px; height:20px; }
+.menu a:hover { background:var(--surface-2); color:var(--ink); }
+.menu a[aria-current="page"] { background:var(--brand-soft); color:var(--brand-ink); font-weight:600; }
+.menu .rotulo-grupo { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); padding:18px 12px 6px; }
+.lateral-rodape { margin-top:auto; padding:12px 8px 0; border-top:1px solid var(--line); }
+
+.principal { min-width:0; display:flex; flex-direction:column; }
+.topo { position:sticky; top:0; z-index:5; background:color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line); display:flex; align-items:center; gap:20px; padding:12px 32px; min-height:68px; }
+.topo .titulo-pagina { font-weight:700; font-size:17px; }
+.topo .dir { margin-left:auto; display:flex; align-items:center; gap:18px; }
+.cota { min-width:180px; }
+.cota .linha { display:flex; justify-content:space-between; font-size:12.5px; color:var(--ink-2); margin-bottom:4px; }
+.barra { height:6px; border-radius:99px; background:var(--surface-3); overflow:hidden; }
+.barra > i { display:block; height:100%; background:var(--brand); border-radius:99px; }
+.status-motor { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--ink-2);
+  padding:6px 12px; border-radius:99px; background:var(--surface); border:1px solid var(--line); white-space:nowrap; }
+.bolinha { width:9px; height:9px; border-radius:50%; background:var(--muted); box-shadow:0 0 0 3px color-mix(in srgb, currentColor 18%, transparent); }
+.bolinha.verde { background:#12b76a; color:#12b76a; } .bolinha.amarela { background:#f79009; color:#f79009; } .bolinha.vermelha { background:#f04438; color:#f04438; }
+.avatar { width:38px; height:38px; border-radius:50%; background:var(--brand-soft); color:var(--brand-ink); display:grid; place-items:center; font-weight:700; border:0; cursor:pointer; }
+
+.conteudo { padding:32px; max-width:1320px; width:100%; margin:0 auto; flex:1; }
+.cabecalho-pagina { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+.cabecalho-pagina p { margin:6px 0 0; color:var(--ink-2); max-width:62ch; }
+.rodape { padding:20px 32px 28px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; border-top:1px solid var(--line); }
+
+.barra-inferior { display:none; }
+@media (max-width: 900px) {
+  .app { grid-template-columns:1fr; }
+  .lateral { display:none; }
+  .topo { padding:10px 16px; gap:12px; min-height:60px; }
+  .topo .cota { display:none; }
+  .conteudo { padding:20px 16px 110px; }
+  .rodape { display:none; }
+  h1 { font-size:24px; }
+  .barra-inferior { display:grid; grid-template-columns:repeat(5, 1fr); position:fixed; left:0; right:0; bottom:0; z-index:20;
+    background:var(--surface); border-top:1px solid var(--line); padding:6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  .barra-inferior a { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:52px;
+    color:var(--muted); text-decoration:none; font-size:11px; font-weight:600; border-radius:10px; }
+  .barra-inferior a svg { width:22px; height:22px; }
+  .barra-inferior a[aria-current="page"] { color:var(--brand-ink); }
+}
+@media (max-width: 420px) { .status-motor span.txt { display:none; } }
+
+/* ============================================================ COMPONENTES */
+.cartao { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow); padding:20px; min-width:0; }
+.grade-kpi { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:16px; margin-bottom:24px; }
+@media (max-width: 1200px) { .grade-kpi { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+@media (max-width: 640px) { .grade-kpi { grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; } }
+.kpi .rot { font-size:13px; font-weight:600; color:var(--ink-2); display:flex; align-items:center; gap:6px; }
+.kpi .val { font-size:34px; font-weight:800; letter-spacing:-.03em; margin:8px 0 2px; line-height:1.1; }
+.kpi .ctx { font-size:12.5px; color:var(--muted); }
+@media (max-width: 640px) { .kpi .val { font-size:28px; } .cartao { padding:16px; } }
+.info { width:18px; height:18px; border-radius:50%; border:1px solid var(--line-2); color:var(--muted); font-size:11px; font-weight:700;
+  display:inline-grid; place-items:center; cursor:help; background:transparent; padding:0; }
+.duas-colunas { display:grid; grid-template-columns: 1.6fr 1fr; gap:16px; }
+@media (max-width: 1100px) { .duas-colunas { grid-template-columns:1fr; } }
+.pilula { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 10px; border-radius:99px; background:var(--surface-2); color:var(--ink-2); white-space:nowrap; }
+.pilula.ok { background:var(--ok-soft); color:var(--ok); } .pilula.warn { background:var(--warn-soft); color:var(--warn); }
+.pilula.bad { background:var(--bad-soft); color:var(--bad); } .pilula.azul { background:var(--brand-soft); color:var(--brand-ink); }
+
+/* linha do tempo da busca */
+.linha-tempo { display:flex; align-items:center; gap:0; margin-top:10px; }
+.etapa { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); white-space:nowrap; }
+.etapa i { width:10px; height:10px; border-radius:50%; background:var(--line-2); display:block; }
+.etapa.feita i { background:var(--brand); } .etapa.atual i { background:var(--brand); box-shadow:0 0 0 4px var(--brand-soft); }
+.etapa.feita, .etapa.atual { color:var(--ink-2); font-weight:600; }
+.ligacao { flex:1; height:2px; background:var(--line); margin:0 8px; min-width:12px; }
+.ligacao.feita { background:var(--brand); }
+.busca-item { padding:14px 0; border-bottom:1px solid var(--line); }
+.busca-item:last-child { border-bottom:0; }
+
+/* gráfico de barras simples (SVG) */
+.grafico { width:100%; height:220px; display:block; }
+.grafico .barra-dado { fill:var(--brand); }
+.grafico .barra-dado:hover { fill:var(--brand-ink); }
+.grafico text { fill:var(--muted); font-size:11px; }
+.grafico line { stroke:var(--line); }
+
+/* estado vazio que ensina */
+.vazio { text-align:center; padding:36px 16px; }
+.vazio .ic { width:52px; height:52px; margin:0 auto 12px; border-radius:14px; background:var(--brand-soft); color:var(--brand-ink); display:grid; place-items:center; }
+.vazio .ic svg { width:26px; height:26px; }
+.vazio p { color:var(--ink-2); max-width:46ch; margin:6px auto 16px; }
+
+/* esqueleto de carregamento */
+.esq { background:linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size:200% 100%; animation:brilho 1.2s infinite; border-radius:8px; }
+@keyframes brilho { from { background-position:200% 0; } to { background-position:-200% 0; } }
+@media (prefers-reduced-motion: reduce) { .esq { animation:none; } }
+
+/* ============================================================ LEADS */
+.filtros { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+.filtros .busca-txt { flex:1 1 260px; position:relative; }
+.filtros .busca-txt svg { position:absolute; left:12px; top:13px; width:18px; height:18px; color:var(--muted); }
+.filtros .busca-txt input { padding-left:40px; }
+.filtros select { width:auto; min-width:150px; }
+.chips { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:4px 0 16px; }
+.chip { display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:0 6px 0 12px; border-radius:99px; background:var(--brand-soft); color:var(--brand-ink); font-size:13px; font-weight:600; border:0; }
+.chip button { width:24px; height:24px; border-radius:50%; border:0; background:transparent; color:inherit; cursor:pointer; display:grid; place-items:center; }
+.alternar { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 12px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--surface); font-size:14px; font-weight:500; cursor:pointer; }
+.alternar input { width:18px; height:18px; accent-color:var(--brand); }
+.resultado-cab { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.resultado-cab .conta { font-size:15px; } .resultado-cab .conta b { font-size:20px; }
+.tabela-caixa { overflow:auto; border:1px solid var(--line); border-radius:var(--r-lg); background:var(--surface); box-shadow:var(--shadow); max-height:70vh; }
+table.leads { width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
+table.leads th { position:sticky; top:0; z-index:1; background:var(--surface-2); text-align:left; font-size:12px; font-weight:700; color:var(--ink-2);
+  text-transform:uppercase; letter-spacing:.04em; padding:12px 14px; border-bottom:1px solid var(--line); white-space:nowrap; }
+table.leads td { padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:middle; }
+table.leads tbody tr { cursor:pointer; }
+table.leads tbody tr:hover { background:var(--surface-2); }
+.nome-lead { font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; max-width:34ch; }
+.cat-lead { font-size:12.5px; color:var(--muted); }
+/* versao-prototipo: 2 (nomes em até 2 linhas) */
+.estrela { color:#f5a524; }
+.cartoes-leads { display:none; }
+@media (max-width: 760px) {
+  .tabela-caixa { display:none; }
+  .cartoes-leads { display:grid; gap:10px; }
+  .filtros select { flex:1 1 45%; min-width:0; }
+}
+.cartao-lead { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:14px 16px; display:grid; gap:8px; cursor:pointer; }
+.cartao-lead .linha1 { display:flex; justify-content:space-between; gap:10px; }
+.cartao-lead .acoes { display:flex; gap:8px; }
+.cartao-lead .acoes .btn { min-height:40px; flex:1; }
+
+/* painel lateral (ficha) */
+.painel-fundo { position:fixed; inset:0; background:rgba(8,12,24,.45); z-index:40; }
+.painel { position:fixed; top:0; right:0; bottom:0; width:min(480px, 100%); background:var(--surface); z-index:41; box-shadow:var(--shadow-lg);
+  display:flex; flex-direction:column; transform:translateX(0); }
+.painel-cab { padding:20px 20px 12px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:flex-start; }
+.painel-corpo { padding:16px 20px; overflow:auto; flex:1; }
+.painel-acoes { padding:14px 20px calc(14px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+dl.dados { display:grid; grid-template-columns: 130px 1fr; gap:10px 14px; margin:0; font-size:14px; }
+dl.dados dt { color:var(--muted); } dl.dados dd { margin:0; overflow-wrap:anywhere; }
+
+/* tarja de privacidade nas capturas públicas (?captura=1) */
+.captura .pii { color:transparent !important; background:var(--line-2); border-radius:4px; user-select:none; }
+.captura a.pii { pointer-events:none; }
+
+/* ============================================================ MERCADO / MAPA */
+.mapa-cartao { display:grid; grid-template-columns: 1fr 300px; gap:20px; }
+@media (max-width: 1000px) { .mapa-cartao { grid-template-columns:1fr; } }
+svg.mapa-rn { width:100%; height:auto; display:block; }
+svg path.mun { stroke:var(--map-stroke); stroke-width:.7px; vector-effect:non-scaling-stroke; }
+svg.mapa-rn path.mun { cursor:pointer; transition:opacity .15s; }
+svg.mapa-rn path.mun:hover { opacity:.85; stroke:var(--ink); stroke-width:1.5px; }
+svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.3px; stroke-opacity:.5; vector-effect:non-scaling-stroke; pointer-events:none; }
+.legenda { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--ink-2); margin-top:10px; flex-wrap:wrap; }
+.legenda .escala { display:flex; } .legenda .escala i { width:34px; height:10px; display:block; }
+.fonte { font-size:12px; color:var(--muted); margin-top:12px; line-height:1.5; }
+.ranking { width:100%; border-collapse:collapse; font-size:14px; }
+.ranking td { padding:8px 4px; border-bottom:1px solid var(--line); }
+.ranking td:last-child { text-align:right; }
+.dica { position:fixed; pointer-events:none; background:var(--ink); color:var(--bg); padding:8px 10px; border-radius:8px; font-size:12.5px; z-index:60; box-shadow:var(--shadow-lg); }
+
+.aviso-prot { background:var(--warn-soft); color:var(--warn); border-radius:var(--r); padding:10px 14px; font-size:13px; font-weight:600; margin-bottom:20px; }
+</style>
+</head>
+<body>
+<!-- ======================================================= LOGIN -->
+<section id="tela-login" class="login oculto" aria-label="Entrar">
+  <div class="login-marca">
+    <div class="logo" style="color:#fff;padding:0"><span class="logo-marca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></span>MapaLeads</div>
+    <div style="position:relative;z-index:1">
+      <h1>Prospecção B2B inteligente no RN</h1>
+      <p style="margin-top:14px">Encontre empresas por cidade, microrregião e segmento — com WhatsApp, mapa e dados oficiais do IBGE.</p>
+    </div>
+    <div class="credito" style="position:relative;z-index:1" data-credito></div>
+    <svg class="rn" id="rn-login" viewBox="0 0 100 60" aria-hidden="true"></svg>
+  </div>
+  <div class="login-form">
+    <h2 style="font-size:24px">Entrar</h2>
+    <p class="ink2" style="margin:6px 0 10px">Use o e-mail e a senha criados pelo administrador.</p>
+    <label class="campo" for="le">E-mail</label><input id="le" type="email" autocomplete="username">
+    <label class="campo" for="ls">Senha</label><input id="ls" type="password" autocomplete="current-password">
+    <button class="btn btn-primario" id="entrar" style="margin-top:20px;width:100%" disabled>Entrar</button>
+    <p class="small" id="msg-login" role="status" style="min-height:20px;color:var(--bad)"></p>
+    <p class="credito" style="text-align:center;margin-top:28px" data-credito></p>
+  </div>
+</section>
+
+<!-- ======================================================= APP -->
+<div id="tela-app" class="app oculto">
+  <aside class="lateral" aria-label="Menu principal">
+    <div class="logo"><span class="logo-marca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></span>MapaLeads</div>
+    <nav class="menu" id="menu"></nav>
+    <div class="lateral-rodape">
+      <div class="small ink2" id="lateral-email" style="overflow:hidden;text-overflow:ellipsis"></div>
+      <p class="credito" style="margin:8px 0 0" data-credito></p>
+    </div>
+  </aside>
+
+  <div class="principal">
+    <header class="topo">
+      <div class="titulo-pagina" id="titulo-pagina">Início</div>
+      <div class="dir">
+        <div class="cota" title="Buscas comuns que você ainda pode fazer hoje (vira à meia-noite de Natal)">
+          <div class="linha"><span>Cota de hoje</span><span class="num" id="cota-txt">–</span></div>
+          <div class="barra" role="progressbar" aria-label="Cota de hoje usada" id="cota-barra" aria-valuemin="0"><i style="width:0%"></i></div>
+        </div>
+        <span class="status-motor" id="status-motor" title="Situação do motor de buscas"><i class="bolinha"></i><span class="txt">Verificando…</span></span>
+        <button class="avatar" id="avatar" aria-label="Menu do usuário" title="Sair"></button>
+      </div>
+    </header>
+
+    <main class="conteudo" id="conteudo">
+      <div class="aviso-prot">Protótipo visual (Etapa 0) — dados reais da sua conta, somente leitura. Nova busca, Mapa e Admin chegam nas próximas etapas.</div>
+
+      <!-- ---------------- INÍCIO -->
+      <section id="pag-inicio" data-pagina="inicio">
+        <div class="cabecalho-pagina">
+          <div><h1 id="saudacao">Olá</h1><p>Resumo das suas buscas e dos leads coletados. Números reais, atualizados a cada busca concluída.</p></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-sec" href="#mercado">Ver mercado</a><a class="btn btn-primario" href="#nova">Nova busca</a></div>
+        </div>
+        <div class="grade-kpi" id="kpis"></div>
+        <div class="duas-colunas">
+          <div class="cartao">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+              <h2>Leads por dia</h2><span class="small muted">últimos 30 dias · horário de Natal</span>
+            </div>
+            <div id="grafico-dias" style="margin-top:12px"><div class="esq" style="height:220px"></div></div>
+          </div>
+          <div class="cartao">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Últimas buscas</h2><a class="small" href="#leads">ver leads</a></div>
+            <div id="ultimas" style="margin-top:6px"><div class="esq" style="height:60px;margin-top:12px"></div><div class="esq" style="height:60px;margin-top:12px"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- MEUS LEADS -->
+      <section id="pag-leads" data-pagina="leads" class="oculto">
+        <div class="cabecalho-pagina">
+          <div><h1>Meus leads</h1><p>Todos os leads das buscas escolhidas, sem repetidos. Clique em um lead para ver a ficha completa.</p></div>
+          <div style="display:flex;gap:10px"><button class="btn btn-sec" disabled title="Etapa 4">Exportar</button></div>
+        </div>
+        <div class="filtros">
+          <div class="busca-txt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="f-texto" placeholder="Buscar por nome ou endereço" aria-label="Buscar por nome ou endereço"></div>
+          <select id="f-busca" aria-label="Busca de origem"></select>
+          <select id="f-cidade" aria-label="Cidade"></select>
+          <label class="alternar" title="Esconde leads cujo endereço mostra outra cidade (os sem cidade no endereço continuam)"><input type="checkbox" id="f-pedida" checked> Só da cidade pedida</label>
+          <label class="alternar"><input type="checkbox" id="f-whats"> Tem WhatsApp</label>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="resultado-cab"><div class="conta" id="conta" aria-live="polite"></div><div class="small muted" id="origem-leads"></div></div>
+        <div class="tabela-caixa"><table class="leads"><thead><tr>
+          <th>Nome</th><th>Bairro</th><th>Cidade</th><th>Microrregião</th><th>Telefone</th><th>Contato</th><th>Nota</th><th>Cidade confere</th>
+        </tr></thead><tbody id="tbody"></tbody></table></div>
+        <div class="cartoes-leads" id="cartoes"></div>
+        <div id="leads-vazio"></div>
+      </section>
+
+      <!-- ---------------- MERCADO -->
+      <section id="pag-mercado" data-pagina="mercado" class="oculto">
+        <div class="cabecalho-pagina">
+          <div><h1>Mercado · Rio Grande do Norte</h1><p>Onde estão as pessoas: população de cada município no Censo 2022. Passe o mouse (ou toque) em um município.</p></div>
+        </div>
+        <div class="grade-kpi" style="grid-template-columns:repeat(3,minmax(0,1fr))" id="kpis-mercado"></div>
+        <div class="cartao mapa-cartao">
+          <div>
+            <h2>População por município</h2>
+            <svg class="mapa-rn" id="mapa-mercado" viewBox="0 0 100 60" role="img" aria-label="Mapa do RN com população por município"></svg>
+            <div class="legenda" id="legenda"></div>
+            <p class="fonte">Fonte: IBGE — Censo Demográfico 2022, população residente (SIDRA, tabela 4709, variável 93).
+              Contornos: IBGE — API de Malhas Territoriais v3, qualidade mínima. Linhas escuras = microrregiões geográficas (IBGE).</p>
+          </div>
+          <div>
+            <h3>Maiores municípios</h3>
+            <table class="ranking" id="ranking"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- PRÓXIMAS ETAPAS -->
+      <section data-pagina="nova" class="oculto"><div class="cartao vazio"><div class="ic" data-icone="busca"></div><h2>Nova busca</h2><p>O assistente em 3 passos (O quê · Onde · Como) chega na Etapa 3. Por enquanto, use a tela atual.</p><a class="btn btn-primario" href="/">Abrir tela atual</a></div></section>
+      <section data-pagina="mapa" class="oculto"><div class="cartao vazio"><div class="ic" data-icone="mapa"></div><h2>Mapa</h2><p>Leads no mapa com agrupamento e camadas por município chegam na Etapa 5.</p></div></section>
+      <section data-pagina="admin" class="oculto"><div class="cartao vazio"><div class="ic" data-icone="admin"></div><h2>Admin</h2><p>Usuários, uso por vendedor, fila ao vivo e saúde do motor chegam na Etapa 8.</p></div></section>
+    </main>
+    <footer class="rodape"><span class="credito" data-credito></span><span class="credito">Dados: leads coletados do Google Maps · IBGE</span></footer>
+  </div>
+  <nav class="barra-inferior" id="barra-inferior" aria-label="Menu"></nav>
+</div>
+
+<div id="ficha-fundo" class="painel-fundo oculto"></div>
+<aside id="ficha" class="painel oculto" role="dialog" aria-modal="true" aria-labelledby="ficha-nome"></aside>
+<div id="dica" class="dica oculto" role="tooltip"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc, getDoc }
+  from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+// ============================================================ CONFIGURAÇÃO (um lugar só)
+// Assinatura da Resolve Farma: texto e onde aparece. Trocar aqui muda em todas as telas.
+const ASSINATURA = {
+  texto: "Desenvolvido por",
+  empresa: "Resolve Farma",
+  logo: null, // ex.: "/marca/resolve-farma.svg" quando o arquivo existir no repositório
+  locais: { login: true, rodape: true, menu: true, sobre: true, xlsx: true, tour: true },
+};
+const VERSAO = "3a-v2 · protótipo";
+
+const $ = (s) => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+if (params.get("captura") === "1") document.documentElement.classList.add("captura");
+const tema = params.get("tema");
+if (tema === "escuro" || tema === "claro") document.documentElement.dataset.tema = tema;
+for (const el of document.querySelectorAll("[data-credito]")) {
+  el.innerHTML = `${ASSINATURA.texto} <b>${ASSINATURA.empresa}</b>`;
+}
+
+// ============================================================ ÍCONES (traço, 24x24)
+const ICONES = {
+  inicio: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/>',
+  busca: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  leads: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  mapa: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
+  mercado: '<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',
+  admin: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  whats: '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 2 2.5 4.2 4.5 4.5l1.2-1.2 2 .8-.5 1.8c-3.6.4-8-4-7.6-7.6l1.8-.5.8 2z"/>',
+  fone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  fechar: '<path d="M6 6l12 12M18 6 6 18"/>',
+  copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+};
+const icone = (nome) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[nome]}</svg>`;
+for (const el of document.querySelectorAll("[data-icone]")) el.innerHTML = icone(el.dataset.icone);
+
+const PAGINAS = [
+  { id: "inicio", nome: "Início", icone: "inicio" },
+  { id: "nova", nome: "Nova busca", icone: "busca" },
+  { id: "leads", nome: "Meus leads", icone: "leads" },
+  { id: "mapa", nome: "Mapa", icone: "mapa" },
+  { id: "mercado", nome: "Mercado (IBGE)", curto: "Mercado", icone: "mercado" },
+  { id: "admin", nome: "Admin", icone: "admin", soAdmin: true },
+];
+
+// ============================================================ UTILIDADES
+const FUSO = { timeZone: "America/Fortaleza" };
+const diaFortaleza = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { ...FUSO, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+const numero = (n) => Number(n || 0).toLocaleString("pt-BR");
+const txt = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const link = (u) => (/^https?:\/\//i.test(String(u || "")) ? txt(u) : "");
+const normalizar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/[-–]\s*rn$|\s+rn$|\/rn$/, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/^assu$/, "acu");
+const dataHora = (d) => d.toLocaleString("pt-BR", { ...FUSO, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+
+// ============================================================ DADOS FIXOS DO IBGE (cacheados pelo navegador)
+const [config, municipiosJson, regioesJson, malhaMun, malhaMicro] = await Promise.all([
+  fetch("/api/config-publica").then((r) => r.json()),
+  fetch("/dados/municipios_rn.json").then((r) => r.json()),
+  fetch("/dados/microrregioes_rn.json").then((r) => r.json()),
+  fetch("/dados/malha_rn_municipio_minima.geojson.json").then((r) => r.json()),
+  fetch("/dados/malha_rn_microrregiao_minima.geojson.json").then((r) => r.json()),
+]);
+const municipios = new Map(municipiosJson.municipios.map((m) => [m.codigo_ibge, { ...m }]));
+for (const r of regioesJson.microrregioes) for (const c of r.municipios) municipios.get(c).micro = r.nome;
+const porNome = new Map([...municipios.values()].map((m) => [normalizar(m.nome), m]));
+
+// ============================================================ DESENHO DO MAPA (SVG a partir da malha oficial)
+// Projeção simples (equiretangular com correção de latitude): suficiente para um estado pequeno.
+const LAT0 = -5.9, KX = Math.cos((LAT0 * Math.PI) / 180);
+const LIM = { x0: -38.6, x1: -34.95, y0: -4.8, y1: -7.0 };
+const W = 100, H = ((LIM.y0 - LIM.y1) / ((LIM.x1 - LIM.x0) * KX)) * 100;
+const px = ([lon, lat]) => [((lon - LIM.x0) * KX / ((LIM.x1 - LIM.x0) * KX)) * W, ((LIM.y0 - lat) / (LIM.y0 - LIM.y1)) * H];
+function caminho(geom) {
+  const aneis = geom.type === "Polygon" ? geom.coordinates : geom.coordinates.flat();
+  return aneis.map((anel) => "M" + anel.map((p) => px(p).map((v) => v.toFixed(2)).join(",")).join("L") + "Z").join("");
+}
+function desenharMapa(svg, { cor = () => "var(--map-empty)", micro = true, interativo = false } = {}) {
+  svg.setAttribute("viewBox", `0 0 ${W} ${H.toFixed(2)}`);
+  const muns = malhaMun.features.map((f) => `<path class="mun" data-cod="${f.properties.codarea}" fill="${cor(f.properties.codarea)}" d="${caminho(f.geometry)}"/>`).join("");
+  const mics = micro ? malhaMicro.features.map((f) => `<path class="micro" d="${caminho(f.geometry)}"/>`).join("") : "";
+  svg.innerHTML = muns + mics;
+  if (!interativo) return;
+  const dica = $("#dica");
+  svg.onpointermove = (ev) => {
+    const cod = ev.target.dataset?.cod;
+    if (!cod) { dica.classList.add("oculto"); return; }
+    const m = municipios.get(cod);
+    dica.innerHTML = `<b>${txt(m.nome)}</b><br>${numero(m.populacao_2022)} habitantes<br><span style="opacity:.75">${txt(m.micro)}</span>`;
+    dica.style.left = `${Math.min(ev.clientX + 14, innerWidth - 200)}px`; dica.style.top = `${ev.clientY + 14}px`;
+    dica.classList.remove("oculto");
+  };
+  svg.onpointerleave = () => dica.classList.add("oculto");
+}
+desenharMapa($("#rn-login"), { cor: () => "#1d3a70", micro: true });
+document.querySelectorAll("#rn-login path.micro").forEach((p) => (p.style.stroke = "#4b73c4"));
+document.querySelectorAll("#rn-login path.mun").forEach((p) => (p.style.stroke = "#0b1b3a"));
+
+// ============================================================ FIREBASE
+const app = initializeApp(config);
+const auth = getAuth(app);
+const db = getFirestore(app);
+if (params.get("emulador") === "1") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+}
+let usuario = null, ehAdmin = false, buscas = [], estadoFila = null;
+
+$("#entrar").onclick = async () => {
+  $("#msg-login").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("#le").value.trim(), $("#ls").value); }
+  catch { $("#msg-login").textContent = "E-mail ou senha inválidos."; }
+};
+$("#ls").onkeydown = (ev) => { if (ev.key === "Enter") $("#entrar").click(); };
+$("#avatar").onclick = () => { if (confirm("Sair do MapaLeads?")) signOut(auth); };
+$("#entrar").disabled = false;
+
+onAuthStateChanged(auth, async (u) => {
+  usuario = u;
+  $("#tela-login").classList.toggle("oculto", !!u);
+  $("#tela-app").classList.toggle("oculto", !u);
+  if (!u) return;
+  ehAdmin = (await u.getIdTokenResult()).claims.admin === true;
+  $("#lateral-email").textContent = u.email;
+  $("#avatar").textContent = (u.email || "?")[0].toUpperCase();
+  $("#saudacao").textContent = `Olá, ${(u.email || "").split("@")[0]}`;
+  montarMenus();
+  ouvirDados();
+  irPara(location.hash.slice(1) || "inicio");
+});
+
+// ============================================================ NAVEGAÇÃO
+function montarMenus() {
+  const visiveis = PAGINAS.filter((p) => !p.soAdmin || ehAdmin);
+  $("#menu").innerHTML = `<div class="rotulo-grupo">Prospecção</div>` + visiveis.map((p) =>
+    `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.nome}</span></a>`).join("");
+  $("#barra-inferior").innerHTML = visiveis.filter((p) => !p.soAdmin).map((p) =>
+    `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.curto || p.nome.split(" ")[0]}</span></a>`).join("");
+}
+addEventListener("hashchange", () => irPara(location.hash.slice(1)));
+function irPara(id) {
+  const pag = PAGINAS.find((p) => p.id === id) || PAGINAS[0];
+  for (const s of document.querySelectorAll("[data-pagina]")) s.classList.toggle("oculto", s.dataset.pagina !== pag.id);
+  for (const a of document.querySelectorAll("[data-ir]")) {
+    if (a.dataset.ir === pag.id) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  $("#titulo-pagina").textContent = pag.nome;
+  if (pag.id === "inicio") desenharInicio();
+  if (pag.id === "leads") carregarLeads();
+  if (pag.id === "mercado") desenharMercado();
+  scrollTo(0, 0);
+}
+
+// ============================================================ DADOS DO USUÁRIO (poucas leituras)
+function ouvirDados() {
+  const col = collection(db, "buscas");
+  const q = ehAdmin
+    ? query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(20))
+    : query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(20));
+  onSnapshot(q, (s) => {
+    buscas = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (!$("#pag-inicio").classList.contains("oculto")) desenharInicio();
+    if (!$("#pag-leads").classList.contains("oculto")) carregarLeads();
+  });
+  onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = d.data() || {}; desenharStatus(); });
+  carregarCota();
+}
+async function carregarCota() {
+  try {
+    const [p, g] = await Promise.all([getDoc(doc(db, `usuarios/${usuario.uid}`)), getDoc(doc(db, "config/geral"))]);
+    const perfil = p.data() || {};
+    const usadas = perfil.dia === diaFortaleza() ? perfil.contagem_dia || 0 : 0;
+    const limite = Number.isInteger(perfil.limite_diario) ? perfil.limite_diario : (g.data()?.limite_padrao ?? 20);
+    $("#cota-txt").textContent = `${usadas} de ${limite}`;
+    $("#cota-barra").setAttribute("aria-valuemax", limite); $("#cota-barra").setAttribute("aria-valuenow", usadas);
+    $("#cota-barra i").style.width = `${Math.min(100, (100 * usadas) / Math.max(1, limite))}%`;
+    cota = { usadas, limite };
+  } catch { $("#cota-txt").textContent = "–"; }
+}
+let cota = null;
+function desenharStatus() {
+  const rodando = estadoFila?.rodando?.length || 0, fila = estadoFila?.itens?.length || 0, aguard = estadoFila?.aguardando?.length || 0;
+  const atualizado = estadoFila?.atualizado_em?.toDate?.();
+  const parado = fila > 0 && !rodando && atualizado && Date.now() - atualizado > 30 * 60000;
+  const [cor, texto] = parado ? ["vermelha", "Motor sem resposta"] : rodando ? ["amarela", `Buscando · ${rodando + fila} na fila`] : fila ? ["amarela", `${fila} na fila`] : ["verde", aguard ? `Pronto · ${aguard} agendada(s)` : "Motor pronto"];
+  $("#status-motor").innerHTML = `<i class="bolinha ${cor}"></i><span class="txt">${texto}</span>`;
+}
+
+// ============================================================ INÍCIO
+async function desenharInicio() {
+  if (!usuario) return;
+  const concluidas = buscas.filter((b) => b.resumo);
+  const total = concluidas.reduce((t, b) => t + (b.resumo.total || 0), 0);
+  const whats = concluidas.reduce((t, b) => t + (b.resumo.com_whatsapp || 0), 0);
+  const ativas = buscas.filter((b) => ["na_fila", "rodando"].includes(b.status)).length;
+  const dias = Array.from({ length: 30 }, (_, i) => diaFortaleza(new Date(Date.now() - (29 - i) * 86400000)));
+  const serie = await serieDias(dias);
+  const semana = serie.slice(-7).reduce((t, d) => t + d.leads, 0);
+  const kpi = (rot, val, ctx, ajuda) => `<div class="cartao kpi"><div class="rot">${rot}${ajuda ? ` <button class="info" title="${txt(ajuda)}" aria-label="${txt(ajuda)}">i</button>` : ""}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></div>`;
+  $("#kpis").innerHTML =
+    kpi("Leads coletados", numero(total), `nas suas últimas ${buscas.length} buscas`, "Soma dos leads das buscas concluídas (sem contar repetidos dentro de cada busca).") +
+    kpi("Leads da semana", numero(semana), "últimos 7 dias", "Leads das buscas concluídas nos últimos 7 dias, horário de Natal.") +
+    kpi("Com WhatsApp", total ? `${Math.round((100 * whats) / total)}%` : "–", total ? `${numero(whats)} de ${numero(total)} leads` : "sem leads ainda", "Leads com celular (o botão abre a conversa no WhatsApp).") +
+    kpi("Buscas ativas", numero(ativas), ativas ? "na fila ou rodando" : "nenhuma agora") +
+    kpi("Cota de hoje", cota ? `${cota.usadas}/${cota.limite}` : "–", cota ? `restam ${Math.max(0, cota.limite - cota.usadas)} buscas` : "", "Buscas comuns por dia. Zera à meia-noite (Natal). RN inteiro não conta.");
+  desenharGrafico(serie);
+  desenharUltimas();
+}
+let cacheSerie = null;
+async function serieDias(dias) {
+  if (cacheSerie) return cacheSerie; // 30 leituras por visita, guardadas enquanto a página estiver aberta
+  const docs = await Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__${ehAdmin ? "geral" : usuario.uid}`)).catch(() => null)));
+  cacheSerie = dias.map((d, i) => ({ dia: d, leads: docs[i]?.data()?.leads || 0 }));
+  return cacheSerie;
+}
+function desenharGrafico(serie) {
+  const max = Math.max(1, ...serie.map((d) => d.leads));
+  if (!serie.some((d) => d.leads)) {
+    $("#grafico-dias").innerHTML = `<div class="vazio"><div class="ic">${icone("mercado")}</div><h3>Ainda sem leads neste período</h3><p>As barras aparecem quando uma busca termina. Comece por uma microrregião — leva poucos minutos.</p><a class="btn btn-primario" href="#nova">Fazer a primeira busca →</a></div>`;
+    return;
+  }
+  const L = 600, A = 200, pad = 28, bw = (L - pad) / serie.length;
+  const barras = serie.map((d, i) => {
+    const h = (d.leads / max) * (A - 30);
+    const [a, m, dd] = d.dia.split("-");
+    return `<rect class="barra-dado" x="${(pad + i * bw + 2).toFixed(1)}" y="${(A - 20 - h).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${Math.max(h, 0).toFixed(1)}" rx="3"><title>${dd}/${m}: ${numero(d.leads)} leads</title></rect>` +
+      (i % 5 === 0 ? `<text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${A - 4}" text-anchor="middle">${dd}/${m}</text>` : "");
+  }).join("");
+  $("#grafico-dias").innerHTML = `<svg class="grafico" viewBox="0 0 ${L} ${A}" role="img" aria-label="Leads por dia nos últimos 30 dias">
+    <line x1="${pad}" x2="${L}" y1="${A - 20}" y2="${A - 20}"/><text x="0" y="14">${numero(max)}</text><text x="0" y="${A - 22}">0</text>${barras}</svg>`;
+}
+const STATUS = { na_fila: ["Na fila", "warn"], rodando: ["Rodando", "azul"], concluida: ["Concluída", "ok"], erro: ["Erro", "bad"], cancelada: ["Cancelada", "bad"] };
+function linhaDoTempo(b) {
+  const ordem = ["na_fila", "rodando", "concluida"];
+  const pos = b.status === "concluida" ? 2 : b.status === "rodando" ? 1 : b.status === "na_fila" ? 0 : 2;
+  const nomes = ["Na fila", b.status === "rodando" && b.progresso ? `Rodando ${b.progresso}` : "Rodando", b.status === "erro" ? "Erro" : b.status === "cancelada" ? "Cancelada" : "Concluída"];
+  return `<div class="linha-tempo" aria-label="Situação: ${STATUS[b.status]?.[0] || b.status}">${ordem.map((_, i) =>
+    `${i ? `<span class="ligacao ${i <= pos ? "feita" : ""}"></span>` : ""}<span class="etapa ${i < pos ? "feita" : i === pos ? "atual" : ""}"><i></i>${nomes[i]}</span>`).join("")}</div>`;
+}
+function desenharUltimas() {
+  if (!buscas.length) {
+    $("#ultimas").innerHTML = `<div class="vazio"><div class="ic">${icone("busca")}</div><h3>Você ainda não tem buscas</h3><p>Comece por uma microrregião: escolha o segmento, marque as cidades e acompanhe aqui.</p><a class="btn btn-primario" href="#nova">Começar →</a></div>`;
+    return;
+  }
+  $("#ultimas").innerHTML = buscas.slice(0, 5).map((b) => {
+    const p = b.parametros || {};
+    const onde = b.tipo === "rn_mae" ? "RN inteiro" : (p.cidades || []).length > 2 ? `${p.cidades.length} cidades` : (p.cidades || []).join(", ");
+    const [rot, cls] = STATUS[b.status] || [b.status, ""];
+    return `<div class="busca-item"><div style="display:flex;justify-content:space-between;gap:10px">
+      <div style="min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${txt((p.termos || []).join(", "))}</div>
+      <div class="small muted">${txt(onde)} · ${b.criada_em ? dataHora(b.criada_em.toDate()) : ""}</div></div>
+      <div style="text-align:right"><span class="pilula ${cls}">${rot}</span>${b.resumo ? `<div class="small ink2 num" style="margin-top:4px">${numero(b.resumo.total)} leads</div>` : ""}</div></div>
+      ${linhaDoTempo(b)}</div>`;
+  }).join("");
+}
+
+// ============================================================ MEUS LEADS
+let leads = [], carregadoDe = "";
+async function carregarLeads() {
+  const comLeads = buscas.filter((b) => (b.qtd_lotes || 0) > 0);
+  $("#f-busca").innerHTML = `<option value="">Todas as buscas (${comLeads.slice(0, 5).length} mais recentes)</option>` +
+    comLeads.slice(0, 5).map((b) => `<option value="${txt(b.id)}">${txt((b.parametros?.termos || []).join(", "))} · ${b.criada_em ? dataHora(b.criada_em.toDate()) : ""}</option>`).join("");
+  const alvo = comLeads.slice(0, 5);
+  const chave = alvo.map((b) => b.id).join(",");
+  if (chave === carregadoDe) return desenharLeads();
+  if (!alvo.length) {
+    leads = []; carregadoDe = chave; $("#tbody").innerHTML = ""; $("#cartoes").innerHTML = "";
+    $("#leads-vazio").innerHTML = `<div class="cartao vazio"><div class="ic">${icone("leads")}</div><h2>Nenhum lead ainda</h2><p>Os leads aparecem aqui quando uma busca termina. Comece por uma microrregião →</p><a class="btn btn-primario" href="#nova">Nova busca</a></div>`;
+    return desenharLeads();
+  }
+  $("#tbody").innerHTML = Array.from({ length: 6 }, () => `<tr><td colspan="8"><div class="esq" style="height:18px"></div></td></tr>`).join("");
+  const listas = await Promise.all(alvo.map(async (b) => {
+    const lotes = await Promise.all(Array.from({ length: b.qtd_lotes }, (_, n) => getDoc(doc(db, `buscas/${b.id}/lotes/${n}`))));
+    return lotes.flatMap((l) => (l.data()?.leads || []).map((x) => ({ ...x, _busca: b.id })));
+  }));
+  const vistos = new Map();
+  for (const l of listas.flat()) {
+    const k = l.id_lugar || `${normalizar(l.nome)}|${String(l.telefone || "").replace(/\D/g, "")}`;
+    if (!vistos.has(k)) vistos.set(k, { ...l, micro: porNome.get(normalizar(l.cidade))?.micro || "" });
+  }
+  leads = [...vistos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+  carregadoDe = chave;
+  $("#origem-leads").textContent = `de ${alvo.length} busca(s) · ${alvo.reduce((t, b) => t + b.qtd_lotes, 0)} leitura(s) no banco`;
+  const cidades = new Map();
+  for (const l of leads) cidades.set(l.cidade || "(sem cidade)", (cidades.get(l.cidade || "(sem cidade)") || 0) + 1);
+  $("#f-cidade").innerHTML = `<option value="">Todas as cidades</option>` + [...cidades].sort((a, b) => b[1] - a[1]).map(([c, n]) => `<option value="${txt(c)}">${txt(c)} (${n})</option>`).join("");
+  desenharLeads();
+}
+for (const id of ["#f-texto", "#f-busca", "#f-cidade", "#f-pedida", "#f-whats"]) $(id).addEventListener("input", desenharLeads);
+let visiveis = [];
+function desenharLeads() {
+  const t = normalizar($("#f-texto").value), bsc = $("#f-busca").value, cid = $("#f-cidade").value;
+  visiveis = leads.filter((l) => (!t || normalizar(`${l.nome} ${l.endereco}`).includes(t)) && (!bsc || l._busca === bsc) &&
+    (!cid || (l.cidade || "(sem cidade)") === cid) && (!$("#f-pedida").checked || l.cidade_confere !== "nao") && (!$("#f-whats").checked || l.whatsapp_link));
+  const chips = [];
+  if ($("#f-pedida").checked) chips.push(["Só da cidade pedida", "#f-pedida"]);
+  if ($("#f-whats").checked) chips.push(["Tem WhatsApp", "#f-whats"]);
+  if (cid) chips.push([cid, "#f-cidade"]);
+  if (t) chips.push([`“${$("#f-texto").value}”`, "#f-texto"]);
+  $("#chips").innerHTML = chips.map(([r, alvo]) => `<span class="chip">${txt(r)}<button aria-label="Remover filtro ${txt(r)}" data-limpa="${alvo}">${icone("fechar")}</button></span>`).join("") +
+    (chips.length ? `<button class="btn btn-fantasma small" style="min-height:32px;padding:0 10px;font-size:13px" data-limpa="tudo">Limpar tudo</button>` : "");
+  $("#conta").innerHTML = `<b class="num">${numero(visiveis.length)}</b> <span class="ink2">de ${numero(leads.length)} leads</span>`;
+  const CONF = { sim: ["sim", "ok"], nao: ["não", "bad"], indefinido: ["?", "warn"] };
+  const contato = (l) => `${link(l.whatsapp_link) ? `<a class="btn btn-whats btn-icone" style="min-height:36px;min-width:36px" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener" aria-label="WhatsApp" onclick="event.stopPropagation()">${icone("whats")}</a>` : ""}` +
+    `${link(l.site) ? `<a class="btn btn-sec btn-icone" style="min-height:36px;min-width:36px" href="${link(l.site)}" target="_blank" rel="noopener" aria-label="Site" onclick="event.stopPropagation()">${icone("link")}</a>` : ""}`;
+  const pagina = visiveis.slice(0, 200);
+  $("#tbody").innerHTML = pagina.map((l, i) => `<tr data-i="${i}" tabindex="0">
+    <td><div class="nome-lead"><span class="pii">${txt(l.nome)}</span></div><div class="cat-lead">${txt(l.categoria)}</div></td>
+    <td>${txt(l.bairro)}</td><td>${txt(l.cidade)}</td><td>${txt(l.micro)}</td>
+    <td class="num" style="white-space:nowrap"><span class="pii">${txt(l.telefone)}</span></td>
+    <td><div style="display:flex;gap:6px">${contato(l)}</div></td>
+    <td class="num">${l.nota ? `<span class="estrela">★</span> ${String(l.nota).replace(".", ",")} <span class="muted small">(${numero(l.qtd_avaliacoes)})</span>` : '<span class="muted">—</span>'}</td>
+    <td><span class="pilula ${CONF[l.cidade_confere]?.[1] || ""}">${CONF[l.cidade_confere]?.[0] || txt(l.cidade_confere)}</span></td></tr>`).join("");
+  $("#cartoes").innerHTML = pagina.map((l, i) => `<div class="cartao-lead" data-i="${i}" tabindex="0">
+    <div class="linha1"><div style="min-width:0"><div class="nome-lead"><span class="pii">${txt(l.nome)}</span></div><div class="cat-lead">${txt(l.categoria)} · ${txt([l.bairro, l.cidade].filter(Boolean).join(", "))}</div></div>
+    ${l.nota ? `<div class="num small" style="white-space:nowrap"><span class="estrela">★</span> ${String(l.nota).replace(".", ",")}</div>` : ""}</div>
+    <div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${icone("whats")} WhatsApp</a>` : ""}
+    ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}" onclick="event.stopPropagation()">${icone("fone")} Ligar</a>` : ""}</div></div>`).join("");
+  if (leads.length) $("#leads-vazio").innerHTML = visiveis.length ? "" : `<div class="cartao vazio"><h2>Nenhum lead com esses filtros</h2><p>Tente tirar algum filtro — por exemplo, “Só da cidade pedida”.</p></div>`;
+}
+$("#chips").onclick = (ev) => {
+  const alvo = ev.target.closest("[data-limpa]")?.dataset.limpa;
+  if (!alvo) return;
+  const limpar = (s) => { const el = $(s); if (el.type === "checkbox") el.checked = false; else el.value = ""; };
+  if (alvo === "tudo") ["#f-pedida", "#f-whats", "#f-cidade", "#f-texto", "#f-busca"].forEach(limpar); else limpar(alvo);
+  desenharLeads();
+};
+function abrirFicha(l) {
+  const pii = (v) => `<span class="pii">${txt(v)}</span>`;
+  const campos = [["Categoria", txt(l.categoria)], ["Telefone", pii(l.telefone)], ["E-mail", pii(l.email)], ["Endereço", pii(l.endereco)], ["Bairro", txt(l.bairro)],
+    ["Cidade", txt(l.cidade)], ["Microrregião", txt(l.micro)], ["Nota", l.nota ? `${String(l.nota).replace(".", ",")} (${numero(l.qtd_avaliacoes)} avaliações)` : ""],
+    ["Site", pii(l.site)], ["Instagram", pii(l.instagram)], ["Encontrado por", txt(l.termo_que_encontrou)], ["Cidade pedida", txt(l.cidade_buscada)], ["Cidade confere", txt(l.cidade_confere)]];
+  $("#ficha").innerHTML = `<div class="painel-cab"><div style="flex:1;min-width:0"><div class="small muted">Ficha do lead</div><h2 id="ficha-nome" style="font-size:22px">${pii(l.nome)}</h2></div>
+    <button class="btn btn-fantasma btn-icone" id="ficha-fechar" aria-label="Fechar">${icone("fechar")}</button></div>
+    <div class="painel-corpo"><dl class="dados">${campos.filter(([, v]) => v && v !== '<span class="pii"></span>').map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+    <p class="fonte">Mini-mapa da localização e “copiar dados” chegam na Etapa 4.</p></div>
+    <div class="painel-acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : "<span></span>"}
+    ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : "<span></span>"}
+    ${link(l.link_maps) ? `<a class="btn btn-sec" style="grid-column:1/-1" href="${link(l.link_maps)}" target="_blank" rel="noopener">${icone("mapa")} Abrir no Google Maps</a>` : ""}</div>`;
+  $("#ficha").classList.remove("oculto"); $("#ficha-fundo").classList.remove("oculto");
+  $("#ficha-fechar").focus();
+}
+const fecharFicha = () => { $("#ficha").classList.add("oculto"); $("#ficha-fundo").classList.add("oculto"); };
+$("#ficha-fundo").onclick = fecharFicha;
+addEventListener("keydown", (ev) => { if (ev.key === "Escape") fecharFicha(); });
+for (const el of [$("#tbody"), $("#cartoes")]) {
+  el.onclick = (ev) => { const i = ev.target.closest("[data-i]")?.dataset.i; if (i !== undefined) abrirFicha(visiveis[Number(i)]); };
+  el.onkeydown = (ev) => { if (ev.key === "Enter") el.onclick(ev); };
+}
+
+// ============================================================ MERCADO (IBGE)
+function desenharMercado() {
+  const lista = [...municipios.values()];
+  const total = lista.reduce((t, m) => t + m.populacao_2022, 0);
+  const kpi = (rot, val, ctx) => `<div class="cartao kpi"><div class="rot">${rot}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></div>`;
+  const acima20 = lista.filter((m) => m.populacao_2022 > 20000).length;
+  $("#kpis-mercado").innerHTML = kpi("População do RN", numero(total), "Censo 2022 · IBGE") + kpi("Municípios", "167", "19 microrregiões · IBGE") +
+    kpi("Com mais de 20 mil hab.", numero(acima20), "Censo 2022 · IBGE");
+  // Faixas (quebras fixas, legíveis): população residente
+  const FAIXAS = [5000, 10000, 20000, 50000, 100000, 300000];
+  const faixa = (p) => FAIXAS.findIndex((f) => p <= f) + 1 || 7;
+  desenharMapa($("#mapa-mercado"), { cor: (cod) => `var(--seq-${faixa(municipios.get(cod)?.populacao_2022 || 0)})`, interativo: true });
+  const rotulos = ["até 5 mil", "5–10 mil", "10–20 mil", "20–50 mil", "50–100 mil", "100–300 mil", "300 mil +"];
+  $("#legenda").innerHTML = `<span>Habitantes:</span>` + rotulos.map((r, i) => `<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:14px;height:14px;border-radius:3px;background:var(--seq-${i + 1});display:inline-block"></i>${r}</span>`).join("");
+  $("#ranking").innerHTML = lista.sort((a, b) => b.populacao_2022 - a.populacao_2022).slice(0, 10)
+    .map((m, i) => `<tr><td class="muted num" style="width:28px">${i + 1}</td><td><b>${txt(m.nome)}</b><div class="small muted">${txt(m.micro)}</div></td><td class="num">${numero(m.populacao_2022)}</td></tr>`).join("");
+}
+</script>
+</body>
+</html>
