@@ -20,6 +20,12 @@ const formas = {
   "JSON completo da conta": JSON.stringify({ type: "service_account", private_key: PEM, client_email: "x@y.iam.gserviceaccount.com" }),
   "quebras CRLF (Windows)": PEM.replace(/\n/g, "\r\n"),
   "espaços nas pontas": `  ${literal}  `,
+  "\\n literal no começo": `\\n${literal}`,
+  "lixo numa linha antes do cabeçalho": `Value\n${PEM}`,
+  "lixo colado antes do cabeçalho": `xyz${PEM}`,
+  "cabeçalho com traços faltando": PEM.replace("-----BEGIN PRIVATE KEY-----", "----BEGIN PRIVATE KEY----"),
+  "sem cabeçalho": PEM.replace("-----BEGIN PRIVATE KEY-----\n", ""),
+  "corpo sem quebras (uma linha só)": PEM.replace(/\n(?!-----END)/g, "").replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n").replace("-----END", "\n-----END"),
 };
 
 for (const [nome, valor] of Object.entries(formas)) {
@@ -36,6 +42,6 @@ test("formato descrito sem expor a chave", () => {
   assert.match(texto, /começa com BEGIN PRIVATE KEY: não/);
   assert.ok(!texto.includes("abc-chave-quebrada"));
   const ok = descreverFormatoDaChave(`"${literal}"`);
-  assert.match(ok, /BEGIN PRIVATE KEY: sim.*END PRIVATE KEY: sim/);
+  assert.match(ok, /BEGIN PRIVATE KEY: sim.*END PRIVATE KEY: sim.*válida após normalizar: sim/);
   assert.ok(!ok.includes(literal.slice(40, 80)));
 });
