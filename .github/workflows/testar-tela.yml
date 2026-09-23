@@ -1,0 +1,54 @@
+# Teste REAL da tela em PRODUÇÃO: abre o site no Chrome, com login temporário (comum e admin)
+# e uma busca com leads FICTÍCIOS; testa Hoje, nova busca, perfis, leads, ficha, .csv/.xlsx
+# e a aba Admin (saúde do motor). Tudo é apagado no final.
+# Log público: só OK/FALHOU por etapa. Uso: Actions > Testar tela em produção > Run workflow.
+# api_local=true: página do deploy preview + Functions deste commit no runner (antes do merge).
+name: Testar tela em produção
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL do site"
+        required: true
+        default: "https://mapaleads-rn.netlify.app"
+      modo:
+        description: "so_tela (não cria busca real) ou criar_e_cancelar (clica Buscar, cancela na hora e apaga)"
+        required: true
+        default: "so_tela"
+        type: choice
+        options:
+          - so_tela
+          - criar_e_cancelar
+      api_local:
+        description: "Functions deste commit rodando no runner (para testar o deploy preview de um PR antes do merge)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read # só para a "saúde do motor" listar as execuções quando api_local=true
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Empacotar as Functions como o Netlify (só com api_local)
+        if: github.event.inputs.api_local == 'true'
+        run: node testes/empacotar.mjs
+      - name: Testar a tela no ar
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          MODO: ${{ github.event.inputs.modo }}
+          NAVEGADOR: /usr/bin/google-chrome
+          API_LOCAL: ${{ github.event.inputs.api_local == 'true' && '1' || '0' }}
+          MAPALEADS_GITHUB_TOKEN: ${{ github.event.inputs.api_local == 'true' && github.token || '' }}
+          MAPALEADS_GITHUB_REPO: ${{ github.repository }}
+        run: node ferramentas/testar_tela_producao.mjs "${{ github.event.inputs.url }}"

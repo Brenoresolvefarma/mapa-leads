@@ -3,49 +3,99 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MapaLeads — teste da Fase 2</title>
+<meta name="color-scheme" content="light dark">
+<title>MapaLeads</title>
 <!--
-  Página TEMPORÁRIA da Fase 2: serve só para testar login, Functions, fila,
-  limite diário, RN inteiro e cancelamento. A tela definitiva vem na Fase 3.
-  Não há nenhuma chave no código: a config pública do Firebase vem de /api/config-publica.
+  MapaLeads — tela definitiva (Fase 3a). Arquivo único, bibliotecas só por CDN.
+  Nenhuma chave no código: a config pública do Firebase vem de /api/config-publica.
+  O navegador só LÊ o Firestore (regras); tudo que grava passa pelas Netlify Functions.
+  Leituras econômicas: lista de buscas 20 por vez, leads em lotes de 300 por leitura.
 -->
 <style>
-  :root { --fundo:#f5f7fb; --cartao:#fff; --texto:#1d2433; --suave:#667085; --borda:#e3e8ef; --azul:#2563eb; --verde:#16a34a; --vermelho:#dc2626; --amarelo:#b45309; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--fundo); color:var(--texto); }
-  header { background:#0f172a; color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  :root {
+    --fundo:#f5f7fb; --cartao:#fff; --texto:#1d2433; --suave:#667085; --borda:#e3e8ef;
+    --azul:#2563eb; --azul-claro:#e8eefc; --verde:#16a34a; --verde-claro:#e7f7ed;
+    --vermelho:#dc2626; --vermelho-claro:#fdecec; --amarelo:#b45309; --amarelo-claro:#fff7e6;
+    --topo:#0f172a; --linha-par:#fafbfd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo:#0b1120; --cartao:#131c2e; --texto:#e5e9f0; --suave:#98a2b3; --borda:#26324a;
+      --azul:#60a5fa; --azul-claro:#1a2a4a; --verde:#4ade80; --verde-claro:#12301f;
+      --vermelho:#f87171; --vermelho-claro:#3a1818; --amarelo:#fbbf24; --amarelo-claro:#3a2a0e;
+      --topo:#060a14; --linha-par:#162036;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--fundo); color:var(--texto); }
+  a { color:var(--azul); }
+  header { background:var(--topo); color:#fff; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
   header b { font-size:18px; }
-  main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav button { background:transparent; color:#cbd5e1; padding:7px 12px; }
+  nav button.ativa { background:#1e293b; color:#fff; }
+  main { max-width:1200px; margin:0 auto; padding:16px; display:grid; gap:16px; }
   section { background:var(--cartao); border:1px solid var(--borda); border-radius:12px; padding:16px; min-width:0; }
-  h2 { margin:0 0 12px; font-size:16px; }
+  h2 { margin:0 0 12px; font-size:16px; } h3 { margin:12px 0 6px; font-size:14px; }
   label { display:block; font-size:13px; color:var(--suave); margin:8px 0 4px; }
-  input, select { width:100%; padding:9px 10px; border:1px solid var(--borda); border-radius:8px; font:inherit; }
-  input[type=checkbox] { width:auto; }
+  label.inline { display:inline-flex; gap:6px; align-items:center; color:var(--texto); margin:0; font-size:14px; }
+  input, select { width:100%; padding:8px 10px; border:1px solid var(--borda); border-radius:8px; font:inherit; background:var(--cartao); color:var(--texto); }
+  input[type=checkbox], input[type=radio] { width:auto; }
   .linha { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
-  button { padding:9px 14px; border:0; border-radius:8px; background:var(--azul); color:#fff; font:inherit; cursor:pointer; }
-  button.sec { background:#e8eefc; color:var(--azul); }
-  button.perigo { background:#fdecec; color:var(--vermelho); }
+  button { padding:8px 14px; border:0; border-radius:8px; background:var(--azul); color:#fff; font:inherit; cursor:pointer; }
+  @media (prefers-color-scheme: dark) { button { color:#0b1120; } nav button { color:#cbd5e1; } nav button.ativa { color:#fff; } }
+  button.sec { background:var(--azul-claro); color:var(--azul); }
+  button.perigo { background:var(--vermelho-claro); color:var(--vermelho); }
+  button.mini { padding:3px 8px; font-size:12px; }
   button:disabled { opacity:.5; cursor:default; }
   .msg { font-size:14px; margin-top:8px; min-height:18px; }
   .erro { color:var(--vermelho); } .ok { color:var(--verde); }
-  .busca { border:1px solid var(--borda); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:14px; }
-  .busca .topo { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-  .pilula { font-size:12px; padding:2px 8px; border-radius:99px; background:#eef2f7; }
-  .na_fila { background:#fff7e6; color:var(--amarelo); } .rodando { background:#e8eefc; color:var(--azul); }
-  .concluida { background:#e7f7ed; color:var(--verde); } .erro-st, .cancelada { background:#fdecec; color:var(--vermelho); }
   .suave { color:var(--suave); font-size:13px; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  td, th { border-bottom:1px solid var(--borda); padding:6px 4px; text-align:left; }
   .oculto { display:none !important; }
-  .grade { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; }
+  .grade { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:8px; }
+  .cartoes { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; }
+  .cartao-num { border:1px solid var(--borda); border-radius:10px; padding:12px; }
+  .cartao-num .valor { font-size:26px; font-weight:700; margin:4px 0; }
+  .pilula { font-size:12px; padding:2px 8px; border-radius:99px; background:var(--azul-claro); color:var(--texto); white-space:nowrap; }
+  .na_fila { background:var(--amarelo-claro); color:var(--amarelo); } .rodando { background:var(--azul-claro); color:var(--azul); }
+  .concluida, .sim { background:var(--verde-claro); color:var(--verde); }
+  .erro-st, .cancelada, .nao { background:var(--vermelho-claro); color:var(--vermelho); }
+  .indefinido { background:var(--amarelo-claro); color:var(--amarelo); }
+  .busca { border:1px solid var(--borda); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:14px; }
+  .busca .topo { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; max-height:180px; overflow:auto; padding:2px; }
+  .chip { border:1px solid var(--borda); border-radius:99px; padding:4px 10px; font-size:13px; display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+  .chip:has(input:checked) { background:var(--azul-claro); border-color:var(--azul); }
+  .cidades { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:2px 10px; max-height:240px; overflow:auto; border:1px solid var(--borda); border-radius:8px; padding:8px; }
+  .rolagem { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td, th { border-bottom:1px solid var(--borda); padding:6px 6px; text-align:left; vertical-align:top; }
+  th { font-size:12px; color:var(--suave); white-space:nowrap; }
+  th[data-ordem] { cursor:pointer; }
+  tbody tr:nth-child(even) { background:var(--linha-par); }
+  #tabela-leads tbody tr { cursor:pointer; }
+  .wa { background:#16a34a; color:#fff; border-radius:6px; padding:3px 8px; font-size:12px; text-decoration:none; white-space:nowrap; }
+  dialog { border:1px solid var(--borda); border-radius:12px; background:var(--cartao); color:var(--texto); max-width:560px; width:calc(100% - 32px); }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:6px 12px; font-size:14px; margin:0; }
+  dt { color:var(--suave); } dd { margin:0; overflow-wrap:anywhere; }
 </style>
 </head>
 <body>
 <header>
-  <b>MapaLeads <span class="suave" style="color:#cbd5e1">· teste Fase 2</span></b>
-  <div id="quem" class="oculto"><span id="email"></span> <span id="selo" class="pilula oculto">admin</span> <button class="sec" id="sair">Sair</button></div>
+  <b>MapaLeads</b>
+  <nav id="abas" class="oculto">
+    <button data-aba="hoje" class="ativa">Hoje</button>
+    <button data-aba="nova">Nova busca</button>
+    <button data-aba="buscas">Buscas</button>
+    <button data-aba="leads">Leads</button>
+    <button data-aba="admin" class="oculto" id="aba-admin">Admin</button>
+  </nav>
+  <div id="quem" class="oculto"><span id="email"></span> <span id="selo" class="pilula oculto">admin</span> <button class="sec mini" id="sair">Sair</button></div>
 </header>
+
 <main>
+  <!-- ======================================================= LOGIN -->
   <section id="login">
     <h2>Entrar</h2>
     <label for="le">E-mail</label><input id="le" type="email" autocomplete="username">
@@ -54,61 +104,169 @@
     <div class="msg" id="msg-login"></div>
   </section>
 
-  <section id="nova" class="oculto">
+  <!-- ======================================================= HOJE -->
+  <div id="tela-hoje" class="oculto" style="display:grid;gap:16px">
+    <section>
+      <h2>Hoje</h2>
+      <div class="cartoes">
+        <div class="cartao-num"><div class="suave">Suas buscas na fila / rodando</div><div class="valor" id="h-fila">–</div><div class="suave" id="h-fila-geral"></div></div>
+        <div class="cartao-num"><div class="suave">Leads da semana (7 dias)</div><div class="valor" id="h-leads">–</div><div class="suave" id="h-leads-det"></div></div>
+        <div class="cartao-num"><div class="suave">% com WhatsApp (7 dias)</div><div class="valor" id="h-whats">–</div><div class="suave" id="h-whats-det"></div></div>
+        <div class="cartao-num"><div class="suave">Cota de hoje</div><div class="valor" id="h-cota">–</div><div class="suave" id="h-cota-det"></div></div>
+      </div>
+      <p class="suave" id="h-geral"></p>
+      <p class="suave">Leads da semana contam as buscas concluídas a partir da Fase 3 (horário de Natal).</p>
+    </section>
+  </div>
+
+  <!-- ======================================================= NOVA BUSCA -->
+  <section id="tela-nova" class="oculto">
     <h2>Nova busca</h2>
-    <label for="termos">Termos (separados por vírgula)</label><input id="termos" placeholder="ex.: home care, cuidador de idosos">
-    <label for="cidades">Cidades (separadas por vírgula)</label><input id="cidades" value="Natal RN">
+    <div class="grade">
+      <div><label for="perfil-sel">Perfis salvos</label><select id="perfil-sel"><option value="">— escolher perfil —</option></select></div>
+      <div class="linha" style="align-items:end"><button class="sec" id="perfil-salvar">Salvar como perfil</button><button class="perigo" id="perfil-apagar" disabled>Apagar perfil</button></div>
+    </div>
+
+    <label for="termos">Segmento / termos (separados por vírgula)</label>
+    <input id="termos" placeholder="ex.: home care, cuidador de idosos">
+
+    <label>Regiões do RN (IBGE)</label>
+    <div class="linha" style="margin-top:0">
+      <label class="inline"><input type="radio" name="tipo-regiao" value="micro" checked> Microrregiões (19)</label>
+      <label class="inline"><input type="radio" name="tipo-regiao" value="imediata"> Regiões imediatas (11)</label>
+    </div>
+    <div class="chips" id="regioes" style="margin-top:8px"></div>
+
+    <label>Cidades <span id="qtd-cidades"></span></label>
+    <div class="linha" style="margin-top:0">
+      <input id="add-cidade" list="lista-municipios" placeholder="Adicionar município do RN" style="flex:1;min-width:180px">
+      <button class="sec" id="btn-add-cidade">Adicionar</button>
+      <button class="sec mini" id="marcar-todas">Marcar todas</button>
+      <button class="sec mini" id="limpar-cidades">Limpar</button>
+    </div>
+    <datalist id="lista-municipios"></datalist>
+    <div class="cidades" id="cidades" style="margin-top:8px"><span class="suave">Escolha regiões ou adicione cidades.</span></div>
+    <label for="outras">Outras cidades fora do RN (texto livre, separadas por vírgula)</label>
+    <input id="outras" placeholder="ex.: João Pessoa PB">
+
     <div class="grade">
       <div><label for="prof">Profundidade</label>
         <select id="prof"><option value="rapida">Rápida (~20 por consulta)</option><option value="normal" selected>Normal (~60)</option><option value="completa">Completa (até ~120)</option></select></div>
-      <div><label>&nbsp;</label><label style="color:var(--texto)"><input type="checkbox" id="email-sn"> Extrair e-mail (mais lento)</label></div>
+      <div><label>&nbsp;</label><label class="inline"><input type="checkbox" id="email-sn"> Extrair e-mail (mais lento)</label></div>
     </div>
-    <div class="linha"><button class="sec" id="estimar">Estimar tempo</button><button id="buscar">Buscar</button></div>
+    <div class="msg" id="estimativa"></div>
+    <div class="linha"><button id="buscar">Buscar</button></div>
     <div class="msg" id="msg-nova"></div>
   </section>
 
-  <section id="rn" class="oculto">
-    <h2>RN inteiro (só admin)</h2>
-    <label for="rn-termos">Segmento / termos (separados por vírgula)</label><input id="rn-termos" placeholder="ex.: dentista, odontologia">
-    <div class="linha">
-      <label style="color:var(--texto);margin:0"><input type="checkbox" id="rn-email"> Extrair e-mail</label>
-      <label style="color:var(--texto);margin:0"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label>
-    </div>
-    <div class="linha"><button class="sec" id="rn-estimar">Estimar</button><button id="rn-confirmar" disabled>Confirmar RN inteiro</button></div>
-    <div class="msg" id="msg-rn"></div>
-  </section>
-
-  <section id="minhas" class="oculto">
+  <!-- ======================================================= BUSCAS -->
+  <section id="tela-buscas" class="oculto">
     <h2 id="titulo-lista">Minhas buscas</h2>
-    <div class="linha oculto" id="filtro-admin">
-      <select id="filtro"><option value="">Todas as buscas (admin)</option><option value="eu">Só as minhas</option></select>
+    <div class="linha" style="margin-top:0">
+      <select id="filtro" class="oculto" style="width:auto"><option value="">Todas as buscas (admin)</option><option value="eu">Só as minhas</option></select>
+      <button id="abrir-selecionadas" disabled>Ver leads das selecionadas</button>
+      <span class="suave">Marque uma ou várias buscas para juntar os leads (sem duplicados).</span>
     </div>
     <div id="lista"><p class="suave">Carregando…</p></div>
+    <div class="linha"><button class="sec" id="mais-buscas">Carregar mais</button></div>
   </section>
 
-  <section id="usuarios" class="oculto">
-    <h2>Usuários (admin)</h2>
-    <div class="grade">
-      <div><label for="u-email">E-mail</label><input id="u-email" type="email"></div>
-      <div><label for="u-senha">Senha inicial (mín. 8)</label><input id="u-senha" type="text"></div>
-      <div><label for="u-nome">Nome</label><input id="u-nome"></div>
-      <div><label for="u-limite">Limite diário (vazio = padrão)</label><input id="u-limite" type="number" min="0"></div>
+  <!-- ======================================================= LEADS -->
+  <section id="tela-leads" class="oculto">
+    <h2>Leads <span class="suave" id="leads-origem"></span></h2>
+    <div id="leads-vazio" class="suave">Escolha uma ou mais buscas na aba “Buscas” e clique em “Ver leads”.</div>
+    <div id="leads-painel" class="oculto">
+      <div class="grade">
+        <div><label for="f-regiao" id="f-regiao-rotulo">Microrregião</label><select id="f-regiao"></select></div>
+        <div><label for="f-cidade">Cidade</label><select id="f-cidade"></select></div>
+        <div><label for="f-nota">Nota mínima</label>
+          <select id="f-nota"><option value="">Qualquer</option><option>3</option><option>3.5</option><option>4</option><option>4.5</option></select></div>
+        <div><label for="f-texto">Procurar nome</label><input id="f-texto" placeholder="parte do nome"></div>
+      </div>
+      <div class="linha">
+        <label class="inline" title="Esconde os leads cujo endereço mostra outra cidade. Os sem cidade no endereço continuam."><input type="checkbox" id="f-pedida" checked> Só da cidade pedida</label>
+        <label class="inline"><input type="checkbox" id="f-whats"> Tem WhatsApp</label>
+        <label class="inline"><input type="checkbox" id="f-semsite"> Sem site</label>
+      </div>
+      <div class="linha">
+        <b id="leads-contagem"></b>
+        <button class="sec" id="baixar-xlsx">Baixar .xlsx</button>
+        <button class="sec" id="baixar-csv">Baixar .csv</button>
+        <span class="suave">O arquivo respeita os filtros.</span>
+      </div>
+      <div class="msg" id="msg-leads"></div>
+      <div class="rolagem">
+        <table id="tabela-leads">
+          <thead><tr>
+            <th data-ordem="nome">Nome</th><th data-ordem="bairro">Bairro</th><th data-ordem="cidade">Cidade</th>
+            <th data-ordem="regiao" id="col-regiao">Microrregião</th><th>Telefone</th><th>WhatsApp</th>
+            <th>Site / Instagram</th><th data-ordem="nota">Nota</th><th data-ordem="qtd_avaliacoes">Avaliações</th><th data-ordem="cidade_confere">Cidade confere</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="linha"><button class="sec oculto" id="mais-leads">Mostrar mais</button></div>
     </div>
-    <div class="linha"><button id="u-criar">Criar usuário</button><button class="sec" id="u-atualizar">Atualizar lista</button></div>
-    <div class="msg" id="msg-u"></div>
-    <div style="overflow-x:auto"><table id="u-tabela"></table></div>
   </section>
+
+  <!-- ======================================================= ADMIN -->
+  <div id="tela-admin" class="oculto" style="display:grid;gap:16px">
+    <section>
+      <h2>Saúde do motor</h2>
+      <div class="linha" style="margin-top:0"><button class="sec" id="saude-atualizar">Atualizar</button><span class="suave" id="saude-quando"></span></div>
+      <div id="saude"></div>
+    </section>
+
+    <section>
+      <h2>RN inteiro</h2>
+      <label for="rn-termos">Segmento / termos (separados por vírgula)</label><input id="rn-termos" placeholder="ex.: dentista, odontologia">
+      <div class="linha">
+        <label class="inline"><input type="checkbox" id="rn-email"> Extrair e-mail</label>
+        <label class="inline"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label>
+      </div>
+      <div class="linha"><button class="sec" id="rn-estimar">Estimar</button><button id="rn-confirmar" disabled>Confirmar RN inteiro</button></div>
+      <div class="msg" id="msg-rn"></div>
+    </section>
+
+    <section>
+      <h2>Usuários, cota e uso de hoje</h2>
+      <div class="grade">
+        <div><label for="u-email">E-mail</label><input id="u-email" type="email"></div>
+        <div><label for="u-senha">Senha inicial (mín. 8)</label><input id="u-senha" type="text"></div>
+        <div><label for="u-nome">Nome</label><input id="u-nome"></div>
+        <div><label for="u-limite">Limite diário (vazio = padrão)</label><input id="u-limite" type="number" min="0"></div>
+      </div>
+      <div class="linha"><button id="u-criar">Criar usuário</button><button class="sec" id="u-atualizar">Atualizar lista</button></div>
+      <div class="msg" id="msg-u"></div>
+      <div class="rolagem"><table id="u-tabela"></table></div>
+    </section>
+  </div>
 </main>
+
+<dialog id="ficha">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <h2 id="ficha-nome" style="margin:0"></h2><button class="sec mini" id="ficha-fechar">Fechar</button>
+  </div>
+  <dl id="ficha-dados" style="margin-top:12px"></dl>
+  <div class="linha" id="ficha-acoes"></div>
+</dialog>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc }
+import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc, getDoc }
   from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
+// SheetJS (planilha .xlsx) do CDN oficial, carregado só na hora de baixar.
+const XLSX_CDN = "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+
 const $ = (id) => document.getElementById(id);
-const config = await (await fetch("/api/config-publica")).json();
+const [config, municipiosJson, regioesJson] = await Promise.all([
+  fetch("/api/config-publica").then((r) => r.json()),
+  fetch("/dados/municipios_rn.json").then((r) => r.json()),
+  fetch("/dados/microrregioes_rn.json").then((r) => r.json()),
+]);
 const app = initializeApp(config);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -118,16 +276,22 @@ if (new URLSearchParams(location.search).get("emulador") === "1") {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
 }
 
-let usuario = null, ehAdmin = false, estadoFila = null, buscasAtuais = [], pararLista = null, pararFila = null;
-
+// ------------------------------------------------------------- utilidades
 const STATUS = { na_fila: "na fila", rodando: "rodando", concluida: "concluída", erro: "erro", cancelada: "cancelada" };
 const tempo = (s) => { s = Math.max(0, Math.round(s)); return s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`; };
 // Datas sempre no horário de Natal (America/Fortaleza), seja qual for o fuso do aparelho.
 const FUSO = { timeZone: "America/Fortaleza" };
 const dataHora = (d) => d.toLocaleString("pt-BR", FUSO);
 const hora = (d) => d.toLocaleTimeString("pt-BR", FUSO);
+const diaFortaleza = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { ...FUSO, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 const texto = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const linkSeguro = (u) => (/^https?:\/\//i.test(String(u || "")) ? texto(u) : "");
+const numero = (n) => Number(n || 0).toLocaleString("pt-BR");
 function mensagem(id, txt, tipo = "") { const el = $(id); el.textContent = txt; el.className = `msg ${tipo}`; }
+// Nome de cidade comparável: sem acento, sem UF, minúsculo (Assú = Açu, como no motor).
+const normalizar = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/[-–]\s*rn$|\s+rn$|\/rn$/, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/^assu$/, "acu");
+const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 async function api(caminho, corpo) {
   const token = await usuario.getIdToken();
@@ -139,47 +303,551 @@ async function api(caminho, corpo) {
   return dados;
 }
 
+// ------------------------------------------------------------- dados do IBGE (arquivos fixos)
+const municipios = municipiosJson.municipios; // {codigo_ibge, nome, populacao_2022}
+const porCodigo = new Map(municipios.map((m) => [m.codigo_ibge, { ...m }]));
+const REGIOES = { micro: regioesJson.microrregioes, imediata: regioesJson.regioes_imediatas };
+for (const r of REGIOES.micro) for (const c of r.municipios) porCodigo.get(c).micro = r;
+for (const r of REGIOES.imediata) for (const c of r.municipios) porCodigo.get(c).imediata = r;
+const porNome = new Map([...porCodigo.values()].map((m) => [normalizar(m.nome), m]));
+const infoCidade = (nome) => porNome.get(normalizar(nome)) || null;
+const ROTULO_REGIAO = { micro: "Microrregião", imediata: "Região imediata" };
+let tipoRegiao = "micro";
+try { tipoRegiao = localStorage.getItem("mapaleads.tipoRegiao") === "imediata" ? "imediata" : "micro"; } catch { /* sem armazenamento */ }
+$("lista-municipios").innerHTML = municipios.map((m) => `<option value="${texto(m.nome)}">`).join("");
+
+// ------------------------------------------------------------- estado
+let usuario = null, ehAdmin = false, estadoFila = null, buscasAtuais = [], pararLista = null, pararFila = null;
+let limiteLista = 20;
+const selecionadas = new Set();
+
+// ------------------------------------------------------------- abas
+function mostrarAba(nome) {
+  for (const b of document.querySelectorAll("#abas button")) b.classList.toggle("ativa", b.dataset.aba === nome);
+  for (const t of ["hoje", "nova", "buscas", "leads", "admin"]) $(`tela-${t}`).classList.toggle("oculto", t !== nome);
+  if (nome === "hoje") carregarHoje();
+  if (nome === "admin" && ehAdmin) { carregarSaude(); carregarUsuarios(); }
+}
+$("abas").onclick = (ev) => { if (ev.target.dataset.aba) mostrarAba(ev.target.dataset.aba); };
+
 // ------------------------------------------------------------- login
 $("entrar").onclick = async () => {
   mensagem("msg-login", "Entrando…");
   try { await signInWithEmailAndPassword(auth, $("le").value.trim(), $("ls").value); mensagem("msg-login", ""); }
   catch { mensagem("msg-login", "E-mail ou senha inválidos.", "erro"); }
 };
+$("ls").onkeydown = (ev) => { if (ev.key === "Enter") $("entrar").click(); };
 $("sair").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, async (u) => {
   usuario = u;
   pararLista?.(); pararFila?.();
-  for (const id of ["nova", "minhas", "quem"]) $(id).classList.toggle("oculto", !u);
   $("login").classList.toggle("oculto", !!u);
-  if (!u) { for (const id of ["rn", "usuarios", "filtro-admin"]) $(id).classList.add("oculto"); return; }
-  // Força token novo: se o admin mudou algo, vale na hora.
+  for (const id of ["abas", "quem"]) $(id).classList.toggle("oculto", !u);
+  if (!u) { for (const t of ["hoje", "nova", "buscas", "leads", "admin"]) $(`tela-${t}`).classList.add("oculto"); return; }
+  // Token novo: se o admin mudou algo, vale na hora.
   const claims = (await u.getIdTokenResult(true)).claims;
   ehAdmin = claims.admin === true;
   $("email").textContent = u.email;
-  for (const id of ["rn", "usuarios", "filtro-admin", "selo"]) $(id).classList.toggle("oculto", !ehAdmin);
+  for (const id of ["aba-admin", "selo", "filtro"]) $(id).classList.toggle("oculto", !ehAdmin);
   $("filtro").value = ehAdmin ? "" : "eu";
-  pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...d.data(), lidoEm: Date.now() }; desenharLista(); });
+  pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...d.data(), lidoEm: Date.now() }; desenharLista(); desenharFilaHoje(); });
   ouvirLista();
-  if (ehAdmin) carregarUsuarios();
+  carregarPerfis();
+  mostrarAba("hoje");
 });
 
-// ------------------------------------------------------------- busca comum
-function pedidoComum(simular) {
-  return { termos: $("termos").value, cidades: $("cidades").value, profundidade: $("prof").value, extrair_email: $("email-sn").checked, simular };
+// ------------------------------------------------------------- HOJE
+async function carregarHoje() {
+  if (!usuario) return;
+  // 7 dias no fuso de Fortaleza: 7 leituras (documentos pequenos de contagem).
+  const dias = Array.from({ length: 7 }, (_, i) => diaFortaleza(new Date(Date.now() - i * 86400000)));
+  const somar = (docs) => docs.reduce((t, d) => {
+    const x = d.data() || {};
+    return { leads: t.leads + (x.leads || 0), whats: t.whats + (x.com_whatsapp || 0), buscas: t.buscas + (x.buscas || 0) };
+  }, { leads: 0, whats: 0, buscas: 0 });
+  try {
+    const [meus, perfil, geral] = await Promise.all([
+      Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__${usuario.uid}`)))),
+      getDoc(doc(db, `usuarios/${usuario.uid}`)),
+      getDoc(doc(db, "config/geral")),
+    ]);
+    const s = somar(meus);
+    $("h-leads").textContent = numero(s.leads);
+    $("h-leads-det").textContent = `${s.buscas} busca(s) concluída(s)`;
+    $("h-whats").textContent = s.leads ? `${Math.round((100 * s.whats) / s.leads)}%` : "–";
+    $("h-whats-det").textContent = s.leads ? `${numero(s.whats)} de ${numero(s.leads)} leads` : "sem leads na semana";
+    const p = perfil.data() || {};
+    const usadas = p.dia === dias[0] ? p.contagem_dia || 0 : 0;
+    const limite = Number.isInteger(p.limite_diario) ? p.limite_diario : (geral.data()?.limite_padrao ?? 20);
+    $("h-cota").textContent = `${usadas} / ${limite}`;
+    $("h-cota-det").textContent = `restam ${Math.max(0, limite - usadas)} busca(s) hoje${ehAdmin ? " · RN inteiro não conta" : ""}`;
+    if (ehAdmin) {
+      const todos = somar(await Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__geral`)))));
+      $("h-geral").textContent = `Todos os usuários (7 dias): ${numero(todos.leads)} leads em ${todos.buscas} busca(s), ` +
+        `${todos.leads ? Math.round((100 * todos.whats) / todos.leads) : 0}% com WhatsApp.`;
+    }
+  } catch (e) {
+    $("h-geral").textContent = `Não foi possível carregar os números (${e.code || e.message}).`;
+  }
+  desenharFilaHoje();
 }
-$("estimar").onclick = async () => {
-  try { const r = await api("criar-busca", pedidoComum(true)); mensagem("msg-nova", `${r.consultas} consulta(s) · cerca de ${tempo(r.estimativa_seg)} depois de começar.`, "ok"); }
-  catch (e) { mensagem("msg-nova", e.message, "erro"); }
+function desenharFilaHoje() {
+  const minhas = buscasAtuais.filter((b) => b.dono_uid === usuario?.uid && ["na_fila", "rodando"].includes(b.status));
+  $("h-fila").textContent = String(minhas.length);
+  const itens = estadoFila?.itens?.length || 0, rodando = estadoFila?.rodando?.length || 0;
+  $("h-fila-geral").textContent = `fila geral: ${rodando} rodando, ${itens} esperando`;
+}
+
+// ------------------------------------------------------------- NOVA BUSCA: regiões e cidades
+const cidadesEscolhidas = new Map(); // nome oficial -> marcada?
+const regioesMarcadas = new Set();
+
+function desenharRegioes() {
+  for (const r of document.querySelectorAll("input[name=tipo-regiao]")) r.checked = r.value === tipoRegiao;
+  $("regioes").innerHTML = REGIOES[tipoRegiao].map((r) => `<label class="chip"><input type="checkbox" data-regiao="${texto(r.id)}"
+    ${regioesMarcadas.has(r.id) ? "checked" : ""}> ${texto(r.nome)} <span class="suave">(${r.municipios.length})</span></label>`).join("");
+  $("f-regiao-rotulo").textContent = ROTULO_REGIAO[tipoRegiao];
+  $("col-regiao").textContent = ROTULO_REGIAO[tipoRegiao];
+}
+function desenharCidades() {
+  const nomes = [...cidadesEscolhidas.keys()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  $("cidades").innerHTML = nomes.length
+    ? nomes.map((n) => `<label class="inline"><input type="checkbox" data-cidade="${texto(n)}" ${cidadesEscolhidas.get(n) ? "checked" : ""}> ${texto(n)}</label>`).join("")
+    : `<span class="suave">Escolha regiões ou adicione cidades.</span>`;
+  const marcadas = nomes.filter((n) => cidadesEscolhidas.get(n)).length;
+  $("qtd-cidades").textContent = nomes.length ? `(${marcadas} de ${nomes.length} marcadas)` : "";
+  agendarEstimativa();
+}
+for (const r of document.querySelectorAll("input[name=tipo-regiao]")) {
+  r.onchange = () => {
+    tipoRegiao = r.value;
+    try { localStorage.setItem("mapaleads.tipoRegiao", tipoRegiao); } catch { /* sem armazenamento */ }
+    regioesMarcadas.clear();
+    desenharRegioes();
+    if (leadsBase.length) montarFiltros();
+  };
+}
+$("regioes").onchange = (ev) => {
+  const id = ev.target.dataset.regiao;
+  if (!id) return;
+  const regiao = REGIOES[tipoRegiao].find((r) => r.id === id);
+  const nomes = regiao.municipios.map((c) => porCodigo.get(c).nome);
+  if (ev.target.checked) { regioesMarcadas.add(id); for (const n of nomes) cidadesEscolhidas.set(n, true); }
+  else { regioesMarcadas.delete(id); for (const n of nomes) cidadesEscolhidas.delete(n); }
+  desenharCidades();
 };
+$("cidades").onchange = (ev) => {
+  const n = ev.target.dataset.cidade;
+  if (n) { cidadesEscolhidas.set(n, ev.target.checked); desenharCidades(); }
+};
+$("btn-add-cidade").onclick = () => {
+  const m = infoCidade($("add-cidade").value);
+  if (!m) { mensagem("msg-nova", "Município do RN não encontrado. Para outras cidades use o campo de texto livre.", "erro"); return; }
+  cidadesEscolhidas.set(m.nome, true); $("add-cidade").value = ""; mensagem("msg-nova", ""); desenharCidades();
+};
+$("add-cidade").onkeydown = (ev) => { if (ev.key === "Enter") $("btn-add-cidade").click(); };
+$("marcar-todas").onclick = () => { for (const n of cidadesEscolhidas.keys()) cidadesEscolhidas.set(n, true); desenharCidades(); };
+$("limpar-cidades").onclick = () => { cidadesEscolhidas.clear(); regioesMarcadas.clear(); desenharRegioes(); desenharCidades(); };
+
+function cidadesDoPedido() {
+  const rn = [...cidadesEscolhidas].filter(([, m]) => m).map(([n]) => n).sort((a, b) => a.localeCompare(b, "pt-BR")).map((n) => `${n} RN`);
+  const outras = $("outras").value.split(",").map((s) => s.trim()).filter(Boolean);
+  return [...rn, ...outras];
+}
+function pedidoComum(simular) {
+  return { termos: $("termos").value, cidades: cidadesDoPedido().join(","), profundidade: $("prof").value, extrair_email: $("email-sn").checked, simular };
+}
+
+// Estimativa automática antes de buscar (1 chamada ao servidor, alguns segundos depois de parar de digitar).
+let temporizador = null;
+function agendarEstimativa() {
+  clearTimeout(temporizador);
+  temporizador = setTimeout(estimar, 700);
+}
+async function estimar() {
+  if (!usuario) return;
+  if (!$("termos").value.trim() || !cidadesDoPedido().length) { mensagem("estimativa", "Preencha os termos e escolha as cidades para ver a estimativa.", "suave"); return; }
+  try {
+    const r = await api("criar-busca", pedidoComum(true));
+    mensagem("estimativa", `Estimativa: ${r.consultas} consulta(s) · cerca de ${tempo(r.estimativa_seg)} depois de começar.`, "ok");
+  } catch (e) { mensagem("estimativa", e.message, "erro"); }
+}
+for (const id of ["termos", "outras", "prof", "email-sn"]) $(id).addEventListener("input", agendarEstimativa);
+
 $("buscar").onclick = async () => {
+  if (!cidadesDoPedido().length) { mensagem("msg-nova", "Escolha pelo menos uma cidade.", "erro"); return; }
   $("buscar").disabled = true;
-  try { const r = await api("criar-busca", pedidoComum(false)); mensagem("msg-nova", `Busca criada. Você ainda pode fazer ${r.restantes_hoje} hoje.`, "ok"); }
-  catch (e) { mensagem("msg-nova", e.message, "erro"); }
+  try {
+    const r = await api("criar-busca", pedidoComum(false));
+    mensagem("msg-nova", `Busca criada (~${tempo(r.estimativa_seg)}). Você ainda pode fazer ${r.restantes_hoje} hoje. Acompanhe na aba “Buscas”.`, "ok");
+  } catch (e) { mensagem("msg-nova", e.message, "erro"); }
   finally { $("buscar").disabled = false; }
 };
 
-// ------------------------------------------------------------- RN inteiro
+// ------------------------------------------------------------- NOVA BUSCA: perfis salvos (no servidor)
+let perfis = [];
+async function carregarPerfis() {
+  try {
+    perfis = (await api("perfis", { acao: "listar" })).perfis;
+    $("perfil-sel").innerHTML = `<option value="">— escolher perfil —</option>` +
+      perfis.map((p) => `<option value="${texto(p.id)}">${texto(p.nome)}</option>`).join("");
+  } catch (e) { mensagem("msg-nova", `Perfis: ${e.message}`, "erro"); }
+  $("perfil-apagar").disabled = !$("perfil-sel").value;
+}
+$("perfil-sel").onchange = () => {
+  const p = perfis.find((x) => x.id === $("perfil-sel").value);
+  $("perfil-apagar").disabled = !p;
+  if (!p) return;
+  $("termos").value = p.termos.join(", ");
+  $("prof").value = p.profundidade;
+  $("email-sn").checked = p.extrair_email;
+  tipoRegiao = p.tipo_regiao || "micro";
+  regioesMarcadas.clear(); for (const r of p.regioes || []) regioesMarcadas.add(r);
+  cidadesEscolhidas.clear();
+  const outras = [];
+  for (const c of p.cidades) { const m = infoCidade(c); if (m && /\sRN$/i.test(c)) cidadesEscolhidas.set(m.nome, true); else outras.push(c); }
+  // Cidades de regiões marcadas que foram desmarcadas continuam na lista, desmarcadas.
+  for (const id of regioesMarcadas) {
+    const r = REGIOES[tipoRegiao].find((x) => x.id === id);
+    for (const c of r?.municipios || []) { const n = porCodigo.get(c).nome; if (!cidadesEscolhidas.has(n)) cidadesEscolhidas.set(n, false); }
+  }
+  $("outras").value = outras.join(", ");
+  desenharRegioes(); desenharCidades();
+  mensagem("msg-nova", `Perfil “${p.nome}” carregado.`, "ok");
+};
+$("perfil-salvar").onclick = async () => {
+  const atual = perfis.find((x) => x.id === $("perfil-sel").value);
+  const nome = prompt("Nome do perfil:", atual?.nome || "");
+  if (!nome) return;
+  const perfil = {
+    nome, termos: $("termos").value, cidades: cidadesDoPedido(), profundidade: $("prof").value,
+    extrair_email: $("email-sn").checked, tipo_regiao: tipoRegiao, regioes: [...regioesMarcadas],
+    ...(atual && atual.nome === nome ? { id: atual.id } : {}),
+  };
+  try {
+    const r = await api("perfis", { acao: "salvar", perfil });
+    await carregarPerfis(); $("perfil-sel").value = r.id; $("perfil-apagar").disabled = false;
+    mensagem("msg-nova", "Perfil salvo.", "ok");
+  } catch (e) { mensagem("msg-nova", e.message, "erro"); }
+};
+$("perfil-apagar").onclick = async () => {
+  const p = perfis.find((x) => x.id === $("perfil-sel").value);
+  if (!p || !confirm(`Apagar o perfil “${p.nome}”?`)) return;
+  try { await api("perfis", { acao: "apagar", id: p.id }); await carregarPerfis(); mensagem("msg-nova", "Perfil apagado.", "ok"); }
+  catch (e) { mensagem("msg-nova", e.message, "erro"); }
+};
+
+// ------------------------------------------------------------- BUSCAS (lista + fila)
+$("filtro").onchange = () => { limiteLista = 20; ouvirLista(); };
+$("mais-buscas").onclick = () => { limiteLista += 20; ouvirLista(); };
+function ouvirLista() {
+  pararLista?.();
+  const col = collection(db, "buscas");
+  const soMinhas = !ehAdmin || $("filtro").value === "eu";
+  $("titulo-lista").textContent = soMinhas ? "Minhas buscas" : "Todas as buscas";
+  // Só as mais recentes (20 por vez): poucas leituras (cota grátis do Firestore).
+  const q = soMinhas
+    ? query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(limiteLista))
+    : query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(limiteLista));
+  pararLista = onSnapshot(q, (snap) => {
+    buscasAtuais = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    $("mais-buscas").classList.toggle("oculto", snap.size < limiteLista);
+    desenharLista(); desenharFilaHoje();
+  }, (e) => { $("lista").innerHTML = `<p class="erro">Não foi possível carregar (${texto(e.code)}). Se for "failed-precondition", crie os índices do README.</p>`; });
+}
+
+function posicaoNaFila(b) {
+  if (!estadoFila) return "";
+  const pertence = (i) => i.id === b.id || i.mae_id === b.id;
+  if ((estadoFila.aguardando || []).some(pertence)) return b.agendada_para ? `agendada para ${dataHora(b.agendada_para.toDate())}` : "aguardando (pausa ou agendamento)";
+  const itens = estadoFila.itens || [];
+  const idx = itens.findIndex(pertence);
+  if (idx < 0) return "";
+  const decorrido = (Date.now() - estadoFila.lidoEm) / 1000;
+  const rodando = (estadoFila.rodando || []).reduce((t, r) => t + Math.max(0, r.restante_seg - decorrido), 0);
+  const antes = itens.slice(0, idx).reduce((t, i) => t + (i.estimativa_seg || 0), 0);
+  return `${idx + 1}º na fila · início em ~${tempo(rodando + antes + (estadoFila.rodando?.length ? 0 : 60))}`;
+}
+
+const rotuloBusca = (b) => {
+  const p = b.parametros || {};
+  return b.tipo === "rn_mae" ? `RN inteiro · ${(p.termos || []).join(", ")}` : `${(p.termos || []).join(", ")} · ${resumirCidades(p.cidades || [])}`;
+};
+const resumirCidades = (c) => (c.length <= 4 ? c.join(", ") : `${c.slice(0, 3).join(", ")} e mais ${c.length - 3}`);
+
+function desenharLista() {
+  if (!usuario) return;
+  $("abrir-selecionadas").disabled = !selecionadas.size;
+  $("abrir-selecionadas").textContent = selecionadas.size > 1 ? `Ver leads das ${selecionadas.size} selecionadas` : "Ver leads das selecionadas";
+  if (!buscasAtuais.length) { $("lista").innerHTML = `<p class="suave">Nenhuma busca ainda.</p>`; return; }
+  $("lista").innerHTML = buscasAtuais.map((b) => {
+    const r = b.resumo;
+    const progresso = b.tipo === "rn_mae" ? `${b.consultas_feitas || 0}/${b.total_consultas || 0} consultas` : (b.progresso || "");
+    const podeCancelar = ["na_fila", "rodando"].includes(b.status) && !b.cancelar_solicitado;
+    const pausa = b.pausada_ate && b.pausada_ate.toDate() > new Date() ? `pausada até ${hora(b.pausada_ate.toDate())}` : "";
+    const temLeads = (b.qtd_lotes || 0) > 0;
+    return `<div class="busca">
+      <div class="topo">
+        <label class="inline">${temLeads ? `<input type="checkbox" data-selecionar="${texto(b.id)}" ${selecionadas.has(b.id) ? "checked" : ""}>` : ""} <b>${texto(rotuloBusca(b))}</b></label>
+        <span class="pilula ${b.status === "erro" ? "erro-st" : texto(b.status)}">${texto(STATUS[b.status] || b.status)}</span>
+      </div>
+      <div class="suave">${ehAdmin && b.dono_email ? texto(b.dono_email) + " · " : ""}${b.criada_em ? dataHora(b.criada_em.toDate()) : ""}
+        ${progresso ? " · " + texto(progresso) : ""} ${b.status === "na_fila" ? " · " + texto(posicaoNaFila(b)) : ""} ${pausa ? " · " + texto(pausa) : ""}
+        ${b.cancelar_solicitado && !["cancelada", "concluida", "erro"].includes(b.status) ? " · cancelando…" : ""}</div>
+      ${r ? `<div>Total ${r.total} · telefone ${r.com_telefone} · e-mail ${r.com_email} · site ${r.com_site} · WhatsApp ${r.com_whatsapp} · na cidade pedida ${r.na_cidade_buscada ?? "-"}</div>` : ""}
+      ${b.aviso ? `<div class="suave">⚠️ ${texto(b.aviso)}</div>` : ""}
+      ${b.mensagem_erro ? `<div class="erro">${texto(b.mensagem_erro)}</div>` : ""}
+      <div class="linha">
+        ${temLeads ? `<button class="sec mini" data-ver="${texto(b.id)}">Ver leads</button>` : ""}
+        ${podeCancelar ? `<button class="perigo mini" data-cancelar="${texto(b.id)}">Cancelar</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+$("lista").onclick = async (ev) => {
+  const d = ev.target?.dataset || {};
+  if (d.selecionar) { ev.target.checked ? selecionadas.add(d.selecionar) : selecionadas.delete(d.selecionar); desenharLista(); return; }
+  if (d.ver) { abrirLeads([d.ver]); return; }
+  if (d.cancelar) {
+    if (!confirm("Cancelar esta busca? Os leads já coletados ficam guardados.")) return;
+    try { await api("cancelar-busca", { id: d.cancelar }); } catch (e) { alert(e.message); }
+  }
+};
+$("abrir-selecionadas").onclick = () => abrirLeads([...selecionadas]);
+setInterval(desenharLista, 30000); // atualiza o "início em" sem novas leituras
+
+// ------------------------------------------------------------- LEADS: carregar e juntar
+let leadsBase = [], buscasAbertas = [], ordem = { campo: "nome", sobe: true }, mostrar = 300;
+
+async function abrirLeads(ids) {
+  mostrarAba("leads");
+  mensagem("msg-leads", "Carregando leads…");
+  $("leads-vazio").classList.add("oculto"); $("leads-painel").classList.remove("oculto");
+  try {
+    buscasAbertas = ids.map((id) => buscasAtuais.find((b) => b.id === id)).filter(Boolean);
+    // 1 leitura por lote de até 300 leads.
+    const listas = await Promise.all(buscasAbertas.map(async (b) => {
+      const lotes = await Promise.all(Array.from({ length: b.qtd_lotes || 0 }, (_, n) => getDoc(doc(db, `buscas/${b.id}/lotes/${n}`))));
+      return lotes.flatMap((l) => l.data()?.leads || []);
+    }));
+    leadsBase = juntarSemDuplicados(listas.flat()).map(enriquecer);
+    $("leads-origem").textContent = buscasAbertas.length === 1 ? `· ${rotuloBusca(buscasAbertas[0])}` : `· ${buscasAbertas.length} buscas juntas`;
+    mensagem("msg-leads", "");
+    mostrar = 300;
+    montarFiltros();
+  } catch (e) { mensagem("msg-leads", `Não foi possível carregar os leads (${e.code || e.message}).`, "erro"); }
+}
+
+// Mesmo critério do motor: id do lugar; na falta, nome + telefone. Termos são juntados.
+function juntarSemDuplicados(leads) {
+  const vistos = new Map();
+  for (const l of leads) {
+    const chave = l.id_lugar || `${normalizar(l.nome)}|${String(l.telefone || "").replace(/\D/g, "")}`;
+    const ja = vistos.get(chave);
+    if (!ja) { vistos.set(chave, { ...l }); continue; }
+    const termos = new Set([...String(ja.termo_que_encontrou || "").split(","), ...String(l.termo_que_encontrou || "").split(",")].map((t) => t.trim()).filter(Boolean));
+    ja.termo_que_encontrou = [...termos].join(", ");
+    if (ja.cidade_confere !== "sim" && l.cidade_confere === "sim") { ja.cidade_confere = "sim"; ja.cidade_buscada = l.cidade_buscada; }
+  }
+  return [...vistos.values()];
+}
+// Região pela cidade do ENDEREÇO do lead (dado real); sem cidade no endereço = em branco.
+function enriquecer(l) {
+  const m = infoCidade(l.cidade);
+  return { ...l, microrregiao: m?.micro?.nome || "", regiao_imediata: m?.imediata?.nome || "", _micro: m?.micro?.id || "", _imediata: m?.imediata?.id || "" };
+}
+const regiaoDo = (l) => (tipoRegiao === "micro" ? l.microrregiao : l.regiao_imediata);
+const regiaoIdDo = (l) => (tipoRegiao === "micro" ? l._micro : l._imediata);
+
+// ------------------------------------------------------------- LEADS: filtros
+function filtrar({ semCidade = false, semRegiao = false } = {}) {
+  const regiao = $("f-regiao").value, cidade = $("f-cidade").value, nota = Number($("f-nota").value || 0);
+  const busca = normalizar($("f-texto").value);
+  return leadsBase.filter((l) =>
+    (!$("f-pedida").checked || l.cidade_confere !== "nao") &&
+    (!$("f-whats").checked || l.whatsapp_link) &&
+    (!$("f-semsite").checked || (!l.site && !l.instagram)) &&
+    (!nota || (Number(l.nota) || 0) >= nota) &&
+    (!busca || normalizar(l.nome).includes(busca)) &&
+    (semRegiao || !regiao || regiaoIdDo(l) === regiao) &&
+    (semCidade || !cidade || (l.cidade || "(sem cidade)") === cidade));
+}
+function montarFiltros() {
+  const regiaoAtual = $("f-regiao").value, cidadeAtual = $("f-cidade").value;
+  const contar = (lista, chave) => lista.reduce((m, l) => { const k = chave(l); m.set(k, (m.get(k) || 0) + 1); return m; }, new Map());
+  const porRegiao = contar(filtrar({ semRegiao: true, semCidade: true }), regiaoIdDo);
+  $("f-regiao").innerHTML = `<option value="">Todas</option>` + REGIOES[tipoRegiao]
+    .filter((r) => porRegiao.has(r.id)).map((r) => `<option value="${texto(r.id)}">${texto(r.nome)} (${porRegiao.get(r.id)})</option>`).join("");
+  $("f-regiao").value = porRegiao.has(regiaoAtual) ? regiaoAtual : "";
+  const porCidade = contar(filtrar({ semCidade: true }), (l) => l.cidade || "(sem cidade)");
+  const cidades = [...porCidade].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"));
+  $("f-cidade").innerHTML = `<option value="">Todas</option>` + cidades.map(([c, n]) => `<option value="${texto(c)}">${texto(c)} (${n})</option>`).join("");
+  $("f-cidade").value = porCidade.has(cidadeAtual) ? cidadeAtual : "";
+  $("f-regiao-rotulo").textContent = ROTULO_REGIAO[tipoRegiao];
+  $("col-regiao").textContent = ROTULO_REGIAO[tipoRegiao];
+  desenharLeads();
+}
+for (const id of ["f-regiao", "f-cidade", "f-nota", "f-pedida", "f-whats", "f-semsite"]) $(id).onchange = () => { mostrar = 300; montarFiltros(); };
+$("f-texto").oninput = () => { mostrar = 300; montarFiltros(); };
+document.querySelector("#tabela-leads thead").onclick = (ev) => {
+  const campo = ev.target.dataset.ordem;
+  if (!campo) return;
+  ordem = { campo, sobe: ordem.campo === campo ? !ordem.sobe : campo !== "nota" && campo !== "qtd_avaliacoes" };
+  desenharLeads();
+};
+function ordenados(lista) {
+  const { campo, sobe } = ordem;
+  const valor = (l) => (campo === "regiao" ? regiaoDo(l) : l[campo]);
+  const num = campo === "nota" || campo === "qtd_avaliacoes";
+  return [...lista].sort((a, b) => {
+    const x = valor(a), y = valor(b);
+    const r = num ? (Number(x) || 0) - (Number(y) || 0) : String(x || "").localeCompare(String(y || ""), "pt-BR");
+    return sobe ? r : -r;
+  });
+}
+
+let leadsVisiveis = [];
+function desenharLeads() {
+  leadsVisiveis = ordenados(filtrar());
+  $("leads-contagem").textContent = `${numero(leadsVisiveis.length)} de ${numero(leadsBase.length)} leads`;
+  const CONFERE = { sim: "sim", nao: "não", indefinido: "?" };
+  $("tabela-leads").querySelector("tbody").innerHTML = leadsVisiveis.slice(0, mostrar).map((l, i) => `<tr data-i="${i}">
+    <td><b>${texto(l.nome)}</b><div class="suave">${texto(l.categoria)}</div></td>
+    <td>${texto(l.bairro)}</td><td>${texto(l.cidade)}</td><td>${texto(regiaoDo(l))}</td>
+    <td style="white-space:nowrap">${texto(l.telefone)}</td>
+    <td>${linkSeguro(l.whatsapp_link) ? `<a class="wa" href="${linkSeguro(l.whatsapp_link)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</td>
+    <td>${linkSeguro(l.instagram) ? `<a href="${linkSeguro(l.instagram)}" target="_blank" rel="noopener">Instagram</a>` : linkSeguro(l.site) ? `<a href="${linkSeguro(l.site)}" target="_blank" rel="noopener">Site</a>` : ""}</td>
+    <td>${l.nota ?? ""}</td><td>${l.qtd_avaliacoes ?? ""}</td>
+    <td><span class="pilula ${texto(l.cidade_confere)}">${texto(CONFERE[l.cidade_confere] || l.cidade_confere)}</span></td>
+  </tr>`).join("");
+  $("mais-leads").classList.toggle("oculto", leadsVisiveis.length <= mostrar);
+}
+$("mais-leads").onclick = () => { mostrar += 300; desenharLeads(); };
+
+// ------------------------------------------------------------- LEADS: ficha
+$("tabela-leads").querySelector("tbody").onclick = (ev) => {
+  if (ev.target.closest("a")) return; // clique no link não abre a ficha
+  const tr = ev.target.closest("tr");
+  if (tr) abrirFicha(leadsVisiveis[Number(tr.dataset.i)]);
+};
+function abrirFicha(l) {
+  $("ficha-nome").textContent = l.nome || "(sem nome)";
+  const campos = [["Categoria", l.categoria], ["Telefone", l.telefone], ["E-mail", l.email], ["Endereço", l.endereco], ["Bairro", l.bairro],
+    ["Cidade", l.cidade], ["Microrregião", l.microrregiao], ["Região imediata", l.regiao_imediata], ["Nota", l.nota], ["Avaliações", l.qtd_avaliacoes],
+    ["Site", l.site], ["Instagram", l.instagram], ["Encontrado por", l.termo_que_encontrou], ["Cidade pedida", l.cidade_buscada], ["Cidade confere", l.cidade_confere]];
+  $("ficha-dados").innerHTML = campos.filter(([, v]) => v !== "" && v !== null && v !== undefined)
+    .map(([k, v]) => `<dt>${texto(k)}</dt><dd>${texto(v)}</dd>`).join("");
+  const botoes = [];
+  if (linkSeguro(l.whatsapp_link)) botoes.push(`<a class="wa" href="${linkSeguro(l.whatsapp_link)}" target="_blank" rel="noopener">WhatsApp</a>`);
+  if (linkSeguro(l.link_maps)) botoes.push(`<a href="${linkSeguro(l.link_maps)}" target="_blank" rel="noopener">Abrir no Google Maps</a>`);
+  if (linkSeguro(l.site)) botoes.push(`<a href="${linkSeguro(l.site)}" target="_blank" rel="noopener">Site</a>`);
+  if (l.telefone) botoes.push(`<button class="sec mini" id="copiar-tel">Copiar telefone</button>`);
+  $("ficha-acoes").innerHTML = botoes.join("");
+  $("copiar-tel")?.addEventListener("click", () => navigator.clipboard?.writeText(l.telefone));
+  $("ficha").showModal();
+}
+$("ficha-fechar").onclick = () => $("ficha").close();
+
+// ------------------------------------------------------------- LEADS: exportar (.xlsx / .csv)
+const COLUNAS = ["nome", "categoria", "telefone", "whatsapp_link", "email", "site", "instagram", "endereco", "bairro", "cidade",
+  "microrregiao", "regiao_imediata", "nota", "qtd_avaliacoes", "link_maps", "termo_que_encontrou", "cidade_buscada", "cidade_confere"];
+
+// Nome do arquivo: segmento-cidade-data | segmento-RN-data | segmento-<região>-data | segmento-varias-cidades-data
+function nomeDoArquivo() {
+  const termos = [...new Set(buscasAbertas.flatMap((b) => b.parametros?.termos || []))];
+  const segmento = slug(termos.slice(0, 3).join("-")) || "leads";
+  const dia = diaFortaleza();
+  const cidadeFiltro = $("f-cidade").value, regiaoFiltro = $("f-regiao").value;
+  if (cidadeFiltro) return `${segmento}-${slug(cidadeFiltro)}-${dia}`;
+  const regiaoSel = regiaoFiltro && REGIOES[tipoRegiao].find((r) => r.id === regiaoFiltro);
+  const temRn = buscasAbertas.some((b) => b.tipo === "rn_mae");
+  if (temRn && !regiaoSel) return `${segmento}-RN-${dia}`;
+  // Cidades pedidas nas buscas abertas (só municípios do RN reconhecidos entram na conta de região).
+  const pedidas = temRn ? municipios.map((m) => m.nome)
+    : [...new Set(buscasAbertas.flatMap((b) => b.parametros?.cidades || []))];
+  let cidades = pedidas.map((c) => infoCidade(c)?.nome || c);
+  if (regiaoSel) {
+    const daRegiao = new Set(regiaoSel.municipios.map((c) => porCodigo.get(c).nome));
+    cidades = cidades.filter((c) => daRegiao.has(c));
+  }
+  cidades = [...new Set(cidades)];
+  if (cidades.length === 1) return `${segmento}-${slug(cidades[0])}-${dia}`;
+  const conjunto = new Set(cidades);
+  const regiaoInteira = REGIOES[tipoRegiao].find((r) => r.municipios.length === conjunto.size && r.municipios.every((c) => conjunto.has(porCodigo.get(c).nome)));
+  if (regiaoInteira) return `${segmento}-${slug(regiaoInteira.nome)}-${dia}`;
+  return `${segmento}-varias-cidades-${dia}`;
+}
+const linhasParaExportar = () => leadsVisiveis.map((l) => Object.fromEntries(COLUNAS.map((c) => [c, l[c] ?? ""])));
+
+function baixar(blob, nome) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+$("baixar-csv").onclick = () => {
+  // Separador ";" e BOM UTF-8: abre certo no Excel em português.
+  const celula = (v) => { const s = typeof v === "number" ? String(v).replace(".", ",") : String(v ?? ""); return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const linhas = [COLUNAS.join(";"), ...linhasParaExportar().map((l) => COLUNAS.map((c) => celula(l[c])).join(";"))];
+  baixar(new Blob(["﻿" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" }), `${nomeDoArquivo()}.csv`);
+};
+$("baixar-xlsx").onclick = async () => {
+  $("baixar-xlsx").disabled = true;
+  try {
+    const XLSX = await import(XLSX_CDN);
+    const planilha = XLSX.utils.json_to_sheet(linhasParaExportar(), { header: COLUNAS });
+    const livro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(livro, planilha, "Leads");
+    XLSX.writeFile(livro, `${nomeDoArquivo()}.xlsx`, { compression: true });
+  } catch { mensagem("msg-leads", "Não foi possível gerar o .xlsx agora. Tente o .csv.", "erro"); }
+  finally { $("baixar-xlsx").disabled = false; }
+};
+
+// ------------------------------------------------------------- ADMIN: saúde do motor
+$("saude-atualizar").onclick = carregarSaude;
+async function carregarSaude() {
+  $("saude").innerHTML = `<p class="suave">Carregando…</p>`;
+  try {
+    const s = await api("saude-motor", {});
+    const f = s.fila;
+    const quando = (iso) => (iso ? dataHora(new Date(iso)) : "–");
+    const execs = s.execucoes?.lista || [];
+    const duracao = (e) => (e.fim ? tempo((new Date(e.fim) - new Date(e.inicio)) / 1000) : "…");
+    const GATILHO = { schedule: "agendamento", workflow_dispatch: "disparo" };
+    const MOTIVO = { motor_rodando: "motor rodando", fila_com_trabalho: "fila com trabalho", busca_orfa: "busca órfã", fila_vazia: "fila vazia" };
+    const metricas = Object.entries(s.metricas || {}).filter(([, v]) => v && v.media_seg);
+    $("saude-quando").textContent = `lido às ${hora(new Date(s.agora))}`;
+    $("saude").innerHTML = `
+      <div class="cartoes" style="margin-top:10px">
+        <div class="cartao-num"><div class="suave">Na fila / rodando</div><div class="valor">${f.na_fila} / ${f.rodando}</div>
+          <div class="suave">último sinal: ${quando(f.ultimo_batimento)}</div></div>
+        <div class="cartao-num"><div class="suave">Pausadas (disjuntor) / agendadas</div><div class="valor">${f.pausadas} / ${f.agendadas}</div>
+          <div class="suave">${f.pausada_ate ? "pausa até " + quando(f.pausada_ate) : "sem pausa"}</div></div>
+        <div class="cartao-num"><div class="suave">Órfãs / RN em andamento</div><div class="valor">${f.orfas} / ${f.rn_em_andamento}</div>
+          <div class="suave">agora o despertador: ${texto(MOTIVO[s.decisao_agora.motivo] || s.decisao_agora.motivo)}</div></div>
+        <div class="cartao-num"><div class="suave">Despertador (Netlify, 15 min)</div><div class="valor" style="font-size:16px">${quando(s.despertador?.ultima_execucao)}</div>
+          <div class="suave">${s.despertador ? texto(MOTIVO[s.despertador.motivo] || s.despertador.motivo) + (s.despertador.disparou ? " · disparou o motor" : "") : "ainda não rodou"}</div></div>
+        <div class="cartao-num"><div class="suave">Hoje (todos)</div><div class="valor">${numero(s.hoje.leads)}</div>
+          <div class="suave">leads em ${s.hoje.buscas || 0} busca(s) · ${numero(s.hoje.com_whatsapp)} com WhatsApp</div></div>
+      </div>
+      <h3>Últimas execuções do motor (GitHub Actions)</h3>
+      ${s.execucoes?.erro ? `<p class="erro">${texto(s.execucoes.erro)}</p>` : `<div class="rolagem"><table>
+        <tr><th>#</th><th>Gatilho</th><th>Resultado</th><th>Início</th><th>Duração</th></tr>
+        ${execs.map((e) => `<tr><td><a href="${linkSeguro(e.link)}" target="_blank" rel="noopener">${texto(e.numero)}</a></td>
+          <td>${texto(GATILHO[e.gatilho] || e.gatilho)}</td>
+          <td><span class="pilula ${e.conclusao === "success" ? "concluida" : e.conclusao ? "erro-st" : "rodando"}">${texto(e.conclusao || e.status)}</span></td>
+          <td>${quando(e.inicio)}</td><td>${duracao(e)}</td></tr>`).join("")}
+      </table></div>`}
+      <h3>Tempo real por consulta (média das últimas)</h3>
+      ${metricas.length ? `<table><tr><th>Profundidade / e-mail</th><th>Média</th><th>Amostras</th></tr>
+        ${metricas.map(([k, v]) => `<tr><td>${texto(k.replace("_", " · ").replace("sem_email", "sem e-mail").replace("email", "com e-mail"))}</td><td>${tempo(v.media_seg)}</td><td>${texto(v.n ?? "")}</td></tr>`).join("")}</table>`
+        : `<p class="suave">Ainda sem medições.</p>`}`;
+  } catch (e) { $("saude").innerHTML = `<p class="erro">${texto(e.message)}</p>`; }
+}
+
+// ------------------------------------------------------------- ADMIN: RN inteiro
 const pedidoRn = (simular) => ({ modo: "rn_inteiro", termos: $("rn-termos").value, extrair_email: $("rn-email").checked, agendar_noite: $("rn-noite").checked, simular });
 $("rn-estimar").onclick = async () => {
   try {
@@ -197,73 +865,15 @@ $("rn-confirmar").onclick = async () => {
   } catch (e) { mensagem("msg-rn", e.message, "erro"); }
 };
 
-// ------------------------------------------------------------- lista + fila
-$("filtro").onchange = ouvirLista;
-function ouvirLista() {
-  pararLista?.();
-  const col = collection(db, "buscas");
-  const soMinhas = !ehAdmin || $("filtro").value === "eu";
-  $("titulo-lista").textContent = soMinhas ? "Minhas buscas" : "Todas as buscas";
-  // Só as 20 mais recentes: poucas leituras (cota grátis do Firestore).
-  const q = soMinhas
-    ? query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(20))
-    : query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(20));
-  pararLista = onSnapshot(q, (snap) => { buscasAtuais = snap.docs.map((d) => ({ id: d.id, ...d.data() })); desenharLista(); },
-    (e) => { $("lista").innerHTML = `<p class="erro">Não foi possível carregar (${texto(e.code)}). Se for "failed-precondition", crie os índices do README.</p>`; });
-}
-
-function posicaoNaFila(b) {
-  if (!estadoFila) return "";
-  const pertence = (i) => i.id === b.id || i.mae_id === b.id;
-  if ((estadoFila.aguardando || []).some(pertence)) return b.agendada_para ? `agendada para ${dataHora(b.agendada_para.toDate())}` : "aguardando (pausa ou agendamento)";
-  const itens = estadoFila.itens || [];
-  const idx = itens.findIndex(pertence);
-  if (idx < 0) return "";
-  const decorrido = (Date.now() - estadoFila.lidoEm) / 1000;
-  const rodando = (estadoFila.rodando || []).reduce((t, r) => t + Math.max(0, r.restante_seg - decorrido), 0);
-  const antes = itens.slice(0, idx).reduce((t, i) => t + (i.estimativa_seg || 0), 0);
-  return `${idx + 1}º na fila · início em ~${tempo(rodando + antes + (estadoFila.rodando?.length ? 0 : 60))}`;
-}
-
-function desenharLista() {
-  if (!usuario) return;
-  if (!buscasAtuais.length) { $("lista").innerHTML = `<p class="suave">Nenhuma busca ainda.</p>`; return; }
-  $("lista").innerHTML = buscasAtuais.map((b) => {
-    const p = b.parametros || {};
-    const rotulo = b.tipo === "rn_mae" ? `RN inteiro · ${(p.termos || []).join(", ")}` : `${(p.termos || []).join(", ")} · ${(p.cidades || []).join(", ")}`;
-    const r = b.resumo;
-    const progresso = b.tipo === "rn_mae" ? `${b.consultas_feitas || 0}/${b.total_consultas || 0} consultas` : (b.progresso || "");
-    const podeCancelar = ["na_fila", "rodando"].includes(b.status) && !b.cancelar_solicitado;
-    const pausa = b.pausada_ate && b.pausada_ate.toDate() > new Date() ? `pausada até ${hora(b.pausada_ate.toDate())}` : "";
-    return `<div class="busca">
-      <div class="topo"><b>${texto(rotulo)}</b><span class="pilula ${b.status === "erro" ? "erro-st" : texto(b.status)}">${texto(STATUS[b.status] || b.status)}</span></div>
-      <div class="suave">${ehAdmin && b.dono_email ? texto(b.dono_email) + " · " : ""}${b.criada_em ? dataHora(b.criada_em.toDate()) : ""}
-        ${progresso ? " · " + texto(progresso) : ""} ${b.status === "na_fila" ? " · " + texto(posicaoNaFila(b)) : ""} ${pausa ? " · " + texto(pausa) : ""}
-        ${b.cancelar_solicitado && !["cancelada", "concluida", "erro"].includes(b.status) ? " · cancelando…" : ""}</div>
-      ${r ? `<div>Total ${r.total} · com telefone ${r.com_telefone} · e-mail ${r.com_email} · site ${r.com_site} · WhatsApp ${r.com_whatsapp} · na cidade pedida ${r.na_cidade_buscada ?? "-"}</div>` : ""}
-      ${b.aviso ? `<div class="suave">⚠️ ${texto(b.aviso)}</div>` : ""}
-      ${b.mensagem_erro ? `<div class="erro">${texto(b.mensagem_erro)}</div>` : ""}
-      ${podeCancelar ? `<div class="linha"><button class="perigo" data-cancelar="${texto(b.id)}">Cancelar</button></div>` : ""}
-    </div>`;
-  }).join("");
-}
-
-$("lista").onclick = async (ev) => {
-  const id = ev.target?.dataset?.cancelar;
-  if (!id || !confirm("Cancelar esta busca? Os leads já coletados ficam guardados.")) return;
-  try { await api("cancelar-busca", { id }); } catch (e) { alert(e.message); }
-};
-setInterval(desenharLista, 30000); // atualiza o "início em" sem novas leituras
-
-// ------------------------------------------------------------- usuários (admin)
+// ------------------------------------------------------------- ADMIN: usuários
 async function carregarUsuarios() {
   try {
     const { usuarios, limite_padrao } = await api("admin-usuarios", { acao: "listar" });
-    $("u-tabela").innerHTML = `<tr><th>E-mail</th><th>Buscas hoje</th><th>Limite/dia</th><th></th></tr>` + usuarios.map((u) => `
+    $("u-tabela").innerHTML = `<tr><th>E-mail</th><th>Buscas hoje</th><th>Limite/dia (padrão ${limite_padrao})</th><th></th></tr>` + usuarios.map((u) => `
       <tr><td>${texto(u.email)} ${u.admin ? '<span class="pilula">admin</span>' : ""} ${u.removido ? '<span class="pilula cancelada">removido</span>' : ""}</td>
       <td>${u.removido ? "-" : u.buscas_hoje}</td>
       <td>${u.removido || u.admin ? "-" : `<input type="number" min="0" style="width:90px" data-limite="${texto(u.uid)}" placeholder="${limite_padrao}" value="${u.limite_diario ?? ""}">`}</td>
-      <td>${u.removido || u.admin ? "" : `<button class="perigo" data-remover="${texto(u.uid)}">Remover</button>`}</td></tr>`).join("");
+      <td>${u.removido || u.admin ? "" : `<button class="perigo mini" data-remover="${texto(u.uid)}">Remover</button>`}</td></tr>`).join("");
   } catch (e) { mensagem("msg-u", e.message, "erro"); }
 }
 $("u-atualizar").onclick = carregarUsuarios;
@@ -287,6 +897,9 @@ $("u-tabela").onclick = async (ev) => {
   try { await api("admin-usuarios", { acao: "remover", uid }); mensagem("msg-u", "Usuário removido.", "ok"); carregarUsuarios(); }
   catch (e) { mensagem("msg-u", e.message, "erro"); }
 };
+
+desenharRegioes();
+desenharCidades();
 </script>
 </body>
 </html>
