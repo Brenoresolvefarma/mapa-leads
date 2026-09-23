@@ -15,7 +15,7 @@ name: Motor MapaLeads
 on:
   schedule:
     # A cada 15 min (UTC). Com fila vazia, sai em segundos (grátis em repo público).
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       termos:
