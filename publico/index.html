@@ -239,6 +239,7 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
 .grafico .bd { fill:var(--brand); } .grafico g.clicavel:hover .bd, .grafico g.clicavel:focus .bd { fill:var(--brand-ink); }
 .busca-item.clicavel { margin:0 -8px; padding:10px 8px; border-radius:var(--r-sm); }
 .grafico text { fill:var(--muted); font-size:10.5px; } .grafico line { stroke:var(--line); }
+.grafico text.valor-barra { fill:var(--ink-2); font-weight:700; font-size:11.5px; }
 .vazio { text-align:center; padding:26px 12px; }
 .vazio .ic { width:44px; height:44px; margin:0 auto 10px; border-radius:12px; background:var(--brand-soft); color:var(--brand-ink); display:grid; place-items:center; }
 .vazio .ic svg { width:22px; height:22px; }
@@ -489,9 +490,12 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
           <div><h1 id="saudacao">Olá</h1><p>Resumo das suas buscas e dos leads coletados. Números reais, atualizados a cada busca concluída.</p></div>
           <div class="linha"><a class="btn btn-sec" href="#mapa">Ver mapa</a><a class="btn btn-primario" href="#nova">Nova busca</a></div>
         </div>
+        <div class="entre" style="margin:-4px 0 10px"><span class="small ink2">Os números contam os mesmos leads que aparecem ao clicar.</span>
+          <div class="linha"><div class="segmentado" id="inicio-modo" aria-label="O que contar"><button data-modo="segmento" aria-pressed="true">No segmento</button><button data-modo="total">Ver total</button></div>
+          <button class="info" data-ajuda="“No segmento” conta só os leads do segmento buscado e da cidade pedida (os filtros padrão de Meus leads). “Ver total” conta todos os leads coletados, sem repetidos.">i</button></div></div>
         <div class="grade-kpi" id="kpis"></div>
         <div class="duas">
-          <div class="cartao"><div class="entre"><h2>Leads por dia</h2><span class="small muted">últimos 30 dias · horário de Natal</span></div>
+          <div class="cartao"><div class="entre"><h2>Leads por dia</h2><span class="small muted" id="grafico-dias-nota">últimos 30 dias · horário de Natal</span></div>
             <div id="grafico-dias" style="margin-top:8px"><div class="esq" style="height:190px"></div></div></div>
           <div class="cartao"><div class="entre"><h2>Últimas buscas</h2><a class="small" href="#leads">ver leads</a></div>
             <div id="ultimas"><div class="esq" style="height:52px;margin-top:10px"></div><div class="esq" style="height:52px;margin-top:10px"></div></div></div>
@@ -683,7 +687,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <div class="grade-kpi form-usuario" style="grid-template-columns:repeat(4,minmax(0,1fr));margin:10px 0">
               <div><label class="campo" for="u-email">E-mail</label><input id="u-email" type="email"></div>
               <div><label class="campo" for="u-senha">Senha inicial (mín. 8)</label><input id="u-senha" type="text"></div>
-              <div><label class="campo" for="u-nome">Nome</label><input id="u-nome" type="text"></div>
+              <div><label class="campo" for="u-nome">Nome (aparece em “Olá, …”)</label><input id="u-nome" type="text" maxlength="60"></div>
               <div><label class="campo" for="u-limite">Limite diário (vazio = padrão)</label><input id="u-limite" type="number" min="0"></div>
             </div>
             <button class="btn btn-primario" id="u-criar">Criar usuário</button>
@@ -978,7 +982,7 @@ onAuthStateChanged(auth, async (u) => {
   $("#menu-admin-celular").classList.toggle("oculto", !ehAdmin);
   $("#lateral-email").textContent = u.email; $("#menu-email").textContent = u.email;
   $("#avatar").textContent = (u.email || "?")[0].toUpperCase();
-  $("#saudacao").textContent = `Olá, ${(u.email || "").split("@")[0]}`;
+  mostrarSaudacao(u.displayName);
   W.ids = ler(`mapaleads.buscas.${u.uid}`, []);
   F.colunas = ler(`mapaleads.colunas.${u.uid}`, null) || COLUNAS.filter((c) => c.padrao).map((c) => c.id);
   montarMenus();
@@ -1048,6 +1052,7 @@ async function carregarCota() {
   try {
     const [p, g] = await Promise.all([getDoc(doc(db, `usuarios/${usuario.uid}`)), getDoc(doc(db, "config/geral"))]);
     const perfil = p.data() || {};
+    mostrarSaudacao(perfil.nome || usuario.displayName);
     const usadas = perfil.dia === diaFortaleza() ? perfil.contagem_dia || 0 : 0;
     const limite = Number.isInteger(perfil.limite_diario) ? perfil.limite_diario : (g.data()?.limite_padrao ?? 20);
     cota = { usadas, limite };
@@ -1056,6 +1061,11 @@ async function carregarCota() {
     $("#cota-barra i").style.width = `${Math.min(100, (100 * usadas) / Math.max(1, limite))}%`;
   } catch { $("#cota-txt").textContent = "–"; }
   if (paginaAtual === "inicio") desenharInicio();
+}
+// "Olá, Breno": primeiro nome do cadastro (o admin define em Admin › Usuários). Sem nome, só "Olá!" (nunca o e-mail).
+function mostrarSaudacao(nome) {
+  const primeiro = String(nome || "").trim().split(/\s+/)[0];
+  $("#saudacao").textContent = primeiro ? `Olá, ${primeiro}` : "Olá!";
 }
 function desenharStatus() {
   const rodando = estadoFila?.rodando?.length || 0, fila = estadoFila?.itens?.length || 0, aguard = estadoFila?.aguardando?.length || 0;
@@ -1083,46 +1093,80 @@ const rotuloBusca = (b) => {
 };
 
 // ============================================================ INÍCIO
-let cacheSerie = null;
+// Cartões e gráfico contam os MESMOS leads que o detalhe mostra ao clicar: juntados sem repetidos e marcados com o
+// segmento das buscas do recorte. Padrão: só do segmento e da cidade pedida (como em Meus leads); "Ver total" = todos.
+const INICIO = { total: ler("mapaleads.inicio.total", false) };
+const lotesLidos = new Map(); // "busca:qtd_lotes" → leads (1 leitura por lote, guardado enquanto a página estiver aberta)
+function leadsDaBusca(b) {
+  const chave = `${b.id}:${b.qtd_lotes || 0}`;
+  if (!lotesLidos.has(chave)) {
+    lotesLidos.set(chave, Promise.all(Array.from({ length: b.qtd_lotes || 0 }, (_, n) => getDoc(doc(db, `buscas/${b.id}/lotes/${n}`))))
+      .then((lotes) => lotes.flatMap((l) => (l.data()?.leads || []).map((x) => ({ ...x, _busca: b.id }))))
+      .catch((e) => { lotesLidos.delete(chave); throw e; }));
+  }
+  return lotesLidos.get(chave);
+}
+// Mesma regra dos filtros padrão de Meus leads ("Só do segmento" + "Só da cidade pedida").
+const noPadrao = (l) => l.no_segmento === "sim" && l.cidade_confere !== "nao" && !!l.cidade;
+async function contarRecorte(lista) {
+  if (!lista.length) return { n: 0, whats: 0, todos: 0 };
+  const seg = montarSegmento(lista);
+  const leads = juntarSemDuplicados((await Promise.all(lista.map(leadsDaBusca))).flat()).map((l) => enriquecer(l, seg.criterio));
+  const vale = INICIO.total ? leads : leads.filter(noPadrao);
+  return { n: vale.length, whats: vale.filter((l) => l.whatsapp_link).length, todos: leads.length };
+}
+let vezInicio = 0, serieInicio = [];
 async function desenharInicio() {
-  const comResumo = buscas.filter((b) => b.resumo);
-  const total = comResumo.reduce((t, b) => t + (b.resumo.total || 0), 0);
-  const whats = comResumo.reduce((t, b) => t + (b.resumo.com_whatsapp || 0), 0);
+  const vez = ++vezInicio;
+  for (const b of $$("#inicio-modo button")) b.setAttribute("aria-pressed", String((b.dataset.modo === "total") === INICIO.total));
+  desenharUltimas();
   const ativas = buscas.filter((b) => ["na_fila", "rodando"].includes(b.status)).length;
+  const comLeads = buscas.filter((b) => (b.qtd_lotes || 0) > 0);
+  const semana = comLeads.filter((b) => buscaNoPeriodo(b, { dias: 7 }));
+  const inicio30 = diasAtras(29), porDia = new Map();
+  for (const b of comLeads) { const d = diaDaBusca(b); if (d >= inicio30) porDia.set(d, [...(porDia.get(d) || []), b]); }
+  let tudo, sem, dias;
+  try {
+    [tudo, sem, dias] = await Promise.all([contarRecorte(comLeads), contarRecorte(semana), Promise.all([...porDia].map(async ([d, l]) => [d, (await contarRecorte(l)).n]))]);
+  } catch (e) { toast(`Não foi possível ler os leads (${e.code || e.message}).`, "erro"); return; }
+  if (vez !== vezInicio) return; // chegou outra atualização no meio
   const kpi = (rot, val, ctx, ajuda, detalhe) => `<a class="cartao kpi clicavel" href="#" data-detalhe="${detalhe}"><span class="seta" aria-hidden="true">›</span><div class="rot">${rot}${ajuda ? ` <button class="info" data-ajuda="${txt(ajuda)}">i</button>` : ""}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></a>`;
-  const serie = await serieDias();
-  const semana = serie.slice(-7).reduce((t, d) => t + d.leads, 0);
+  const qual = INICIO.total ? "todos os leads, sem repetidos" : "só do segmento e da cidade pedida";
   $("#kpis").innerHTML =
-    kpi("Leads coletados", numero(total), `nas ${buscas.length} buscas mais recentes${ehAdmin ? " (todos)" : ""}`, "Soma dos leads das buscas concluídas (sem repetidos dentro de cada busca). Clique para ver todos.", "total") +
-    kpi("Leads da semana", numero(semana), "últimos 7 dias", "Leads das buscas concluídas nos últimos 7 dias, horário de Natal. Clique para ver esses leads.", "semana") +
-    kpi("Com WhatsApp", total ? `${Math.round((100 * whats) / total)}%` : "–", total ? `${numero(whats)} de ${numero(total)} leads` : "sem leads ainda", "Leads com celular: o botão abre a conversa no WhatsApp. Clique para ver só esses.", "whats") +
+    kpi(INICIO.total ? "Leads coletados" : "Leads no segmento", numero(tudo.n), INICIO.total ? `em ${comLeads.length} busca(s)` : `de ${numero(tudo.todos)} coletados · ${comLeads.length} busca(s)`,
+      `Leads das suas ${comLeads.length} buscas mais recentes com leads${ehAdmin ? " (de todos)" : ""}: ${qual}. Clique para ver esses leads.`, "total") +
+    kpi("Leads da semana", numero(sem.n), "buscas concluídas nos últimos 7 dias", `Buscas que terminaram nos últimos 7 dias (horário de Natal): ${qual}. Clique para ver esses leads.`, "semana") +
+    kpi("Com WhatsApp", tudo.n ? `${Math.round((100 * tudo.whats) / tudo.n)}%` : "–", tudo.n ? `${numero(tudo.whats)} de ${numero(tudo.n)} leads` : "sem leads ainda", `Leads com celular (o botão abre o WhatsApp): ${qual}. Clique para ver só esses.`, "whats") +
     kpi("Buscas ativas", numero(ativas), ativas ? "na fila ou rodando" : "nenhuma agora", "", "ativas") +
     kpi("Cota de hoje", cota ? `${cota.usadas}/${cota.limite}` : "–", cota ? `restam ${Math.max(0, cota.limite - cota.usadas)} buscas` : "", "Buscas comuns por dia. Zera à meia-noite (Natal). Estado inteiro não conta.", "cota");
-  desenharGraficoDias(serie);
-  desenharUltimas();
+  const mapaDias = new Map(dias);
+  serieInicio = Array.from({ length: 30 }, (_, i) => { const d = diasAtras(29 - i); return { dia: d, leads: mapaDias.get(d) || 0 }; });
+  desenharGraficoDias(serieInicio);
 }
-async function serieDias() {
-  if (cacheSerie) return cacheSerie; // 30 leituras por visita, guardadas enquanto a página estiver aberta
-  const dias = Array.from({ length: 30 }, (_, i) => diaFortaleza(new Date(Date.now() - (29 - i) * 86400000)));
-  const docs = await Promise.all(dias.map((d) => getDoc(doc(db, `estatisticas/${d}__${ehAdmin ? "geral" : usuario.uid}`)).catch(() => null)));
-  cacheSerie = dias.map((d, i) => ({ dia: d, leads: docs[i]?.data()?.leads || 0 }));
-  return cacheSerie;
-}
-function desenharGraficoDias(serie) {
+$("#inicio-modo").onclick = (ev) => {
+  const m = ev.target.closest("[data-modo]")?.dataset.modo; if (!m) return;
+  INICIO.total = m === "total"; guardar("mapaleads.inicio.total", INICIO.total); desenharInicio();
+};
+// Com poucos dias de busca (até 7), mostra só esses dias — sem 30 colunas vazias.
+function desenharGraficoDias(serieCompleta) {
+  const comDados = serieCompleta.filter((d) => d.leads);
+  const poucos = comDados.length > 0 && comDados.length <= 7;
+  const serie = poucos ? comDados : serieCompleta;
+  $("#grafico-dias-nota").textContent = `${poucos ? "só os dias com busca (últimos 30)" : "últimos 30 dias"} · ${INICIO.total ? "todos os leads" : "no segmento"} · horário de Natal`;
   const max = Math.max(1, ...serie.map((d) => d.leads));
-  if (!serie.some((d) => d.leads)) {
+  if (!comDados.length) {
     $("#grafico-dias").innerHTML = `<div class="vazio"><div class="ic">${icone("mercado")}</div><h3>Ainda sem leads neste período</h3><p>As barras aparecem quando uma busca termina. Comece por uma microrregião — leva poucos minutos.</p><a class="btn btn-primario" href="#nova">Fazer uma busca →</a></div>`;
     return;
   }
   // Largura real do cartão: no celular o texto do gráfico continua legível (não encolhe junto).
-  const L = Math.max(280, Math.round($("#grafico-dias").clientWidth || 600)), A = 190, pad = 30, bw = (L - pad) / serie.length;
+  const L = Math.max(280, Math.round($("#grafico-dias").clientWidth || 600)), A = 190, pad = 30, bw = poucos ? Math.min(90, (L - pad) / serie.length) : (L - pad) / serie.length;
   const barras = serie.map((d, i) => {
-    const h = (d.leads / max) * (A - 28); const [, m, dd] = d.dia.split("-");
+    const h = (d.leads / max) * (A - 40); const [, m, dd] = d.dia.split("-");
     // Área de clique = a coluna inteira do dia (fácil de tocar); a barra visível fica por cima.
-    return `<g class="${d.leads ? "clicavel" : ""}" ${d.leads ? `data-dia="${d.dia}" role="button" tabindex="0" aria-label="${dd}/${m}: ${numero(d.leads)} leads — ver"` : ""}><rect x="${(pad + i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${A - 18}" fill="transparent"/><rect class="bd" x="${(pad + i * bw + 2).toFixed(1)}" y="${(A - 18 - h).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${h.toFixed(1)}" rx="3"/><title>${dd}/${m}: ${numero(d.leads)} leads${d.leads ? " — clique para ver" : ""}</title></g>` +
-      (i % (L < 500 ? 7 : 5) === 0 ? `<text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${A - 3}" text-anchor="middle">${dd}/${m}</text>` : "");
+    return `<g class="${d.leads ? "clicavel" : ""}" ${d.leads ? `data-dia="${d.dia}" role="button" tabindex="0" aria-label="${dd}/${m}: ${numero(d.leads)} leads — ver"` : ""}><rect x="${(pad + i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${A - 18}" fill="transparent"/><rect class="bd" x="${(pad + i * bw + 2).toFixed(1)}" y="${(A - 18 - h).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${h.toFixed(1)}" rx="3"/><title>${dd}/${m}: ${numero(d.leads)} leads${d.leads ? " — clique para ver" : ""}</title>${poucos ? `<text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${(A - 22 - h).toFixed(1)}" text-anchor="middle" class="valor-barra">${numero(d.leads)}</text>` : ""}</g>` +
+      (poucos || i % (L < 500 ? 7 : 5) === 0 ? `<text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${A - 3}" text-anchor="middle">${dd}/${m}</text>` : "");
   }).join("");
-  $("#grafico-dias").innerHTML = `<svg class="grafico" viewBox="0 0 ${L} ${A}" role="img" aria-label="Leads por dia nos últimos 30 dias"><line x1="${pad}" x2="${L}" y1="${A - 18}" y2="${A - 18}"/><text x="0" y="12">${numero(max)}</text><text x="0" y="${A - 20}">0</text>${barras}</svg>`;
+  $("#grafico-dias").innerHTML = `<svg class="grafico" viewBox="0 0 ${L} ${A}" role="img" aria-label="Leads por dia"><line x1="${pad}" x2="${L}" y1="${A - 18}" y2="${A - 18}"/><text x="0" y="12">${numero(max)}</text><text x="0" y="${A - 20}">0</text>${barras}</svg>`;
 }
 const STATUS = { na_fila: ["Na fila", "warn"], rodando: ["Rodando", "azul"], concluida: ["Concluída", "ok"], erro: ["Erro", "bad"], cancelada: ["Cancelada", "bad"] };
 function linhaDoTempo(b) {
@@ -1164,17 +1208,17 @@ document.addEventListener("click", async (ev) => {
   const ver = ev.target.closest("[data-ver-busca]")?.dataset.verBusca;
   if (ver) { const b = buscas.find((x) => x.id === ver); detalharLeads({ ids: [ver], origem: { rot: "Início", href: "#inicio", item: b ? rotuloBusca(b) : "" } }); return; }
   const dia = ev.target.closest("[data-dia]")?.dataset.dia;
-  if (dia) { const p = { dia }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, segmento: false, pedida: false }, origem: { rot: "Início", href: "#inicio", item: `Leads de ${rotuloPeriodo(p).replace("Dia ", "")}` } }); return; }
+  if (dia) { const p = { dia }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: `Leads de ${rotuloPeriodo(p).replace("Dia ", "")}` } }); return; }
   const det = ev.target.closest("[data-detalhe]")?.dataset.detalhe;
   if (det) { ev.preventDefault(); DETALHES[det]?.(); }
 });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.matches?.("[data-ver-busca], [data-dia]")) ev.target.click(); });
-// Cartões do Início → detalhe. Os totais contam todos os leads (sem os filtros de segmento/cidade), então o detalhe abre com eles desligados.
-const TODOS = { segmento: false, pedida: false };
+// Cartões do Início → detalhe com o mesmo recorte do número (no segmento = filtros padrão; "Ver total" = filtros desligados).
+const modoInicio = () => (INICIO.total ? { segmento: false, pedida: false } : {});
 const DETALHES = {
-  total: () => detalharLeads({ ids: idsComLeads(), filtros: { ...TODOS }, origem: { rot: "Início", href: "#inicio", item: "Todos os leads" } }),
-  semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...TODOS }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
-  whats: () => detalharLeads({ ids: idsComLeads(), filtros: { whats: true, ...TODOS }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
+  total: () => detalharLeads({ ids: idsComLeads(), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
+  semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
+  whats: () => detalharLeads({ ids: idsComLeads(), filtros: { whats: true, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
   ativas: () => $("#ultimas").scrollIntoView({ behavior: "smooth", block: "center" }),
   cota: () => { location.hash = "#nova"; },
 };
@@ -1371,14 +1415,11 @@ async function prepararLeads() {
   W.chave = chave;
   const abertas = buscasAbertas();
   // 1 leitura por lote de até 300 leads.
-  const listas = await Promise.all(abertas.map(async (b) => {
-    const lotes = await Promise.all(Array.from({ length: b.qtd_lotes || 0 }, (_, n) => getDoc(doc(db, `buscas/${b.id}/lotes/${n}`))));
-    return lotes.flatMap((l) => (l.data()?.leads || []).map((x) => ({ ...x, _busca: b.id })));
-  }));
+  const listas = await Promise.all(abertas.map(leadsDaBusca));
   if (W.chave !== chave) return; // outra escolha chegou antes
   W.segmento = montarSegmento(abertas);
   F.cats.clear();
-  W.leads = juntarSemDuplicados(listas.flat()).map(enriquecer);
+  W.leads = juntarSemDuplicados(listas.flat()).map((l) => enriquecer(l));
   desenharCaixaBuscas();
 }
 function juntarSemDuplicados(lista) {
@@ -1407,10 +1448,10 @@ function coordenadas(l) {
   return m ? [Number(m[1]), Number(m[2])] : null;
 }
 // Região = cidade do ENDEREÇO (sem cidade = em branco; nada inferido). Segmento: marcado, nunca apagado.
-function enriquecer(l) {
+function enriquecer(l, criterio = W.segmento.criterio) {
   const m = infoCidade(l.cidade);
   const x = { ...l, _cod: m?.codigo || "", microrregiao: m?.micro?.nome || "", regiao_imediata: m?.imediata?.nome || "", _micro: m?.micro?.id || "", _coord: coordenadas(l) };
-  x.no_segmento = noSegmento(x, W.segmento.criterio) ? "sim" : "não";
+  x.no_segmento = noSegmento(x, criterio) ? "sim" : "não";
   return x;
 }
 const categoriaDo = (l) => l.categoria || "(sem categoria)";
@@ -1633,7 +1674,7 @@ async function salvarCategoriasPerfil() {
     await api("perfis", { acao: "salvar_categorias", id: perfil.id, categorias_aceitas: marcadas });
     await carregarPerfis();
     W.segmento = montarSegmento(buscasAbertas(), { categorias: marcadas });
-    W.leads = W.leads.map(enriquecer);
+    W.leads = W.leads.map((l) => enriquecer(l));
     toast(`Categorias guardadas no perfil “${perfil.nome}”.`, "ok");
     desenharFiltrosLeads();
   } catch (e) { toast(e.message, "erro"); }
@@ -2209,8 +2250,9 @@ async function carregarUsuarios() {
   $("#u-tabela").innerHTML = `<tr><td><div class="esq" style="height:14px"></div></td></tr>`;
   try {
     const { usuarios, limite_padrao } = await api("admin-usuarios", { acao: "listar" });
-    $("#u-tabela").innerHTML = `<thead><tr><th>Usuário</th><th>Buscas hoje</th><th>Buscas (7 dias)</th><th>Leads (7 dias)</th><th>% WhatsApp</th><th>Limite/dia (padrão ${limite_padrao})</th><th></th></tr></thead><tbody>` +
+    $("#u-tabela").innerHTML = `<thead><tr><th>Usuário</th><th>Nome</th><th>Buscas hoje</th><th>Buscas (7 dias)</th><th>Leads (7 dias)</th><th>% WhatsApp</th><th>Limite/dia (padrão ${limite_padrao})</th><th></th></tr></thead><tbody>` +
       usuarios.map((u) => `<tr><td class="principal-td" data-rot=""><span style="overflow-wrap:anywhere">${txt(u.email)}</span> ${u.admin ? '<span class="pilula azul">admin</span>' : ""} ${u.removido ? '<span class="pilula bad">removido</span>' : ""}</td>
+        <td data-rot="Nome">${u.removido ? txt(u.nome) : `<input type="text" maxlength="60" style="min-width:140px" data-nome="${txt(u.uid)}" value="${txt(u.nome || "")}" placeholder="ex.: Breno" aria-label="Nome de ${txt(u.email)}">`}</td>
         <td class="num" data-rot="Buscas hoje">${u.removido ? "–" : u.buscas_hoje}</td><td class="num" data-rot="Buscas (7 dias)">${u.semana ? numero(u.semana.buscas) : "–"}</td><td class="num" data-rot="Leads (7 dias)">${u.semana ? numero(u.semana.leads) : "–"}</td>
         <td class="num" data-rot="% WhatsApp">${u.semana?.leads ? `${Math.round((100 * u.semana.com_whatsapp) / u.semana.leads)}%` : "–"}</td>
         <td data-rot="Limite/dia">${u.removido || u.admin ? "–" : `<input type="number" min="0" style="width:90px" data-limite="${txt(u.uid)}" placeholder="${limite_padrao}" value="${u.limite_diario ?? ""}" aria-label="Limite diário de ${txt(u.email)}">`}</td>
@@ -2224,6 +2266,15 @@ $("#u-criar").onclick = async () => {
   catch (e) { toast(e.message, "erro"); }
 };
 $("#u-tabela").onchange = async (ev) => {
+  const uidNome = ev.target?.dataset?.nome;
+  if (uidNome) {
+    try {
+      const r = await api("admin-usuarios", { acao: "definir_nome", uid: uidNome, nome: ev.target.value });
+      ev.target.value = r.nome; toast("Nome atualizado.", "ok");
+      if (uidNome === usuario.uid) mostrarSaudacao(r.nome);
+    } catch (e) { toast(e.message, "erro"); }
+    return;
+  }
   const uid = ev.target?.dataset?.limite; if (!uid) return;
   try { await api("admin-usuarios", { acao: "definir_limite", uid, limite_diario: ev.target.value === "" ? null : Number(ev.target.value) }); toast("Limite atualizado.", "ok"); }
   catch (e) { toast(e.message, "erro"); }

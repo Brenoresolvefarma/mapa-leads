@@ -77,7 +77,7 @@ before(async () => {
   await db.doc("buscas/outra/lotes/0").set({ dono_uid: breno.uid, leads: [lead({ nome: "Lead Do Admin", categoria: "Segredo", cidade: "Natal", termo_que_encontrou: "segredo", id_lugar: "adm" })] });
   await db.doc(`estatisticas/${hoje}__${ana.uid}`).set({ dono_uid: ana.uid, buscas: 2, leads: 7, com_whatsapp: 3, com_telefone: 4, dia: hoje });
   await db.doc(`estatisticas/${hoje}__geral`).set({ buscas: 9, leads: 50, com_whatsapp: 10, dia: hoje });
-  await db.doc(`usuarios/${ana.uid}`).set({ email: "ana@x.example", dia: hoje, contagem_dia: 2, limite_diario: 5 });
+  await db.doc(`usuarios/${ana.uid}`).set({ email: "ana@x.example", nome: "Ana Souza", dia: hoje, contagem_dia: 2, limite_diario: 5 });
 
   local = await iniciarServidor();
   navegador = await chromium.launch({ executablePath: process.env.NAVEGADOR || "/opt/pw-browsers/chromium" });
@@ -115,10 +115,16 @@ const esperarHash = (p, h) => p.waitForFunction((x) => decodeURIComponent(locati
 
 test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", async () => {
   const p = await abrir("ana@x.example", "senha-forte-2");
-  await esperarTexto(p, "#kpis", /Leads da semana\s*i?7/);
-  assert.match(await texto(p, "#kpis"), /Leads coletados\s*i?8/);
-  assert.match(await texto(p, "#kpis"), /Com WhatsApp\s*i?38%/); // 3 de 8
+  // Saudação com o NOME do cadastro (não o e-mail)
+  await esperarTexto(p, "#saudacao", /^Olá, Ana$/);
+  // Padrão "No segmento": só do segmento e da cidade pedida (Alfa, Beta, Delta e Antiga; a loja, a Gama e a sem cidade não contam)
+  await esperarTexto(p, "#kpis", /Leads da semana\s*i?3/);
+  assert.match(await texto(p, "#kpis"), /Leads no segmento\s*i?4\s*de 7 coletados/);
+  assert.match(await texto(p, "#kpis"), /Com WhatsApp\s*i?50%/); // 2 de 4
   assert.match(await texto(p, "#kpis"), /Cota de hoje\s*i?2\/5/);
+  // Gráfico: só 2 dias com busca → mostra só esses 2 (sem 30 colunas vazias), com o valor em cima
+  assert.equal(await p.locator("#grafico-dias [data-dia]").count(), 2);
+  assert.match(await texto(p, "#grafico-dias-nota"), /só os dias com busca/);
   assert.equal(await p.isVisible("#selo"), false);
   assert.equal(await p.locator("#menu [data-ir=admin]").count(), 0);
   assert.equal(await p.locator("#ultimas .busca-item").count(), 3);
@@ -127,9 +133,10 @@ test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", a
   assert.equal(await p.locator("#kpis [data-detalhe=semana]").evaluate((e) => getComputedStyle(e).cursor), "pointer");
   assert.equal(await p.locator("#kpis [data-detalhe=semana] .seta").count(), 1);
 
-  // "Leads da semana" → Meus leads só das buscas dos últimos 7 dias (b1 + b2, sem repetidos), sem os filtros de segmento/cidade
+  // "Leads da semana" → Meus leads só das buscas dos últimos 7 dias (b1 + b2, sem repetidos), com o mesmo número
   await p.click("#kpis [data-detalhe=semana]");
-  await esperarTexto(p, "#conta", /^6 de 6 leads$/);
+  await esperarTexto(p, "#conta", /^3 de 6 leads$/);
+  assert.equal(await p.isChecked("#f-segmento"), true);
   assert.match(await texto(p, "#chips"), /Últimos 7 dias/);
   assert.match(await texto(p, "#trilha-leads"), /Início\s*›\s*Leads da semana/);
   assert.ok(!(await texto(p, "#tabela-leads")).includes("Clínica Antiga"));
@@ -142,12 +149,25 @@ test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", a
   await esperarTexto(p, "#conta", /^2 de 7 leads$/);
   assert.match(await texto(p, "#chips"), /Tem WhatsApp/);
 
-  // Barra do dia de hoje no gráfico → leads das buscas que terminaram hoje
+  // Barra do dia de hoje no gráfico → leads das buscas que terminaram hoje (mesmo número da barra)
   await p.click("[data-ir=inicio]");
   await p.waitForSelector(`#grafico-dias [data-dia="${hoje}"]`);
+  assert.equal((await p.locator(`#grafico-dias [data-dia="${hoje}"] .valor-barra`).textContent()).trim(), "3");
   await p.click(`#grafico-dias [data-dia="${hoje}"]`);
-  await esperarTexto(p, "#conta", /^6 de 6 leads$/);
+  await esperarTexto(p, "#conta", /^3 de 6 leads$/);
   assert.match(await texto(p, "#chips"), /Dia \d\d\/\d\d/);
+  // "Ver total": todos os leads, sem repetidos; o detalhe abre com os filtros desligados
+  await p.click("[data-ir=inicio]");
+  await p.click("#inicio-modo [data-modo=total]");
+  await esperarTexto(p, "#kpis", /Leads coletados\s*i?7/);
+  assert.match(await texto(p, "#kpis"), /Leads da semana\s*i?6/);
+  assert.match(await texto(p, "#kpis"), /Com WhatsApp\s*i?29%/); // 2 de 7
+  await p.click("#kpis [data-detalhe=semana]");
+  await esperarTexto(p, "#conta", /^6 de 6 leads$/);
+  assert.equal(await p.isChecked("#f-segmento"), false);
+  await p.click("[data-ir=inicio]");
+  await p.click("#inicio-modo [data-modo=segmento]");
+  await esperarTexto(p, "#kpis", /Leads no segmento/);
 
   // Uma busca da lista → leads dela (filtros padrão) + trilha
   await p.click("[data-ir=inicio]");
@@ -392,7 +412,7 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
 test("celular (360/390/414 px): nada passa da largura da tela, toques ≥ 44 px e cartões clicáveis", async () => {
   for (const largura of [390, 360, 414]) {
     const p = await abrir("ana@x.example", "senha-forte-2", { width: largura, height: 844 });
-    await esperarTexto(p, "#kpis", /Leads da semana\s*i?7/);
+    await esperarTexto(p, "#kpis", /Leads da semana\s*i?3/);
     for (const pag of ["inicio", "nova", "leads", "mapa", "mercado", "sobre"]) {
       await p.evaluate((h) => { location.hash = h; }, `#${pag}`);
       await p.waitForSelector(`[data-pagina=${pag}]:not(.oculto)`);
@@ -436,10 +456,15 @@ test("celular (360/390/414 px): nada passa da largura da tela, toques ≥ 44 px 
 test("admin: Admin com saúde do motor, usuários e Estado inteiro; sair e entrar como comum na mesma aba não vaza nada", async () => {
   const p = await abrir("breno@x.example", "senha-forte-1");
   assert.ok(await p.isVisible("#selo"));
+  await esperarTexto(p, "#saudacao", /^Olá!$/); // sem nome no cadastro: nunca o começo do e-mail
   await p.click("#menu [data-ir=admin]");
   await esperarTexto(p, "#saude", /Últimas execuções|Token do GitHub/);
   assert.match(await texto(p, "#saude"), /Token do GitHub não configurado/);
   await p.waitForSelector("#u-tabela tr >> text=ana@x.example");
+  // Nome editável no cadastro (vai para a saudação)
+  await p.fill(`#u-tabela [data-nome="${uids.ana}"]`, "Aninha Teste");
+  await p.press(`#u-tabela [data-nome="${uids.ana}"]`, "Tab");
+  await esperarTexto(p, "#toasts", /Nome atualizado/);
   await p.fill("#rn-termos", "dentista");
   await p.click("#rn-estimar");
   await esperarTexto(p, "#msg-rn", /249 consultas/);
@@ -473,6 +498,7 @@ test("admin: Admin com saúde do motor, usuários e Estado inteiro; sair e entra
   await p.evaluate(() => { location.hash = "#admin"; });
   await p.waitForSelector("[data-pagina=inicio]:not(.oculto)");
   assert.equal(await p.textContent("#menu-email"), "ana@x.example");
+  assert.equal(await p.textContent("#saudacao"), "Olá, Aninha");
   assert.deepEqual(erros, []);
   await p.context().close();
 });

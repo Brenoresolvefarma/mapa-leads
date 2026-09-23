@@ -35,8 +35,11 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
 ### A tela (Fase 3a v2)
 Arquivo único [`publico/index.html`](publico/index.html) (Leaflet, MarkerCluster, Chart.js e SheetJS por CDN, carregados só
 quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e no celular (360–414 px).
-- **Início**: cartões (leads coletados, da semana, % com WhatsApp, buscas ativas, cota), leads por dia (30 dias) e
-  últimas buscas com linha do tempo. **Tudo clicável**: "Leads da semana" abre Meus leads só com as buscas dos últimos
+- **Início**: "Olá, <nome>" (nome do cadastro; o admin edita em Admin), cartões (leads no segmento, da semana, % com
+  WhatsApp, buscas ativas, cota), leads por dia e últimas buscas com linha do tempo. Os números contam **só os leads do
+  segmento e da cidade pedida** (os filtros padrão de Meus leads), com a alternância **"Ver total"**; são calculados
+  dos mesmos leads que aparecem ao clicar (lê os lotes das buscas uma vez por visita). Com até 7 dias de busca nos
+  últimos 30, o gráfico mostra só esses dias (com o valor em cima de cada barra). **Tudo clicável**: "Leads da semana" abre Meus leads só com as buscas dos últimos
   7 dias; "% com WhatsApp" abre só os com WhatsApp; uma barra do gráfico abre os leads daquele dia; uma busca abre os
   leads dela ("Ver no mapa" abre o mapa só com ela). A tela de destino mostra a trilha de volta.
 - **Nova busca** (3 passos): O quê (termos em chips, sinônimos sugeridos e editáveis, perfis salvos no servidor) ·
@@ -64,7 +67,7 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
   "Atualizar indicadores do IBGE"): população, área e densidade (Censo 2022, SIDRA 4714); PIB 2022 (SIDRA 5938);
   **PIB per capita 2022 = PIB 2022 ÷ população do Censo 2022 (calculado; opção "b" aprovada pelo Breno)**; empresas,
   unidades locais, pessoal ocupado e salário médio (CEMPRE 2024, SIDRA 9509).
-- **Admin**: usuários (criar, limite, remover) com buscas/leads/% WhatsApp da semana, fila ao vivo, saúde do motor,
+- **Admin**: usuários (criar com nome, editar nome, limite, remover) com buscas/leads/% WhatsApp da semana, fila ao vivo, saúde do motor,
   Estado inteiro (RN) e estados ativos (só RN).
 - Tema claro/escuro (automático ou escolhido), tour de 4 passos no 1º acesso, "Desenvolvido por Resolve Farma"
   (constante `ASSINATURA`). Datas sempre no horário de Natal.

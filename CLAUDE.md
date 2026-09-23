@@ -180,7 +180,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   `#cartoes`; ranking/usuários/execuções por `.tabela.vira-cartao` + `data-rot`), chips e filtros numa faixa que rola
   só por dentro, toques ≥ 44 px, ranking do Mercado 20 por vez ("mostrar mais"). O teste mede a largura tirando o clip.
 - **Tudo clicável** (`detalharLeads()` + trilha `#trilha-leads`): cartões do Início (total/semana/WhatsApp abrem Meus
-  leads com segmento/cidade DESLIGADOS, porque esses números contam todos os leads; semana = buscas que TERMINARAM
+  leads com o mesmo recorte do número — no segmento ou, em "Ver total", filtros desligados; semana = buscas que TERMINARAM
   nos últimos 7 dias em Fortaleza, filtro `F.periodo`), barra do dia, busca (leads) e "Ver no mapa"; no Mapa, barras
   de microrregião/município aprofundam e categoria abre a tabela com `F.categoria` (mesma contagem, mantém os filtros);
   Mercado: cartões (indicador → ranking; leads → tabela), ranking e gráficos → mapa; ficha: cidade/microrregião → mapa.
@@ -188,6 +188,12 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   (`#mapa/<micro>/<municipio>` em slug), Esc/Voltar, tela cheia, painel recolhível (gaveta no celular), zoom embaixo
   à direita, zoom máximo 11 (contorno simplificado). Cinza = "sem busca". Sem índice de oportunidade (proposta só
   com aprovação da fórmula).
+- **Início (ajustes do Breno)**: saudação com o NOME (`usuarios/{uid}.nome` ou displayName; sem nome = "Olá!", nunca o
+  e-mail); admin edita o nome (`admin-usuarios` ação `definir_nome`, até 60 caracteres, grava doc + displayName).
+  Cartões e gráfico contam por padrão só leads **no segmento e da cidade pedida** (mesma regra dos filtros padrão),
+  alternância "No segmento | Ver total" (guardada no navegador); calculados dos lotes das buscas (cache `lotesLidos`,
+  compartilhado com Meus leads; 1 leitura por lote por visita — o Início não lê mais `estatisticas`), cada recorte com
+  o segmento das suas buscas, igual ao detalhe. Gráfico: até 7 dias com busca nos últimos 30 → só esses dias.
 - **Exportação**: colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
 - **Duplicados**: o mesmo lugar em outra busca completa os campos vazios (dado real do Google).
 - `admin-usuarios` listar devolve `semana` (7 dias de `estatisticas/{dia}__{uid}`: 7 leituras por usuário).

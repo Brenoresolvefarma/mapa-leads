@@ -1,5 +1,5 @@
 // POST /api/admin-usuarios  — SÓ admin (conferido pela claim do token, no servidor).
-// Ações: listar | criar | remover | definir_limite
+// Ações: listar | criar | remover | definir_limite | definir_nome
 // Não existe cadastro público e não existe "promover a admin" por aqui:
 // o admin é definido só pelo workflow "Definir admin" no GitHub.
 
@@ -22,6 +22,8 @@ export default handler(async (req) => {
       return json(200, await remover(auth, db, usuario, corpo));
     case "definir_limite":
       return json(200, await definirLimite(auth, db, corpo));
+    case "definir_nome":
+      return json(200, await definirNome(auth, db, corpo));
     default:
       throw new ErroHttp(400, "Ação inválida.");
   }
@@ -70,7 +72,11 @@ async function listar(auth, db) {
   return { usuarios, limite_padrao: limitePadrao };
 }
 
-async function criar(auth, db, { email, senha, nome, limite_diario }) {
+// Nome mostrado na saudação ("Olá, Breno"): até 60 caracteres, sem espaços sobrando.
+const limparNome = (nome) => String(nome ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+
+async function criar(auth, db, { email, senha, nome: nomeBruto, limite_diario }) {
+  const nome = limparNome(nomeBruto);
   if (!email || !senha) throw new ErroHttp(400, "Informe e-mail e senha.");
   if (String(senha).length < 8) throw new ErroHttp(400, "A senha precisa ter pelo menos 8 caracteres.");
   let conta;
@@ -127,4 +133,16 @@ async function definirLimite(auth, db, { uid, limite_diario }) {
     { merge: true },
   );
   return { limite_diario: usarPadrao ? null : limite_diario };
+}
+
+async function definirNome(auth, db, { uid, nome: nomeBruto }) {
+  if (!uid) throw new ErroHttp(400, "Informe o usuário.");
+  const nome = limparNome(nomeBruto);
+  try {
+    await auth.updateUser(uid, { displayName: nome || null });
+  } catch {
+    throw new ErroHttp(404, "Usuário não encontrado.");
+  }
+  await db.doc(`usuarios/${uid}`).set({ nome }, { merge: true });
+  return { nome };
 }

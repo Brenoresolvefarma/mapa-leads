@@ -193,6 +193,16 @@ test("admin-usuarios: só admin; criar, limitar, listar e remover (buscas ficam)
   assert.equal(caio.limite_diario, 5);
   assert.equal(caio.buscas_hoje, 1);
   assert.deepEqual(caio.semana, { buscas: 3, leads: 15, com_whatsapp: 5 });
+  assert.equal(caio.nome, "Caio");
+  // Nome (saudação "Olá, ..."): só o admin muda; espaços limpos e no máximo 60 caracteres.
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "Ana" }, tokens.ana)).status, 403);
+  const renomeado = await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "  Caio   Souza  " }, tokens.breno);
+  assert.equal(renomeado.status, 200);
+  assert.equal((await db.doc(`usuarios/${uid}`).get()).data().nome, "Caio Souza");
+  assert.equal((await firebase().auth.getUser(uid)).displayName, "Caio Souza");
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "x".repeat(80) }, tokens.breno)).corpo.nome.length, 60);
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_nome", uid: "nao-existe", nome: "X" }, tokens.breno)).status, 404);
+  await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "Caio" }, tokens.breno);
   assert.ok(lista.corpo.usuarios.find((u) => u.email === "breno@x.example").admin);
 
   const brenoUid = (await firebase().auth.getUserByEmail("breno@x.example")).uid;

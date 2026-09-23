@@ -58,7 +58,7 @@ if (local) {
   const { firebase } = await import("../netlify/lib/servidor.mjs");
   const { auth, db } = firebase();
   email = "captura@x.example"; senha = "senha-forte-9";
-  const u = await auth.createUser({ email, password: senha }).catch(() => auth.getUserByEmail(email));
+  const u = await auth.createUser({ email, password: senha, displayName: "Breno" }).catch(() => auth.getUserByEmail(email));
   if (process.env.PAPEL === "admin") await auth.setCustomUserClaims(u.uid, { admin: true });
   const apagar = process.env.SEMEAR === "1" ? await semear(db, u.uid) : async () => {};
   const srv = await iniciarServidor();
@@ -75,7 +75,7 @@ if (local) {
   if (process.env.API_LOCAL === "1") funcoesLocais = await carregarFuncoesLocais(conta); // deploy preview sem os secrets
   email = `captura-${randomBytes(4).toString("hex")}@example.com`;
   senha = randomBytes(12).toString("base64url");
-  const { uid } = await auth.createUser({ email, password: senha });
+  const { uid } = await auth.createUser({ email, password: senha, displayName: "Breno" }); // saudação "Olá, Breno"
   // PAPEL=admin só para as capturas PRIVADAS (vê as buscas reais); o padrão é usuário comum.
   if (process.env.PAPEL === "admin") await auth.setCustomUserClaims(uid, { admin: true });
   const apagar = process.env.SEMEAR === "1" ? await semear(getFirestore(app), uid) : async () => {};
