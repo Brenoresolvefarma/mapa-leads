@@ -1,4 +1,4 @@
-# TEMPORÁRIO (removido antes do merge): valida a tela v2 no deploy preview do PR 12.
+# TEMPORÁRIO (removido antes do merge): valida a tela v2 no deploy preview do PR 12. (rodada após os créditos do Netlify)
 #  1) teste real (logins temporários, busca fictícia, Functions deste commit no runner — API_LOCAL);
 #  2) capturas públicas (login temporário + busca FICTÍCIA, tudo apagado): vão para docs/capturas/fase3a-v2/;
 #  3) capturas privadas (admin temporário, leads reais sem tarja): criptografadas com a chave pública
