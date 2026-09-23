@@ -26,6 +26,7 @@ test("home care: casa lojas e prefeituras como FORA; cuidados de idosos como DEN
   assert.equal(R.noSegmento(lead("Prefeitura Municipal", "Prefeitura"), crit), false);
   assert.equal(R.noSegmento(lead("Funerária Paz", "Funerária"), crit), false);
   assert.equal(R.noSegmento(lead("Net House Provedor", "Provedor de serviços de Internet"), crit), false);
+  assert.equal(R.noSegmento(lead("CARETAS HOME", "Complexo habitacional"), crit), false); // "care" não casa "caretas"
 });
 
 test("categorias aceitas marcam como DENTRO mesmo sem o termo no nome", () => {

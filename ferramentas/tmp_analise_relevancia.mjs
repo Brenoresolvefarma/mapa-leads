@@ -1,4 +1,4 @@
-// TEMPORÁRIO (removido antes do merge): aplica a relevância nova à busca "HOME CARE" de 30 cidades
+// TEMPORÁRIO (removido antes do merge) — rodada 2: aplica a relevância nova à busca "HOME CARE" de 30 cidades
 // do Breno. A saída vai para um arquivo que o workflow CIFRA antes de publicar (nada legível no log).
 import { writeFileSync } from "node:fs";
 import { initializeApp, cert } from "firebase-admin/app";
@@ -33,6 +33,10 @@ for (const b of buscas) {
   linhas.push(`NO SEGMENTO (automático: termo + sinônimos no nome/categoria): ${conta((l) => R.noSegmento(l, auto))}`);
   linhas.push(`NO SEGMENTO (automático + suas 5 categorias): ${conta((l) => R.noSegmento(l, comLista))}`);
   linhas.push(`... e na cidade pedida (com cidade): ${conta((l) => R.noSegmento(l, comLista) && naCidade(l))}`);
+  const cidadesPedidas = new Set(b.parametros.cidades.map((c) => R.semAcento(c).replace(/ rn$/, "")));
+  const dentro = leads.filter((l) => R.noSegmento(l, comLista));
+  const locais = dentro.filter((l) => l.cidade && cidadesPedidas.has(R.semAcento(l.cidade)));
+  linhas.push(`... desses, com cidade do endereço entre as 30 pedidas: ${locais.length} | em outras cidades do RN/Brasil: ${dentro.filter((l) => l.cidade && !cidadesPedidas.has(R.semAcento(l.cidade))).length} | sem cidade: ${dentro.filter((l) => !l.cidade).length}`);
   linhas.push(`CATEGORIAS (${cats.size}): nome | leads | no segmento (auto) | no segmento (auto+lista)`);
   for (const [c, x] of [...cats].sort((a, b) => b[1].n - a[1].n)) linhas.push(`  ${c} | ${x.n} | ${x.auto} | ${x.lista}`);
   linhas.push(`LEADS NO SEGMENTO (auto+lista): nome | categoria | cidade`);

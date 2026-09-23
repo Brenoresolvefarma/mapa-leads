@@ -219,8 +219,12 @@ test("perfis: cada usuário salva, lista, edita e apaga só os próprios", async
   const lista = await pedido(perfis, { acao: "listar" }, tokens.ana);
   assert.deepEqual(lista.corpo.perfis, [{
     id: criado.corpo.id, nome: "Clínicas", termos: ["clínica"], cidades: ["Natal RN", "Extremoz RN"],
-    extrair_email: false, profundidade: "rapida", tipo_regiao: "micro", regioes: ["24018"],
+    extrair_email: false, profundidade: "rapida", sinonimos: [], categorias_aceitas: [], tipo_regiao: "micro", regioes: ["24018"],
   }]);
+  // Guardar categorias aceitas escolhidas na tela de leads
+  assert.equal((await pedido(perfis, { acao: "salvar_categorias", id: criado.corpo.id, categorias_aceitas: ["Residência geriátrica", "Casa de repouso para idosos"] }, tokens.ana)).status, 200);
+  assert.deepEqual((await pedido(perfis, { acao: "listar" }, tokens.ana)).corpo.perfis[0].categorias_aceitas, ["Residência geriátrica", "Casa de repouso para idosos"]);
+  assert.equal((await pedido(perfis, { acao: "salvar_categorias", id: criado.corpo.id, categorias_aceitas: ["x"] }, tokens.breno)).status, 404);
   // Outro usuário não vê nem altera.
   assert.deepEqual((await pedido(perfis, { acao: "listar" }, tokens.breno)).corpo.perfis, []);
   assert.equal((await pedido(perfis, { acao: "salvar", perfil: { ...perfil, id: criado.corpo.id } }, tokens.breno)).status, 404);
@@ -280,4 +284,23 @@ test("despertador: dispara só quando há trabalho e registra em config/desperta
   const registro = (await db.doc("config/despertador").get()).data();
   assert.equal(registro.disparou, false);
   assert.ok(registro.ultima_execucao);
+});
+
+test("sessão antiga de admin não vale: token de usuário comum recebe 403 em todas as ações de admin", async () => {
+  // A tela recarrega ao trocar de usuário; mesmo que um estado antigo tentasse, o servidor confere a claim do token.
+  const r1 = await pedido(adminUsuarios, { acao: "listar" }, tokens.ana);
+  const r2 = await pedido(adminUsuarios, { acao: "definir_limite", uid: "qualquer", limite_diario: 999 }, tokens.ana);
+  const r3 = await pedido(saudeMotor, {}, tokens.ana);
+  const r4 = await pedido(criarBusca, { modo: "rn_inteiro", termos: "x", simular: true }, tokens.ana);
+  assert.deepEqual([r1.status, r2.status, r3.status, r4.status], [403, 403, 403, 403]);
+});
+
+test("busca comum guarda sinônimos e categorias aceitas (só marcam leads; não mudam as consultas)", async () => {
+  const { db } = firebase();
+  const sim = await pedido(criarBusca, { termos: "home care", cidades: "Natal RN", profundidade: "rapida", sinonimos: ["casa de repouso"], simular: true }, tokens.breno);
+  assert.equal(sim.corpo.consultas, 1);
+  const r = await pedido(criarBusca, { termos: "home care", cidades: "Natal RN", profundidade: "rapida", sinonimos: ["casa de repouso"], categorias_aceitas: ["Residência geriátrica"] }, tokens.breno);
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+  const p = (await db.doc(`buscas/${r.corpo.id}`).get()).data().parametros;
+  assert.deepEqual([p.termos, p.sinonimos, p.categorias_aceitas], [["home care"], ["casa de repouso"], ["Residência geriátrica"]]);
 });

@@ -106,6 +106,7 @@ def test_montar_lead_campos_completos():
     assert lead == {
         "nome": "Clínica Fictícia",
         "categoria": "Dentista",
+        "categorias": [],
         "telefone": "(84) 99999-0000",
         "whatsapp_link": "https://wa.me/5584999990000",
         "email": "contato@ficticia.example",
@@ -138,6 +139,11 @@ def test_nota_zero_vira_vazio():
     lead = t.montar_lead(entrada_ficticia(review_rating=0, review_count=0), "x")
     assert lead["nota"] is None
     assert lead["qtd_avaliacoes"] == 0
+
+
+def test_categorias_guarda_a_lista_do_google():
+    lead = t.montar_lead(entrada_ficticia(categories=["Home care", " ", "Saúde", 3]), "x")
+    assert lead["categorias"] == ["Home care", "Saúde"]
 
 
 def test_categoria_usa_lista_quando_principal_ausente():

@@ -291,6 +291,8 @@ def montar_lead(entrada, consulta):
     return {
         "nome": (entrada.get("title") or "").strip(),
         "categoria": categoria,
+        # Todas as categorias do Google (a 1ª é a principal): usadas para marcar o segmento na tela.
+        "categorias": [c.strip() for c in (entrada.get("categories") or []) if isinstance(c, str) and c.strip()][:10],
         "telefone": telefone,
         "whatsapp_link": whatsapp,
         "email": _juntar_emails(entrada.get("emails")),
