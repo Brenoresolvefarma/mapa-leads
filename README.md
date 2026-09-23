@@ -148,6 +148,11 @@ O log público mostra só números, ex.:
 3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
 
+## Verificação em produção (GitHub Actions, manual)
+- **Verificar Functions**: chama as 4 Functions no ar sem login (espera 200/401/405). Só status no log.
+- **Diagnosticar Functions**: cria um login de teste temporário (apagado no fim) e faz uma busca
+  **simulada** (não grava nada) em produção, além de testar o Firestore direto. Mostra status e códigos de erro.
+
 ## Desenvolvimento e testes
 ```bash
 pip install -r motor/requirements.txt -r motor/requirements-dev.txt

@@ -11,9 +11,6 @@ on:
         description: "URL do site"
         required: true
         default: "https://mapaleads-rn.netlify.app"
-  # TEMPORÁRIO (investigação do 500 no criar-busca): roda a cada push nesta branch.
-  push:
-    branches: [claude/great-darwin-pt5gmw]
 
 permissions:
   contents: read
@@ -34,4 +31,4 @@ jobs:
       - name: Diagnosticar
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: node --no-experimental-require-module ferramentas/diagnosticar_criar_busca.mjs "${{ github.event.inputs.url || 'https://mapaleads-rn.netlify.app' }}"
+        run: node --no-experimental-require-module ferramentas/diagnosticar_criar_busca.mjs "${{ github.event.inputs.url }}"
