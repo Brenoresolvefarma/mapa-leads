@@ -26,7 +26,7 @@ jobs:
       - name: Esperar o deploy preview deste commit
         run: |
           for i in $(seq 1 60); do
-            if curl -fsS "$PREVIEW/prototipo.html" | grep -q "Etapa 0" && curl -fsS -o /dev/null "$PREVIEW/dados/malha_rn_municipio_minima.geojson.json"; then
+            if curl -fsS "$PREVIEW/prototipo.html" | grep -q "versao-prototipo: 2" && curl -fsS -o /dev/null "$PREVIEW/dados/malha_rn_municipio_minima.geojson.json"; then
               echo "preview pronto; config-publica HTTP $(curl -s -o /dev/null -w '%{http_code}' $PREVIEW/api/config-publica)"; exit 0; fi
             sleep 10
           done
@@ -63,4 +63,4 @@ jobs:
           git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/capturas/etapa0 publico/og-image.png publico/favicon-32.png publico/apple-touch-icon.png publico/icone-192.png publico/icone-512.png
           git commit -m "Capturas da Etapa 0 (publicas, sem leads) e imagens da marca" || echo "nada novo"
-          git push
+          git pull --rebase -q origin claude/great-darwin-pt5gmw && git push

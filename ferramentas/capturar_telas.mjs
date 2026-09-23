@@ -91,6 +91,8 @@ try {
     const mascara = process.env.SEM_TARJA === "1" ? "" : "captura=1";
     const url = `${site}/${PAGINA}?${mascara}${local ? "&emulador=1" : ""}`;
     await p.goto(url);
+    // Esconde a barra de colaboração que o Netlify injeta só nos deploy previews.
+    await p.addStyleTag({ content: "netlify-drawer, #netlify-drawer, iframe[id*='netlify'], div[id*='netlify-drawer'] { display:none !important; }" }).catch(() => {});
     await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
     if (hash) {
       await p.fill("#le", email); await p.fill("#ls", senha); await p.click("#entrar");
@@ -104,6 +106,7 @@ try {
     } else {
       await p.waitForTimeout(1500);
     }
+    await p.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (/netlify/i.test(el.tagName) || /netlify-drawer/i.test(el.id)) el.remove(); }));
     await p.screenshot({ path: `${PASTA}/${arquivo}.png`, fullPage: !acao && largura > 760 });
     // Sem rolagem horizontal em nenhuma largura.
     const rolaLado = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
