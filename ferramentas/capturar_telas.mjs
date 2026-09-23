@@ -86,6 +86,8 @@ try {
       await ctx.route("https://www.gstatic.com/firebasejs/**", (r) =>
         r.fulfill({ path: `node_modules/firebase/${new URL(r.request().url()).pathname.split("/").pop()}`, contentType: "text/javascript" }));
     }
+    // Bloqueia a barra de colaboração que o Netlify injeta só nos deploy previews.
+    await ctx.route(/netlify-cdp|netlify\.js|app\.netlify\.com\/.*drawer/i, (r) => r.abort());
     const p = await ctx.newPage();
     p.on("pageerror", (e) => erros.push(`${arquivo}: ${e.message}`));
     const mascara = process.env.SEM_TARJA === "1" ? "" : "captura=1";

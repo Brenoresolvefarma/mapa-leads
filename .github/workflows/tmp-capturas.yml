@@ -1,4 +1,4 @@
-# TEMPORÁRIO (removido antes do merge): capturas da Etapa 0 no deploy preview do PR 10.
+# TEMPORÁRIO (removido antes do merge): capturas da Etapa 0 no deploy preview do PR 10. (rodada 3)
 #  - públicas (login comum temporário, sem leads): vão para docs/capturas/etapa0/ no PR;
 #  - privadas (admin temporário, leads reais sem tarja): criptografadas com a chave pública
 #    ferramentas/marca/chave_publica_capturas_tmp.pem (a privada só existe na sessão do Claude)
