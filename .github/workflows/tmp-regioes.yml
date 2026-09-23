@@ -1,0 +1,15 @@
+# TEMPORÁRIO: coleta microrregiões e regiões imediatas do RN na API do IBGE. Removido antes do merge.
+name: TMP regioes IBGE
+on:
+  push:
+    branches: [claude/great-darwin-pt5gmw]
+    paths: [ferramentas/tmp_regioes.py]
+permissions:
+  contents: read
+jobs:
+  ibge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 ferramentas/tmp_regioes.py
