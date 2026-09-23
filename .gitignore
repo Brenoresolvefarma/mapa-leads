@@ -6,7 +6,6 @@
 !firebase.json
 !firestore.indexes.json
 !dados/*.json
-!publico/manifest.json
 .env
 .env.*
 
