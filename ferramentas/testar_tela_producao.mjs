@@ -154,6 +154,7 @@ try {
     await xlsx.saveAs(join(pasta, "t.xlsx"));
     const xml = execFileSync("unzip", ["-p", join(pasta, "t.xlsx")], { encoding: "utf8" });
     confere(xml.includes("cidade_confere") && !xml.includes("id_lugar") && xml.includes("Fictício A"), "conteúdo do xlsx");
+    await p.selectOption("#f-cidade", ""); // o mapa acompanha o filtro da tabela: volta ao RN inteiro
   });
   await etapa("mapa (Leaflet do CDN): RN › Natal › Natal pelo painel e categoria → tabela", async () => {
     await p.click("[data-ir=mapa]");
