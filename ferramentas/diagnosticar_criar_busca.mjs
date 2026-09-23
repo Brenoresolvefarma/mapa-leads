@@ -93,6 +93,33 @@ try {
   });
   log(`criar-busca em produção (${SITE}): HTTP ${prod.status} ${await prod.text()}`);
   if (prod.status !== 200) resultado = 1;
+
+  // 5) Opcional (MODO=criar_e_cancelar): "Buscar" de verdade — cria a busca (transação +
+  //    disparo do motor), cancela na hora (antes de raspar) e apaga o que foi gravado.
+  if (process.env.MODO === "criar_e_cancelar") {
+    const db = getFirestore(app);
+    const cabecalhos = { "content-type": "application/json", authorization: `Bearer ${idToken}` };
+    const criada = await fetch(`${SITE}/api/criar-busca`, {
+      method: "POST", headers: cabecalhos,
+      body: JSON.stringify({ termos: "diagnostico", cidades: "Natal RN", profundidade: "rapida" }),
+    });
+    const corpoCriada = await criada.json();
+    log(`Buscar em produção: HTTP ${criada.status}, motor disparado=${corpoCriada.disparado}, restantes_hoje=${corpoCriada.restantes_hoje}`);
+    if (criada.status !== 201) resultado = 1;
+    if (corpoCriada.id) {
+      const cancelada = await fetch(`${SITE}/api/cancelar-busca`, {
+        method: "POST", headers: cabecalhos, body: JSON.stringify({ id: corpoCriada.id }),
+      });
+      log(`Cancelar em produção: HTTP ${cancelada.status} ${await cancelada.text()}`);
+      if (cancelada.status !== 200) resultado = 1;
+      const doc = (await db.doc(`buscas/${corpoCriada.id}`).get()).data() || {};
+      log(`busca gravada: tipo=${doc.tipo} status=${doc.status} lista=${doc.lista}`);
+      // Limpeza: nada do teste fica no banco.
+      await db.doc(`buscas/${corpoCriada.id}`).delete();
+    }
+    await db.doc(`usuarios/${UID}`).delete();
+    log("dados do teste apagados do Firestore.");
+  }
 } catch (erro) {
   log(`Falha no diagnóstico: ${erro.name} code=${erro.code} msg=${erro.message}`);
   resultado = 1;
