@@ -11,6 +11,14 @@ on:
         description: "URL do site"
         required: true
         default: "https://mapaleads-rn.netlify.app"
+      modo:
+        description: "simular (só Estimar) ou criar_e_cancelar (Buscar de verdade, cancela na hora e apaga)"
+        required: true
+        default: "simular"
+        type: choice
+        options:
+          - simular
+          - criar_e_cancelar
 
 permissions:
   contents: read
@@ -31,4 +39,5 @@ jobs:
       - name: Diagnosticar
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          MODO: ${{ github.event.inputs.modo }}
         run: node --no-experimental-require-module ferramentas/diagnosticar_criar_busca.mjs "${{ github.event.inputs.url }}"
