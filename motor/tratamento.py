@@ -9,6 +9,7 @@ Campo que o scraper não trouxe fica vazio ("" ou None).
 """
 
 import re
+import unicodedata
 from urllib.parse import urlparse
 
 # Quantos leads cabem em cada documento-lote do Firestore.
@@ -30,10 +31,44 @@ LIMITE_CONSULTA_MIN = {
     "normal": 12,
     "completa": 20,
 }
-# Vigia de travamento: encerra a consulta se não gravar nenhum lead nos
-# primeiros 5 min, ou se ficar 3 min sem gravar lead novo.
+# Vigia (aprovado pelo Breno): encerra a consulta se não gravar nenhum lead
+# nos primeiros 5 min, ou (plano B) se ficar sem atividade por 60 s sem e-mail
+# / 3 min com e-mail. O "fim real" (scraper avisa que terminou) vem antes disso.
 LIMITE_PRIMEIRO_LEAD_MIN = 5
-LIMITE_SEM_LEAD_NOVO_MIN = 3
+SEM_ATIVIDADE_SEG = {False: 60, True: 180}
+
+# Pausa aleatória entre consultas (segundos), para reduzir risco de bloqueio.
+PAUSA_ENTRE_CONSULTAS_SEG = (20, 40)
+
+# Tempo médio inicial por consulta (segundos), medido na execução real de
+# 23/09/2026 (rápida: ~30 s + encerramento). O motor recalibra com dados reais.
+MEDIA_INICIAL_CONSULTA_SEG = {"rapida": 40, "normal": 110, "completa": 180}
+FATOR_EMAIL = 1.6
+
+
+def sem_atividade_seg(extrair_email):
+    """Janela do plano B da vigia, em segundos."""
+    return SEM_ATIVIDADE_SEG[bool(extrair_email)]
+
+
+def chave_metrica(profundidade, extrair_email):
+    return f"{profundidade}_{'email' if extrair_email else 'sem_email'}"
+
+
+def estimar_consulta_seg(profundidade, extrair_email, metricas=None):
+    """Tempo estimado de UMA consulta (sem contar a pausa)."""
+    media = ((metricas or {}).get(chave_metrica(profundidade, extrair_email)) or {}).get("media_seg")
+    if media:
+        return float(media)
+    base = MEDIA_INICIAL_CONSULTA_SEG[profundidade]
+    return base * (FATOR_EMAIL if extrair_email else 1)
+
+
+def estimar_consultas_seg(consultas, extrair_email, metricas=None):
+    """Tempo estimado de uma lista de consultas, incluindo as pausas."""
+    pausa = sum(PAUSA_ENTRE_CONSULTAS_SEG) / 2
+    total = sum(estimar_consulta_seg(c["profundidade"], extrair_email, metricas) for c in consultas)
+    return int(total + pausa * max(len(consultas) - 1, 0))
 
 
 def limite_consulta_seg(profundidade, extrair_email):
@@ -60,11 +95,11 @@ def dividir_lista(texto):
     return itens
 
 
-def gerar_consultas(termos, cidades):
-    """Gera a lista de consultas termo × cidade.
+def gerar_consultas(termos, cidades, profundidade="normal"):
+    """Gera a lista de consultas termo × cidade de uma busca comum.
 
-    Cada consulta tem um id curto (q0, q1...) usado no arquivo de entrada
-    do scraper, para sabermos qual termo encontrou cada lugar.
+    Cada consulta tem um id curto (q0, q1...), a profundidade e o critério
+    de conferência de cidade ("cidade": o lead deve estar na cidade pedida).
     """
     consultas = []
     for termo in termos:
@@ -74,6 +109,8 @@ def gerar_consultas(termos, cidades):
                 "termo": termo,
                 "cidade": cidade,
                 "texto": f"{termo} {cidade}",
+                "profundidade": profundidade,
+                "criterio": "cidade",
             })
     return consultas
 
@@ -165,8 +202,77 @@ def chave_do_lugar(entrada):
     return f"nt:{nome}|{_so_digitos(telefone)}"
 
 
-def montar_lead(entrada, termo):
+# Siglas de UF, para tirar o "RN" de "Natal RN" antes de comparar cidades.
+UFS = {
+    "ac", "al", "ap", "am", "ba", "ce", "df", "es", "go", "ma", "mt", "ms", "mg", "pa",
+    "pb", "pr", "pe", "pi", "rj", "rn", "rs", "ro", "rr", "sc", "sp", "se", "to",
+}
+# Grafias alternativas conhecidas (IBGE x Google).
+ALIASES_CIDADE = {"acu": "assu"}
+
+
+def normalizar_nome(texto):
+    """Minúsculas, sem acento, sem pontuação: "Ceará-Mirim" -> "ceara mirim"."""
+    texto = unicodedata.normalize("NFKD", texto or "")
+    texto = "".join(c for c in texto if not unicodedata.combining(c)).lower()
+    texto = re.sub(r"[^a-z0-9]+", " ", texto).strip()
+    return ALIASES_CIDADE.get(texto, texto)
+
+
+def cidade_sem_uf(cidade):
+    """ "Natal RN" / "Natal - RN" / "Natal/RN" -> "natal" (normalizado)."""
+    partes = normalizar_nome(cidade).split()
+    if len(partes) > 1 and partes[-1] in UFS:
+        partes = partes[:-1]
+    return ALIASES_CIDADE.get(" ".join(partes), " ".join(partes))
+
+
+def _como_consulta(consulta):
+    """Aceita a consulta como dict ou só o termo (texto)."""
+    if isinstance(consulta, dict):
+        return consulta
+    return {"termo": consulta, "cidade": "", "criterio": "cidade"}
+
+
+def conferir_cidade(entrada, consulta):
+    """Diz se o lugar está onde foi pedido: "sim", "nao" ou "indefinido".
+
+    Nunca apaga nem corrige nada: só marca.
+      - criterio "cidade" (busca comum): cidade do endereço == cidade pedida;
+      - criterio "uf" (RN inteiro): o endereço é do RN.
+    """
+    consulta = _como_consulta(consulta)
+    endereco = entrada.get("complete_address") or {}
+    if consulta.get("criterio") == "uf":
+        estado = normalizar_nome(endereco.get("state"))
+        if estado:
+            return "sim" if estado in ("rn", "rio grande do norte") else "nao"
+        texto = entrada.get("address") or ""
+        siglas = re.findall(r"(?:^|[\s,/-])([A-Z]{2})(?=[\s,]|$)", texto)
+        siglas = [s for s in siglas if s.lower() in UFS]
+        if not siglas:
+            return "indefinido"
+        return "sim" if siglas[-1] == "RN" else "nao"
+
+    alvo = cidade_sem_uf(consulta.get("cidade"))
+    cidade_lead = normalizar_nome(endereco.get("city"))
+    if not alvo or not cidade_lead:
+        return "indefinido"
+    return "sim" if cidade_lead == alvo else "nao"
+
+
+def id_do_lugar(entrada):
+    """ID do lugar no Google (place_id, ou cid). Vazio se não houver."""
+    place_id = (entrada.get("place_id") or "").strip()
+    if place_id:
+        return place_id
+    cid = str(entrada.get("cid") or "").strip()
+    return f"cid:{cid}" if cid else ""
+
+
+def montar_lead(entrada, consulta):
     """Converte um item da saída JSON do scraper no formato de lead do MapaLeads."""
+    consulta = _como_consulta(consulta)
     telefone, whatsapp = normalizar_telefone(entrada.get("phone"))
     site = (entrada.get("web_site") or "").strip()
 
@@ -195,32 +301,73 @@ def montar_lead(entrada, termo):
         "nota": nota,
         "qtd_avaliacoes": qtd,
         "link_maps": (entrada.get("link") or "").strip(),
-        "termo_que_encontrou": termo,
+        "termo_que_encontrou": consulta.get("termo") or "",
+        # Campos da Fase 2:
+        "cidade_buscada": consulta.get("cidade") or "",
+        "cidade_confere": conferir_cidade(entrada, consulta),
+        "id_lugar": id_do_lugar(entrada),  # uso interno (duplicados); fora do .xlsx
     }
 
 
-def tratar_resultados(itens):
-    """Recebe [(entrada_do_scraper, termo), ...] e devolve a lista de leads sem duplicados.
+def _juntar_termo(lead, termo):
+    termos = [t.strip() for t in lead["termo_que_encontrou"].split(",") if t.strip()]
+    if termo and termo not in termos:
+        lead["termo_que_encontrou"] = ", ".join(termos + [termo])
 
+
+def tratar_resultados(itens):
+    """Recebe [(entrada_do_scraper, consulta), ...] e devolve a lista de leads sem duplicados.
+
+    "consulta" é o dict da consulta (termo, cidade, criterio) ou só o termo.
     Se o mesmo lugar aparecer em mais de um termo, os termos são juntados
     em "termo_que_encontrou" (ex.: "home care, cuidador").
     Itens sem nome são descartados (não são lugares válidos).
     """
     por_chave = {}
-    for entrada, termo in itens:
+    for entrada, consulta in itens:
+        consulta = _como_consulta(consulta)
         if not (entrada.get("title") or "").strip():
             continue
         chave = chave_do_lugar(entrada)
         if chave not in por_chave:
-            por_chave[chave] = montar_lead(entrada, termo)
+            por_chave[chave] = montar_lead(entrada, consulta)
             continue
         lead = por_chave[chave]
-        termos = [t.strip() for t in lead["termo_que_encontrou"].split(",")]
-        if termo not in termos:
-            lead["termo_que_encontrou"] = f"{lead['termo_que_encontrou']}, {termo}"
+        _juntar_termo(lead, consulta.get("termo"))
         # Se a primeira ocorrência veio sem e-mail e esta trouxe, aproveita.
         if not lead["email"]:
             lead["email"] = _juntar_emails(entrada.get("emails"))
+        # Se esta consulta confirma a cidade, vale a confirmação.
+        if lead["cidade_confere"] != "sim" and conferir_cidade(entrada, consulta) == "sim":
+            lead["cidade_confere"] = "sim"
+            lead["cidade_buscada"] = consulta.get("cidade") or lead["cidade_buscada"]
+    return list(por_chave.values())
+
+
+def chave_do_lead(lead):
+    """Chave de duplicado para leads já tratados (busca-mãe do RN inteiro)."""
+    if lead.get("id_lugar"):
+        return f"id:{lead['id_lugar']}"
+    nome = " ".join((lead.get("nome") or "").lower().split())
+    return f"nt:{nome}|{_so_digitos(lead.get('telefone'))}"
+
+
+def deduplicar_leads(listas):
+    """Junta várias listas de leads (uma por busca-filha) sem duplicados."""
+    por_chave = {}
+    for leads in listas:
+        for lead in leads:
+            chave = chave_do_lead(lead)
+            if chave not in por_chave:
+                por_chave[chave] = dict(lead)
+                continue
+            atual = por_chave[chave]
+            for termo in (lead.get("termo_que_encontrou") or "").split(","):
+                _juntar_termo(atual, termo.strip())
+            if not atual.get("email") and lead.get("email"):
+                atual["email"] = lead["email"]
+            if atual.get("cidade_confere") != "sim" and lead.get("cidade_confere") == "sim":
+                atual["cidade_confere"] = "sim"
     return list(por_chave.values())
 
 
@@ -232,6 +379,7 @@ def calcular_resumo(leads):
         "com_email": sum(1 for l in leads if l["email"]),
         "com_site": sum(1 for l in leads if l["site"]),
         "com_whatsapp": sum(1 for l in leads if l["whatsapp_link"]),
+        "na_cidade_buscada": sum(1 for l in leads if l.get("cidade_confere") == "sim"),
     }
 
 

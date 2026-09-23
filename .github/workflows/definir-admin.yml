@@ -1,0 +1,26 @@
+# Define o administrador do MapaLeads: aplica a custom claim admin=true ao UID
+# guardado no secret MAPALEADS_ADMIN_UID. Rodar UMA vez (e de novo só se trocar o admin).
+# Não recebe nenhum dado digitado e não imprime UID nem e-mail no log público.
+name: Definir admin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  definir-admin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r motor/requirements.txt
+      - name: Aplicar claim de admin
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          MAPALEADS_ADMIN_UID: ${{ secrets.MAPALEADS_ADMIN_UID }}
+        run: python ferramentas/definir_admin.py

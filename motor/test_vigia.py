@@ -60,9 +60,9 @@ def rodar(tmp_path, script, **limites):
 
     vigia.subprocess.Popen = popen_capturando
     try:
-        padrao = dict(limite_total=10, limite_primeiro=5, limite_sem_novo=1, intervalo=0.05)
+        padrao = dict(limite_total=10, limite_primeiro=5, limite_sem_atividade=1, intervalo=0.05, folga_fim=0.2)
         padrao.update(limites)
-        motivo, codigo, _ = vigia.executar_com_vigia(
+        motivo, codigo, _, diag = vigia.executar_com_vigia(
             processo_falso(resultado, script),
             arquivo_resultado=str(resultado),
             arquivo_log=str(tmp_path / "q0.log"),
@@ -73,6 +73,7 @@ def rodar(tmp_path, script, **limites):
         vigia.subprocess.Popen = popen_original
     # Garante que nenhum processo ficou vivo.
     assert all(p.poll() is not None for p in processos)
+    rodar.diag = diag
     return motivo, codigo, resultado
 
 
@@ -84,7 +85,7 @@ def test_scraper_que_termina_sozinho(tmp_path):
 
 
 def test_travado_depois_de_gravar_e_encerrado_e_mantem_leads(tmp_path):
-    motivo, _, resultado = rodar(tmp_path, GRAVA_E_TRAVA, limite_sem_novo=0.5)
+    motivo, _, resultado = rodar(tmp_path, GRAVA_E_TRAVA, limite_sem_atividade=0.5)
     assert motivo == vigia.TRAVADO
     assert len(resultado.read_text().splitlines()) == 3  # leads parciais preservados
 
@@ -95,7 +96,7 @@ def test_sem_nenhum_lead_no_inicio(tmp_path):
 
 
 def test_limite_total_mesmo_gravando(tmp_path):
-    motivo, _, resultado = rodar(tmp_path, GRAVA_SEMPRE, limite_total=0.6, limite_sem_novo=5)
+    motivo, _, resultado = rodar(tmp_path, GRAVA_SEMPRE, limite_total=0.6, limite_sem_atividade=5)
     assert motivo == vigia.LIMITE_TOTAL
     assert resultado.read_text()  # leads coletados até o limite ficam no arquivo
 
@@ -103,44 +104,94 @@ def test_limite_total_mesmo_gravando(tmp_path):
 def test_processo_que_ignora_parar_e_morto_a_forca(tmp_path):
     # "parar" que não faz nada: a vigia precisa matar o processo sozinha.
     resultado = tmp_path / "q0.json"
-    motivo, _, _ = vigia.executar_com_vigia(
+    motivo, _, _, _ = vigia.executar_com_vigia(
         processo_falso(resultado, SO_TRAVA),
         arquivo_resultado=str(resultado),
         arquivo_log=str(tmp_path / "q0.log"),
         parar=lambda: None,
-        limite_total=10, limite_primeiro=0.3, limite_sem_novo=1, intervalo=0.05,
+        limite_total=10, limite_primeiro=0.3, limite_sem_atividade=1, intervalo=0.05,
         tempo_espera_parar=0.5,
     )
     assert motivo == vigia.SEM_RESULTADOS
 
 
-# ------------------------------------------------------------ diagnóstico
+# ------------------------------------------------------------ fim real
 
-LOG_FICTICIO = """
-{"level":"INFO","msg":"scrapemate stats","numOfJobsCompleted":5,"numOfJobsFailed":0}
-{"level":"INFO","msg":"scrapemate stats","numOfJobsCompleted":21,"numOfJobsFailed":2}
-{"level":"INFO","msg":"exiting because of inactivity","error":"inactivity timeout"}
+# Simula o scraper de verdade: grava leads, loga no formato JSON do zerolog,
+# avisa "scrapemate exited" e depois TRAVA (como na execução real de 23/09).
+GRAVA_AVISA_FIM_E_TRAVA = """
+import sys, time, json
+caminho = sys.argv[1]
+def logar(nivel, msg):
+    print(json.dumps({"level": nivel, "component": "scrapemate", "job": "https://x/y", "message": msg}), flush=True)
+logar("info", "starting scrapemate")
+for i in range(4):
+    with open(caminho, "a") as f:
+        f.write('{"title": "Lugar %d"}\\n' % i)
+    logar("info", "job finished")
+    time.sleep(0.05)
+logar("error", "job finished")
+logar("info", "scrapemate exited")
+time.sleep(600)
+"""
+
+# Log com atividade (etapas) mas sem leads novos: não deve cortar pelo plano B.
+ETAPAS_SEM_LEAD_E_DEPOIS_TRAVA = """
+import sys, time, json
+caminho = sys.argv[1]
+with open(caminho, "a") as f:
+    f.write('{"title": "A"}\\n')
+for i in range(8):
+    print(json.dumps({"level": "info", "message": "job finished"}), flush=True)
+    time.sleep(0.1)
+time.sleep(600)
 """
 
 
-def test_diagnostico_extrai_so_numeros():
-    diag = vigia.diagnosticar_log(LOG_FICTICIO)
-    assert diag == {"etapas_ok": 21, "etapas_falhas": 2, "inatividade": True, "consentimento": False}
+def test_fim_real_encerra_logo_e_conta_etapas(tmp_path):
+    motivo, _, resultado = rodar(tmp_path, GRAVA_AVISA_FIM_E_TRAVA, limite_sem_atividade=30)
+    assert motivo == vigia.FIM_REAL
+    assert len(resultado.read_text().splitlines()) == 4
+    diag = rodar.diag
+    assert diag["etapas_ok"] == 4 and diag["etapas_falhas"] == 1
+    assert diag["fim_real_seg"] is not None
+    assert diag["consentimento"] is False
 
 
-def test_diagnostico_formato_texto_e_consentimento():
-    texto = "time=... msg=\"scrapemate stats\" numOfJobsCompleted=7 numOfJobsFailed=1\nclicked consent button"
-    diag = vigia.diagnosticar_log(texto)
-    assert diag["etapas_ok"] == 7 and diag["etapas_falhas"] == 1
-    assert diag["consentimento"] is True
-    assert diag["inatividade"] is False
+def test_etapas_no_log_contam_como_atividade(tmp_path):
+    # 8 etapas a cada 0,1 s mantêm a consulta viva além de 0,5 s; depois trava.
+    motivo, _, _ = rodar(tmp_path, ETAPAS_SEM_LEAD_E_DEPOIS_TRAVA, limite_sem_atividade=0.5)
+    assert motivo == vigia.TRAVADO
+    assert rodar.diag["etapas_ok"] == 8
 
 
-def test_diagnostico_log_vazio():
-    diag = vigia.diagnosticar_log("")
-    linha = vigia.resumo_diagnostico(vigia.TRAVADO, None, 190, diag)
-    assert linha == ("término: vigia (sem leads novos) (código ?), 190s, etapas ok=? falhas=?, "
-                     "inatividade=não, consentimento=não")
+def test_leitor_de_log_so_conta_mensagens_permitidas(tmp_path):
+    caminho = tmp_path / "q.log"
+    caminho.write_text(
+        '{"level":"info","message":"job finished","job":"https://maps/xyz?q=segredo"}\n'
+        '{"level":"error","message":"job finished"}\n'
+        '{"level":"info","message":"exiting because of inactivity"}\n'
+        'texto solto com consent.google.com\n'
+        '{"level":"info","message":"scrapemate exited"}\n'
+        '{"level":"info","message":"job fin',  # linha incompleta
+        encoding="utf-8",
+    )
+    leitor = vigia.LeitorDeLog(str(caminho))
+    assert leitor.ler_novidades() == 2
+    assert (leitor.etapas_ok, leitor.etapas_falhas) == (1, 1)
+    assert leitor.fim_real and leitor.inatividade and leitor.consentimento
+    with open(caminho, "a", encoding="utf-8") as f:
+        f.write('ished"}\n')
+    assert leitor.ler_novidades() == 1
+
+
+def test_resumo_diagnostico_so_numeros():
+    diag = {"etapas_ok": 21, "etapas_falhas": 0, "fim_real_seg": 31, "inatividade": False, "consentimento": False}
+    linha = vigia.resumo_diagnostico(vigia.FIM_REAL, -15, 36, diag)
+    assert linha == ("término: fim real detectado (código -15), 36s, fim real aos 31s, "
+                     "etapas ok=21 falhas=0, inatividade=não, consentimento=não")
+    vazio = {"etapas_ok": 0, "etapas_falhas": 0, "fim_real_seg": None, "inatividade": False, "consentimento": False}
+    assert "fim real não visto" in vigia.resumo_diagnostico(vigia.TRAVADO, None, 90, vazio)
 
 
 # ------------------------------------------------------ limites aprovados
@@ -153,4 +204,6 @@ def test_limites_por_profundidade_e_email():
     assert tratamento.limite_consulta_seg("completa", False) == 20 * 60
     assert tratamento.limite_consulta_seg("completa", True) == 40 * 60
     assert tratamento.LIMITE_PRIMEIRO_LEAD_MIN == 5
-    assert tratamento.LIMITE_SEM_LEAD_NOVO_MIN == 3
+    assert tratamento.sem_atividade_seg(False) == 60
+    assert tratamento.sem_atividade_seg(True) == 180
+    assert tratamento.PAUSA_ENTRE_CONSULTAS_SEG == (20, 40)
