@@ -40,11 +40,11 @@ def amostra(tabela, variavel, periodo, classif=""):
         print(f"   amostra t{tabela} v{variavel}: ERRO {e}")
 
 print("===== CENSO 2022 =====")
-for t in (4709, 4714):
+for t in (4714,):
     r = meta(t)
     if r:
         m, per = r
-        for v in m["variaveis"][:4]:
+        for v in m["variaveis"]:
             amostra(t, v["id"], per[-1])
 
 print("===== PIB DOS MUNICIPIOS =====")
@@ -55,42 +55,21 @@ if r:
         if "per capita" in v["nome"].lower() or v["id"] == 37:
             amostra(5938, v["id"], per[-1])
 
-print("===== CEMPRE (busca por nome) =====")
+print("===== CEMPRE COM MUNICIPIO (N6) =====")
 lista = get(API)
-candidatas = []
 for pesq in lista:
+    if "Cadastro Central" not in pesq.get("nome", ""):
+        continue
     for ag in pesq.get("agregados", []):
-        nome = ag["nome"]
-        if "unidades locais" in nome.lower() or "Cadastro Central" in pesq.get("nome", ""):
-            candidatas.append((ag["id"], nome, pesq.get("nome")))
-for i, n, p in candidatas[:40]:
-    print(f"   cand {i}: {n} | {p}")
-for i, n, p in candidatas[:40]:
-    r = meta(i)
-    if r and "N6" in r[0].get("nivelTerritorial", {}).get("Administrativo", []):
-        print(f"   -> {i} tem município (N6)")
-
-print("===== MALHAS =====")
-M = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/24"
-try:
-    print("metadados:", json.dumps(get(f"{M}/metadados"), ensure_ascii=False)[:800])
-except Exception as e:
-    print("metadados ERRO", e)
-salvar = {}
-for intra in ("municipio", "microrregiao", "regiao-imediata"):
-    for qual in ("minima", "intermediaria"):
-        url = f"{M}?formato=application/vnd.geo+json&intrarregiao={intra}&qualidade={qual}"
         try:
-            b = get(url, bruto=True)
-            g = json.loads(b)
-            print(f"malha {intra} {qual}: {len(b)} bytes, {len(g.get('features', []))} feicoes, props exemplo {g['features'][0].get('properties')}")
-            salvar[(intra, qual)] = g
-        except Exception as e:
-            print(f"malha {intra} {qual}: ERRO {e}")
-for (intra, qual), g in salvar.items():
-    if qual == "intermediaria" or intra != "municipio":
-        pass
-    nome = f"dados/malha_rn_{intra.replace('-', '_')}_{qual}.geojson.json"
-    with open(nome, "w", encoding="utf-8") as f:
-        json.dump(g, f, ensure_ascii=False, separators=(",", ":"))
+            m = get(f"{API}/{ag['id']}/metadados")
+        except Exception:
+            continue
+        if "N6" not in m.get("nivelTerritorial", {}).get("Administrativo", []):
+            continue
+        per = [p["id"] for p in get(f"{API}/{ag['id']}/periodos")]
+        cls = [f"{c['id']}:{c['nome'][:40]}({len(c.get('categorias', []))})" for c in m.get("classificacoes", [])]
+        vs = [f"{v['id']}:{v['nome'][:50]}" for v in m.get("variaveis", []) if not str(v['id']).startswith('100')]
+        print(f"## {ag['id']}: {ag['nome'][:140]} | periodos {per[0]}..{per[-1]} | classif {cls}")
+        print(f"   vars {vs[:8]}")
 print("===FIM===")
