@@ -70,7 +70,8 @@ jobs:
           MAPALEADS_GITHUB_TOKEN: ${{ github.token }}
           MAPALEADS_GITHUB_REPO: ${{ github.repository }}
         run: |
-          node ferramentas/capturar_telas.mjs "$PREVIEW" > /dev/null || echo "capturas privadas com aviso (código $?)"
+          # Só os avisos (nome do arquivo + largura) e a contagem de erros; nenhum dado sai no log.
+          node ferramentas/capturar_telas.mjs "$PREVIEW" | grep -E "AVISO|^Erros de JavaScript" || true
           cd "$RUNNER_TEMP"
           tar -czf privadas.tgz privadas && rm -rf privadas
           openssl rand -out chave.bin 32

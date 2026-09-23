@@ -99,15 +99,20 @@ try {
 
   // ---------- usuário comum
   const p = await abrir(usuarios.comum);
-  await etapa("login e Início (cota, leads da semana, % WhatsApp)", async () => {
+  await etapa("login e Início (cota, leads no segmento, % WhatsApp, Ver total)", async () => {
     await esperar(p, "#cota-txt", /^0 de \d+$/);
     confere(!(await p.locator("#menu [data-ir=admin]").count()), "menu admin visível para comum");
-    await esperar(p, "#kpis", /Leads da semana\s*i?3/);
-    confere(/Com WhatsApp\s*i?33%/.test(await p.textContent("#kpis")), "% WhatsApp");
+    // No segmento e da cidade pedida: A e B (a C é de outra cidade; a loja é fora do segmento)
+    await esperar(p, "#kpis", /Leads da semana\s*i?2/);
+    confere(/Com WhatsApp\s*i?50%/.test(await p.textContent("#kpis")), "% WhatsApp");
+    await p.click("#inicio-modo [data-modo=total]");
+    await esperar(p, "#kpis", /Leads coletados\s*i?4/);
+    await p.click("#inicio-modo [data-modo=segmento]");
+    await esperar(p, "#kpis", /Leads no segmento\s*i?2/);
   });
   await etapa("cartão 'Leads da semana' abre Meus leads filtrado", async () => {
     await p.click("#kpis [data-detalhe=semana]");
-    await esperar(p, "#conta", /^4 de 4 leads$/);
+    await esperar(p, "#conta", /^2 de 4 leads$/);
     confere(/Últimos 7 dias/.test(await p.textContent("#chips")), "chip do período");
     await p.click("#trilha-leads a");
     await esperarHash(p, "#inicio");
