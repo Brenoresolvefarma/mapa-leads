@@ -97,11 +97,20 @@ try {
     }
     const p = await ctx.newPage();
     p.erros = [];
+    p.console = [];
     p.on("pageerror", (e) => p.erros.push(e.message));
+    p.on("console", (m) => { if (m.type() === "error") p.console.push(m.text()); });
     p.on("dialog", (d) => d.accept(d.type() === "prompt" ? "Perfil de teste" : undefined));
     await p.goto(SITE);
     await p.fill("#le", u.email); await p.fill("#ls", u.senha); await p.click("#entrar");
-    await p.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 20000 });
+    try {
+      await p.waitForSelector("#tela-hoje:not(.oculto)", { timeout: 20000 });
+    } catch {
+      // Diagnóstico sem dados: mensagem da tela + códigos de erro do Firebase (ex.: auth/...).
+      const codigos = [...new Set(p.console.join(" ").match(/(auth|firestore)\/[a-z-]+|HTTP \d{3}|status of \d{3}/g) || [])];
+      throw new Error(`login não abriu o painel; tela: "${(await p.textContent("#msg-login")) || ""}"; ` +
+        `erros JS: ${p.erros.length}; códigos: ${codigos.join(", ") || "nenhum"}`);
+    }
     return p;
   };
 
