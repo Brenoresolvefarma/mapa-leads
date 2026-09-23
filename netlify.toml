@@ -1,0 +1,21 @@
+# Netlify (plano Free): site estático em publico/ + Functions em netlify/functions/.
+[build]
+  publish = "publico"
+  functions = "netlify/functions"
+  command = "echo 'Sem build: site estático + Functions'"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+  # Os JSON de dados (IBGE) são embutidos no pacote da Function pelo import.
+  included_files = ["dados/*.json"]
+
+# Cabeçalhos de segurança da página.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

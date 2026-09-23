@@ -25,6 +25,7 @@ def test_gerar_consultas_termo_x_cidade():
         "odontologia Natal RN", "odontologia Mossoró RN",
     ]
     assert [c["id"] for c in consultas] == ["q0", "q1", "q2", "q3"]
+    assert all(c["profundidade"] == "normal" and c["criterio"] == "cidade" for c in consultas)
 
 
 # -------------------------------------------------------------- telefone
@@ -116,6 +117,9 @@ def test_montar_lead_campos_completos():
         "qtd_avaliacoes": 32,
         "link_maps": "https://www.google.com/maps/place/ficticia",
         "termo_que_encontrou": "dentista",
+        "cidade_buscada": "",
+        "cidade_confere": "indefinido",
+        "id_lugar": "ChIJficticio1",
     }
 
 
@@ -190,6 +194,7 @@ def test_resumo():
     ])
     assert t.calcular_resumo(leads) == {
         "total": 3, "com_telefone": 2, "com_email": 2, "com_site": 2, "com_whatsapp": 1,
+        "na_cidade_buscada": 0,
     }
 
 
@@ -225,3 +230,90 @@ def test_ler_resultados_lista_json_e_arquivo_ausente(tmp_path):
     arquivo.write_text('[{"title": "A"}]', encoding="utf-8")
     assert len(motor.ler_resultados(str(arquivo))) == 1
     assert motor.ler_resultados(str(tmp_path / "nao_existe.json")) == []
+
+
+# ------------------------------------------------ cidade conferida (Fase 2)
+
+def consulta_natal(**extra):
+    base = {"termo": "home care", "cidade": "Natal RN", "criterio": "cidade"}
+    base.update(extra)
+    return base
+
+
+def test_cidade_confere_sim_nao_indefinido():
+    assert t.conferir_cidade(entrada_ficticia(), consulta_natal()) == "sim"
+    vizinha = entrada_ficticia(complete_address={"city": "São Gonçalo do Amarante"})
+    assert t.conferir_cidade(vizinha, consulta_natal()) == "nao"
+    sem_cidade = entrada_ficticia(complete_address={})
+    assert t.conferir_cidade(sem_cidade, consulta_natal()) == "indefinido"
+
+
+def test_cidade_ignora_acento_maiuscula_e_uf():
+    entrada = entrada_ficticia(complete_address={"city": "Ceará-Mirim"})
+    for pedida in ("ceara mirim", "Ceará-Mirim - RN", "CEARÁ MIRIM/RN", "Ceará-Mirim RN"):
+        assert t.conferir_cidade(entrada, consulta_natal(cidade=pedida)) == "sim", pedida
+
+
+def test_cidade_grafia_alternativa_acu_assu():
+    entrada = entrada_ficticia(complete_address={"city": "Assú"})
+    assert t.conferir_cidade(entrada, consulta_natal(cidade="Açu RN")) == "sim"
+
+
+def test_criterio_uf_rn_inteiro():
+    rn = {"termo": "dentista", "cidade": "Caicó", "criterio": "uf"}
+    assert t.conferir_cidade(entrada_ficticia(complete_address={"state": "RN"}), rn) == "sim"
+    assert t.conferir_cidade(entrada_ficticia(complete_address={"state": "Rio Grande do Norte"}), rn) == "sim"
+    assert t.conferir_cidade(entrada_ficticia(complete_address={"state": "Paraíba"}), rn) == "nao"
+    # Sem estado estruturado: usa a sigla no fim do endereço.
+    pb = entrada_ficticia(complete_address={}, address="Rua X, 10 - Centro, Cajazeiras - PB, 58900-000")
+    assert t.conferir_cidade(pb, rn) == "nao"
+    ok = entrada_ficticia(complete_address={}, address="Rua X, 10 - Centro, Caicó - RN, 59300-000")
+    assert t.conferir_cidade(ok, rn) == "sim"
+    assert t.conferir_cidade(entrada_ficticia(complete_address={}, address=""), rn) == "indefinido"
+
+
+def test_lead_marca_cidade_mas_nunca_apaga():
+    vizinha = entrada_ficticia(complete_address={"city": "São Gonçalo do Amarante"})
+    leads = t.tratar_resultados([(vizinha, consulta_natal())])
+    assert len(leads) == 1
+    assert leads[0]["cidade_confere"] == "nao"
+    assert leads[0]["cidade_buscada"] == "Natal RN"
+    assert leads[0]["cidade"] == "São Gonçalo do Amarante"  # dado original intacto
+
+
+def test_duplicado_confirmado_em_outra_consulta_vira_sim():
+    e = entrada_ficticia(complete_address={"city": "Parnamirim"})
+    itens = [(e, consulta_natal()), (e, consulta_natal(cidade="Parnamirim RN"))]
+    leads = t.tratar_resultados(itens)
+    assert len(leads) == 1 and leads[0]["cidade_confere"] == "sim"
+    assert leads[0]["cidade_buscada"] == "Parnamirim RN"
+
+
+def test_id_do_lugar():
+    assert t.id_do_lugar({"place_id": "P1", "cid": "9"}) == "P1"
+    assert t.id_do_lugar({"cid": 9}) == "cid:9"
+    assert t.id_do_lugar({}) == ""
+
+
+# ------------------------------------------- duplicados da busca-mãe (RN)
+
+def test_deduplicar_leads_entre_filhas():
+    a = t.montar_lead(entrada_ficticia(), {"termo": "dentista", "cidade": "Natal", "criterio": "uf"})
+    b = t.montar_lead(entrada_ficticia(), {"termo": "odontologia", "cidade": "Parnamirim", "criterio": "uf"})
+    c = t.montar_lead(entrada_ficticia(place_id="P2", cid=""), {"termo": "dentista", "cidade": "Caicó", "criterio": "uf"})
+    sem_id = dict(a, id_lugar="", nome="Sem ID", telefone="(84) 3201-1234")
+    leads = t.deduplicar_leads([[a, c], [b, sem_id], [dict(sem_id)]])
+    assert len(leads) == 3
+    assert leads[0]["termo_que_encontrou"] == "dentista, odontologia"
+
+
+# --------------------------------------------------------- estimativas
+
+def test_estimativa_usa_media_inicial_e_metricas_reais():
+    consultas = t.gerar_consultas(["a", "b"], ["Natal RN"], "rapida")
+    # 2 × 40 s + 1 pausa média de 30 s
+    assert t.estimar_consultas_seg(consultas, False) == 110
+    assert t.estimar_consultas_seg(consultas, True) == int(2 * 40 * 1.6 + 30)
+    metricas = {"rapida_sem_email": {"media_seg": 50, "n": 3}}
+    assert t.estimar_consultas_seg(consultas, False, metricas) == 130
+    assert t.estimar_consultas_seg([], False) == 0

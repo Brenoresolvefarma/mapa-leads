@@ -1,0 +1,23 @@
+{
+  "name": "mapaleads",
+  "private": true,
+  "type": "module",
+  "description": "MapaLeads — Netlify Functions e testes (motor em Python fica em motor/)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test testes/logica.test.mjs",
+    "test:regras": "firebase emulators:exec --only firestore --project demo-mapaleads \"node --test testes/regras.test.mjs\"",
+    "test:funcoes": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/funcoes.test.mjs\"",
+    "test:motor": "firebase emulators:exec --only firestore --project demo-mapaleads \"cd motor && python -m pytest -q test_integracao_emulador.py\""
+  },
+  "dependencies": {
+    "firebase-admin": "14.4.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.30.2"
+  }
+}

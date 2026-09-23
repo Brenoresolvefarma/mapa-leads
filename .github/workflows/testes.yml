@@ -1,4 +1,8 @@
-# Roda os testes do tratamento de dados (só dados fictícios) a cada push e PR.
+# Testes a cada push e PR (grátis em repo público). Só dados fictícios.
+#  - pytest: tratamento, vigia e fila do motor;
+#  - node: lógica das Netlify Functions (limite diário, RN inteiro, fila);
+#  - emuladores do Firebase: regras de segurança do Firestore, Functions (login + banco)
+#    e o motor inteiro com scraper falso. Nada disso toca no Firebase de verdade.
 name: Testes
 
 on:
@@ -20,3 +24,30 @@ jobs:
       - run: pip install -r motor/requirements.txt -r motor/requirements-dev.txt
       - working-directory: motor
         run: pytest -q
+
+  node-e-emuladores:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: pip install -r motor/requirements.txt -r motor/requirements-dev.txt
+      - name: Lógica das Functions
+        run: npm test
+      - name: Regras do Firestore (emulador)
+        run: npm run test:regras
+      - name: Functions contra os emuladores (Auth + Firestore)
+        run: npm run test:funcoes
+      - name: Motor contra o emulador (scraper falso)
+        run: npm run test:motor

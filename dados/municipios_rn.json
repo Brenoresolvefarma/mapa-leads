@@ -1,0 +1,840 @@
+{
+ "fonte": "IBGE: API de Localidades (municípios do RN, UF 24) e SIDRA tabela 4709, variável 93 (população residente, Censo Demográfico 2022). Coletado em 2026-09-23.",
+ "municipios": [
+  {
+   "codigo_ibge": "2400109",
+   "nome": "Acari",
+   "populacao_2022": 10597
+  },
+  {
+   "codigo_ibge": "2400307",
+   "nome": "Afonso Bezerra",
+   "populacao_2022": 10839
+  },
+  {
+   "codigo_ibge": "2400505",
+   "nome": "Alexandria",
+   "populacao_2022": 13640
+  },
+  {
+   "codigo_ibge": "2400604",
+   "nome": "Almino Afonso",
+   "populacao_2022": 4687
+  },
+  {
+   "codigo_ibge": "2400703",
+   "nome": "Alto do Rodrigues",
+   "populacao_2022": 12484
+  },
+  {
+   "codigo_ibge": "2400802",
+   "nome": "Angicos",
+   "populacao_2022": 11632
+  },
+  {
+   "codigo_ibge": "2400901",
+   "nome": "Antônio Martins",
+   "populacao_2022": 6577
+  },
+  {
+   "codigo_ibge": "2401008",
+   "nome": "Apodi",
+   "populacao_2022": 36093
+  },
+  {
+   "codigo_ibge": "2401107",
+   "nome": "Areia Branca",
+   "populacao_2022": 24093
+  },
+  {
+   "codigo_ibge": "2401206",
+   "nome": "Arez",
+   "populacao_2022": 13251
+  },
+  {
+   "codigo_ibge": "2400208",
+   "nome": "Assú",
+   "populacao_2022": 56496
+  },
+  {
+   "codigo_ibge": "2401453",
+   "nome": "Baraúna",
+   "populacao_2022": 26913
+  },
+  {
+   "codigo_ibge": "2401503",
+   "nome": "Barcelona",
+   "populacao_2022": 3986
+  },
+  {
+   "codigo_ibge": "2401404",
+   "nome": "Baía Formosa",
+   "populacao_2022": 8825
+  },
+  {
+   "codigo_ibge": "2401602",
+   "nome": "Bento Fernandes",
+   "populacao_2022": 4807
+  },
+  {
+   "codigo_ibge": "2401651",
+   "nome": "Bodó",
+   "populacao_2022": 2306
+  },
+  {
+   "codigo_ibge": "2401701",
+   "nome": "Bom Jesus",
+   "populacao_2022": 9952
+  },
+  {
+   "codigo_ibge": "2401800",
+   "nome": "Brejinho",
+   "populacao_2022": 12202
+  },
+  {
+   "codigo_ibge": "2402006",
+   "nome": "Caicó",
+   "populacao_2022": 61146
+  },
+  {
+   "codigo_ibge": "2401859",
+   "nome": "Caiçara do Norte",
+   "populacao_2022": 6293
+  },
+  {
+   "codigo_ibge": "2401909",
+   "nome": "Caiçara do Rio do Vento",
+   "populacao_2022": 3268
+  },
+  {
+   "codigo_ibge": "2401305",
+   "nome": "Campo Grande",
+   "populacao_2022": 9730
+  },
+  {
+   "codigo_ibge": "2402105",
+   "nome": "Campo Redondo",
+   "populacao_2022": 10215
+  },
+  {
+   "codigo_ibge": "2402204",
+   "nome": "Canguaretama",
+   "populacao_2022": 29668
+  },
+  {
+   "codigo_ibge": "2402303",
+   "nome": "Caraúbas",
+   "populacao_2022": 19727
+  },
+  {
+   "codigo_ibge": "2402501",
+   "nome": "Carnaubais",
+   "populacao_2022": 9714
+  },
+  {
+   "codigo_ibge": "2402402",
+   "nome": "Carnaúba dos Dantas",
+   "populacao_2022": 7992
+  },
+  {
+   "codigo_ibge": "2402600",
+   "nome": "Ceará-Mirim",
+   "populacao_2022": 79115
+  },
+  {
+   "codigo_ibge": "2402709",
+   "nome": "Cerro Corá",
+   "populacao_2022": 11000
+  },
+  {
+   "codigo_ibge": "2402808",
+   "nome": "Coronel Ezequiel",
+   "populacao_2022": 5117
+  },
+  {
+   "codigo_ibge": "2402907",
+   "nome": "Coronel João Pessoa",
+   "populacao_2022": 4237
+  },
+  {
+   "codigo_ibge": "2403004",
+   "nome": "Cruzeta",
+   "populacao_2022": 8005
+  },
+  {
+   "codigo_ibge": "2403103",
+   "nome": "Currais Novos",
+   "populacao_2022": 41313
+  },
+  {
+   "codigo_ibge": "2403202",
+   "nome": "Doutor Severiano",
+   "populacao_2022": 7044
+  },
+  {
+   "codigo_ibge": "2403301",
+   "nome": "Encanto",
+   "populacao_2022": 6016
+  },
+  {
+   "codigo_ibge": "2403400",
+   "nome": "Equador",
+   "populacao_2022": 5360
+  },
+  {
+   "codigo_ibge": "2403509",
+   "nome": "Espírito Santo",
+   "populacao_2022": 10620
+  },
+  {
+   "codigo_ibge": "2403608",
+   "nome": "Extremoz",
+   "populacao_2022": 61635
+  },
+  {
+   "codigo_ibge": "2403707",
+   "nome": "Felipe Guerra",
+   "populacao_2022": 5944
+  },
+  {
+   "codigo_ibge": "2403756",
+   "nome": "Fernando Pedroza",
+   "populacao_2022": 2938
+  },
+  {
+   "codigo_ibge": "2403806",
+   "nome": "Florânia",
+   "populacao_2022": 10196
+  },
+  {
+   "codigo_ibge": "2403905",
+   "nome": "Francisco Dantas",
+   "populacao_2022": 2700
+  },
+  {
+   "codigo_ibge": "2404002",
+   "nome": "Frutuoso Gomes",
+   "populacao_2022": 4122
+  },
+  {
+   "codigo_ibge": "2404101",
+   "nome": "Galinhos",
+   "populacao_2022": 2104
+  },
+  {
+   "codigo_ibge": "2404200",
+   "nome": "Goianinha",
+   "populacao_2022": 26741
+  },
+  {
+   "codigo_ibge": "2404309",
+   "nome": "Governador Dix-Sept Rosado",
+   "populacao_2022": 11938
+  },
+  {
+   "codigo_ibge": "2404408",
+   "nome": "Grossos",
+   "populacao_2022": 9924
+  },
+  {
+   "codigo_ibge": "2404507",
+   "nome": "Guamaré",
+   "populacao_2022": 15295
+  },
+  {
+   "codigo_ibge": "2404606",
+   "nome": "Ielmo Marinho",
+   "populacao_2022": 11615
+  },
+  {
+   "codigo_ibge": "2404705",
+   "nome": "Ipanguaçu",
+   "populacao_2022": 14131
+  },
+  {
+   "codigo_ibge": "2404804",
+   "nome": "Ipueira",
+   "populacao_2022": 2035
+  },
+  {
+   "codigo_ibge": "2404853",
+   "nome": "Itajá",
+   "populacao_2022": 7292
+  },
+  {
+   "codigo_ibge": "2404903",
+   "nome": "Itaú",
+   "populacao_2022": 5320
+  },
+  {
+   "codigo_ibge": "2405108",
+   "nome": "Jandaíra",
+   "populacao_2022": 6562
+  },
+  {
+   "codigo_ibge": "2405207",
+   "nome": "Janduís",
+   "populacao_2022": 4746
+  },
+  {
+   "codigo_ibge": "2405306",
+   "nome": "Januário Cicco",
+   "populacao_2022": 9051
+  },
+  {
+   "codigo_ibge": "2405405",
+   "nome": "Japi",
+   "populacao_2022": 5117
+  },
+  {
+   "codigo_ibge": "2405504",
+   "nome": "Jardim de Angicos",
+   "populacao_2022": 2437
+  },
+  {
+   "codigo_ibge": "2405603",
+   "nome": "Jardim de Piranhas",
+   "populacao_2022": 13977
+  },
+  {
+   "codigo_ibge": "2405702",
+   "nome": "Jardim do Seridó",
+   "populacao_2022": 11655
+  },
+  {
+   "codigo_ibge": "2405009",
+   "nome": "Jaçanã",
+   "populacao_2022": 7834
+  },
+  {
+   "codigo_ibge": "2406007",
+   "nome": "José da Penha",
+   "populacao_2022": 5803
+  },
+  {
+   "codigo_ibge": "2405801",
+   "nome": "João Câmara",
+   "populacao_2022": 33290
+  },
+  {
+   "codigo_ibge": "2405900",
+   "nome": "João Dias",
+   "populacao_2022": 2076
+  },
+  {
+   "codigo_ibge": "2406106",
+   "nome": "Jucurutu",
+   "populacao_2022": 17793
+  },
+  {
+   "codigo_ibge": "2406155",
+   "nome": "Jundiá",
+   "populacao_2022": 3739
+  },
+  {
+   "codigo_ibge": "2406502",
+   "nome": "Lagoa Nova",
+   "populacao_2022": 15573
+  },
+  {
+   "codigo_ibge": "2406601",
+   "nome": "Lagoa Salgada",
+   "populacao_2022": 8319
+  },
+  {
+   "codigo_ibge": "2406205",
+   "nome": "Lagoa d'Anta",
+   "populacao_2022": 6654
+  },
+  {
+   "codigo_ibge": "2406304",
+   "nome": "Lagoa de Pedras",
+   "populacao_2022": 7338
+  },
+  {
+   "codigo_ibge": "2406403",
+   "nome": "Lagoa de Velhos",
+   "populacao_2022": 2567
+  },
+  {
+   "codigo_ibge": "2406700",
+   "nome": "Lajes",
+   "populacao_2022": 9866
+  },
+  {
+   "codigo_ibge": "2406809",
+   "nome": "Lajes Pintadas",
+   "populacao_2022": 4787
+  },
+  {
+   "codigo_ibge": "2406908",
+   "nome": "Lucrécia",
+   "populacao_2022": 3490
+  },
+  {
+   "codigo_ibge": "2407005",
+   "nome": "Luís Gomes",
+   "populacao_2022": 9070
+  },
+  {
+   "codigo_ibge": "2407203",
+   "nome": "Macau",
+   "populacao_2022": 27369
+  },
+  {
+   "codigo_ibge": "2407104",
+   "nome": "Macaíba",
+   "populacao_2022": 82249
+  },
+  {
+   "codigo_ibge": "2407252",
+   "nome": "Major Sales",
+   "populacao_2022": 3924
+  },
+  {
+   "codigo_ibge": "2407302",
+   "nome": "Marcelino Vieira",
+   "populacao_2022": 7896
+  },
+  {
+   "codigo_ibge": "2407401",
+   "nome": "Martins",
+   "populacao_2022": 8179
+  },
+  {
+   "codigo_ibge": "2407500",
+   "nome": "Maxaranguape",
+   "populacao_2022": 10255
+  },
+  {
+   "codigo_ibge": "2407609",
+   "nome": "Messias Targino",
+   "populacao_2022": 4274
+  },
+  {
+   "codigo_ibge": "2407708",
+   "nome": "Montanhas",
+   "populacao_2022": 11444
+  },
+  {
+   "codigo_ibge": "2407807",
+   "nome": "Monte Alegre",
+   "populacao_2022": 23031
+  },
+  {
+   "codigo_ibge": "2407906",
+   "nome": "Monte das Gameleiras",
+   "populacao_2022": 2276
+  },
+  {
+   "codigo_ibge": "2408003",
+   "nome": "Mossoró",
+   "populacao_2022": 264577
+  },
+  {
+   "codigo_ibge": "2408102",
+   "nome": "Natal",
+   "populacao_2022": 751300
+  },
+  {
+   "codigo_ibge": "2408300",
+   "nome": "Nova Cruz",
+   "populacao_2022": 34269
+  },
+  {
+   "codigo_ibge": "2408201",
+   "nome": "Nísia Floresta",
+   "populacao_2022": 31942
+  },
+  {
+   "codigo_ibge": "2408409",
+   "nome": "Olho d'Água do Borges",
+   "populacao_2022": 3905
+  },
+  {
+   "codigo_ibge": "2408508",
+   "nome": "Ouro Branco",
+   "populacao_2022": 4913
+  },
+  {
+   "codigo_ibge": "2408607",
+   "nome": "Paraná",
+   "populacao_2022": 3934
+  },
+  {
+   "codigo_ibge": "2408805",
+   "nome": "Parazinho",
+   "populacao_2022": 4801
+  },
+  {
+   "codigo_ibge": "2408706",
+   "nome": "Paraú",
+   "populacao_2022": 3579
+  },
+  {
+   "codigo_ibge": "2408904",
+   "nome": "Parelhas",
+   "populacao_2022": 21499
+  },
+  {
+   "codigo_ibge": "2403251",
+   "nome": "Parnamirim",
+   "populacao_2022": 252716
+  },
+  {
+   "codigo_ibge": "2409100",
+   "nome": "Passa e Fica",
+   "populacao_2022": 10896
+  },
+  {
+   "codigo_ibge": "2409209",
+   "nome": "Passagem",
+   "populacao_2022": 3115
+  },
+  {
+   "codigo_ibge": "2409308",
+   "nome": "Patu",
+   "populacao_2022": 11007
+  },
+  {
+   "codigo_ibge": "2409407",
+   "nome": "Pau dos Ferros",
+   "populacao_2022": 30479
+  },
+  {
+   "codigo_ibge": "2409506",
+   "nome": "Pedra Grande",
+   "populacao_2022": 3618
+  },
+  {
+   "codigo_ibge": "2409605",
+   "nome": "Pedra Preta",
+   "populacao_2022": 2441
+  },
+  {
+   "codigo_ibge": "2409704",
+   "nome": "Pedro Avelino",
+   "populacao_2022": 6242
+  },
+  {
+   "codigo_ibge": "2409803",
+   "nome": "Pedro Velho",
+   "populacao_2022": 13824
+  },
+  {
+   "codigo_ibge": "2409902",
+   "nome": "Pendências",
+   "populacao_2022": 12278
+  },
+  {
+   "codigo_ibge": "2410009",
+   "nome": "Pilões",
+   "populacao_2022": 2965
+  },
+  {
+   "codigo_ibge": "2410207",
+   "nome": "Portalegre",
+   "populacao_2022": 7601
+  },
+  {
+   "codigo_ibge": "2410256",
+   "nome": "Porto do Mangue",
+   "populacao_2022": 5228
+  },
+  {
+   "codigo_ibge": "2410108",
+   "nome": "Poço Branco",
+   "populacao_2022": 12390
+  },
+  {
+   "codigo_ibge": "2410405",
+   "nome": "Pureza",
+   "populacao_2022": 9362
+  },
+  {
+   "codigo_ibge": "2410504",
+   "nome": "Rafael Fernandes",
+   "populacao_2022": 5432
+  },
+  {
+   "codigo_ibge": "2410603",
+   "nome": "Rafael Godeiro",
+   "populacao_2022": 2934
+  },
+  {
+   "codigo_ibge": "2410702",
+   "nome": "Riacho da Cruz",
+   "populacao_2022": 2701
+  },
+  {
+   "codigo_ibge": "2410801",
+   "nome": "Riacho de Santana",
+   "populacao_2022": 4127
+  },
+  {
+   "codigo_ibge": "2410900",
+   "nome": "Riachuelo",
+   "populacao_2022": 7389
+  },
+  {
+   "codigo_ibge": "2408953",
+   "nome": "Rio do Fogo",
+   "populacao_2022": 10351
+  },
+  {
+   "codigo_ibge": "2411007",
+   "nome": "Rodolfo Fernandes",
+   "populacao_2022": 4242
+  },
+  {
+   "codigo_ibge": "2411106",
+   "nome": "Ruy Barbosa",
+   "populacao_2022": 3206
+  },
+  {
+   "codigo_ibge": "2411205",
+   "nome": "Santa Cruz",
+   "populacao_2022": 37313
+  },
+  {
+   "codigo_ibge": "2409332",
+   "nome": "Santa Maria",
+   "populacao_2022": 4847
+  },
+  {
+   "codigo_ibge": "2411403",
+   "nome": "Santana do Matos",
+   "populacao_2022": 12456
+  },
+  {
+   "codigo_ibge": "2411429",
+   "nome": "Santana do Seridó",
+   "populacao_2022": 2696
+  },
+  {
+   "codigo_ibge": "2411502",
+   "nome": "Santo Antônio",
+   "populacao_2022": 22177
+  },
+  {
+   "codigo_ibge": "2413102",
+   "nome": "Senador Elói de Souza",
+   "populacao_2022": 5965
+  },
+  {
+   "codigo_ibge": "2413201",
+   "nome": "Senador Georgino Avelino",
+   "populacao_2022": 4065
+  },
+  {
+   "codigo_ibge": "2410306",
+   "nome": "Serra Caiada",
+   "populacao_2022": 10125
+  },
+  {
+   "codigo_ibge": "2413409",
+   "nome": "Serra Negra do Norte",
+   "populacao_2022": 7597
+  },
+  {
+   "codigo_ibge": "2413300",
+   "nome": "Serra de São Bento",
+   "populacao_2022": 5703
+  },
+  {
+   "codigo_ibge": "2413359",
+   "nome": "Serra do Mel",
+   "populacao_2022": 13091
+  },
+  {
+   "codigo_ibge": "2413508",
+   "nome": "Serrinha",
+   "populacao_2022": 6436
+  },
+  {
+   "codigo_ibge": "2413557",
+   "nome": "Serrinha dos Pintos",
+   "populacao_2022": 4659
+  },
+  {
+   "codigo_ibge": "2413607",
+   "nome": "Severiano Melo",
+   "populacao_2022": 5487
+  },
+  {
+   "codigo_ibge": "2411601",
+   "nome": "São Bento do Norte",
+   "populacao_2022": 3304
+  },
+  {
+   "codigo_ibge": "2411700",
+   "nome": "São Bento do Trairí",
+   "populacao_2022": 3792
+  },
+  {
+   "codigo_ibge": "2411809",
+   "nome": "São Fernando",
+   "populacao_2022": 3492
+  },
+  {
+   "codigo_ibge": "2411908",
+   "nome": "São Francisco do Oeste",
+   "populacao_2022": 4161
+  },
+  {
+   "codigo_ibge": "2412005",
+   "nome": "São Gonçalo do Amarante",
+   "populacao_2022": 115838
+  },
+  {
+   "codigo_ibge": "2412203",
+   "nome": "São José de Mipibu",
+   "populacao_2022": 47286
+  },
+  {
+   "codigo_ibge": "2412302",
+   "nome": "São José do Campestre",
+   "populacao_2022": 11121
+  },
+  {
+   "codigo_ibge": "2412401",
+   "nome": "São José do Seridó",
+   "populacao_2022": 4558
+  },
+  {
+   "codigo_ibge": "2412104",
+   "nome": "São João do Sabugi",
+   "populacao_2022": 5956
+  },
+  {
+   "codigo_ibge": "2412500",
+   "nome": "São Miguel",
+   "populacao_2022": 23537
+  },
+  {
+   "codigo_ibge": "2412559",
+   "nome": "São Miguel do Gostoso",
+   "populacao_2022": 10221
+  },
+  {
+   "codigo_ibge": "2412609",
+   "nome": "São Paulo do Potengi",
+   "populacao_2022": 16786
+  },
+  {
+   "codigo_ibge": "2412708",
+   "nome": "São Pedro",
+   "populacao_2022": 5776
+  },
+  {
+   "codigo_ibge": "2412807",
+   "nome": "São Rafael",
+   "populacao_2022": 7711
+  },
+  {
+   "codigo_ibge": "2412906",
+   "nome": "São Tomé",
+   "populacao_2022": 9972
+  },
+  {
+   "codigo_ibge": "2413003",
+   "nome": "São Vicente",
+   "populacao_2022": 6310
+  },
+  {
+   "codigo_ibge": "2413706",
+   "nome": "Sítio Novo",
+   "populacao_2022": 4654
+  },
+  {
+   "codigo_ibge": "2413805",
+   "nome": "Taboleiro Grande",
+   "populacao_2022": 2338
+  },
+  {
+   "codigo_ibge": "2413904",
+   "nome": "Taipu",
+   "populacao_2022": 11422
+  },
+  {
+   "codigo_ibge": "2414001",
+   "nome": "Tangará",
+   "populacao_2022": 13281
+  },
+  {
+   "codigo_ibge": "2414100",
+   "nome": "Tenente Ananias",
+   "populacao_2022": 10262
+  },
+  {
+   "codigo_ibge": "2414159",
+   "nome": "Tenente Laurentino Cruz",
+   "populacao_2022": 5891
+  },
+  {
+   "codigo_ibge": "2411056",
+   "nome": "Tibau",
+   "populacao_2022": 5382
+  },
+  {
+   "codigo_ibge": "2414209",
+   "nome": "Tibau do Sul",
+   "populacao_2022": 16929
+  },
+  {
+   "codigo_ibge": "2414308",
+   "nome": "Timbaúba dos Batistas",
+   "populacao_2022": 2348
+  },
+  {
+   "codigo_ibge": "2414407",
+   "nome": "Touros",
+   "populacao_2022": 33035
+  },
+  {
+   "codigo_ibge": "2414456",
+   "nome": "Triunfo Potiguar",
+   "populacao_2022": 3376
+  },
+  {
+   "codigo_ibge": "2414506",
+   "nome": "Umarizal",
+   "populacao_2022": 10078
+  },
+  {
+   "codigo_ibge": "2414605",
+   "nome": "Upanema",
+   "populacao_2022": 13577
+  },
+  {
+   "codigo_ibge": "2414753",
+   "nome": "Venha-Ver",
+   "populacao_2022": 3014
+  },
+  {
+   "codigo_ibge": "2414803",
+   "nome": "Vera Cruz",
+   "populacao_2022": 10735
+  },
+  {
+   "codigo_ibge": "2415008",
+   "nome": "Vila Flor",
+   "populacao_2022": 3174
+  },
+  {
+   "codigo_ibge": "2414902",
+   "nome": "Viçosa",
+   "populacao_2022": 1822
+  },
+  {
+   "codigo_ibge": "2414704",
+   "nome": "Várzea",
+   "populacao_2022": 5233
+  },
+  {
+   "codigo_ibge": "2400406",
+   "nome": "Água Nova",
+   "populacao_2022": 2946
+  }
+ ]
+}

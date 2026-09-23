@@ -1,17 +1,59 @@
 rules_version = '2';
 
-// Regras de segurança do Firestore do MapaLeads.
+// Regras de segurança do Firestore do MapaLeads (Fase 2).
 //
-// FASE 1: o navegador não tem acesso a NADA.
-// Só o motor (GitHub Actions) grava e lê, usando a conta de serviço
-// (Admin SDK), que ignora estas regras.
-//
-// Na Fase 2 estas regras serão ampliadas para:
-//  - usuário comum ler só as próprias buscas e lotes de leads;
-//  - admin (custom claim admin=true) ler tudo;
-//  - ninguém gravar leads pelo navegador, nunca.
+// Princípios:
+//  - O navegador NUNCA grava nada. Buscas, leads, usuários e fila são gravados
+//    só pelo servidor (Netlify Functions e motor no GitHub Actions, via Admin SDK,
+//    que ignora estas regras).
+//  - Usuário comum lê SOMENTE as próprias buscas e os próprios leads.
+//  - Admin (custom claim admin=true, gravada só pelo servidor) lê tudo.
+//  - O papel vem do token assinado pelo Firebase: o usuário não consegue alterá-lo.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    function admin() {
+      return logado() && request.auth.token.admin == true;
+    }
+
+    function dono(dados) {
+      return logado() && dados.dono_uid == request.auth.uid;
+    }
+
+    match /buscas/{buscaId} {
+      allow read: if admin() || dono(resource.data);
+      allow write: if false;
+
+      // Leads em lotes de até 300 por documento.
+      match /lotes/{lote} {
+        allow read: if admin() || dono(resource.data);
+        allow write: if false;
+      }
+    }
+
+    // Perfil e contador do limite diário: o próprio usuário lê, só o servidor grava.
+    match /usuarios/{uid} {
+      allow read: if admin() || (logado() && request.auth.uid == uid);
+      allow write: if false;
+    }
+
+    // Estado público da fila: só IDs, tipo e tempo estimado (sem dono, termos ou cidades).
+    match /fila/estado {
+      allow read: if logado();
+      allow write: if false;
+    }
+
+    // Configuração geral (ex.: limite diário padrão): leitura para logados.
+    match /config/geral {
+      allow read: if logado();
+      allow write: if false;
+    }
+
+    // Qualquer outra coisa: bloqueada.
     match /{documento=**} {
       allow read, write: if false;
     }

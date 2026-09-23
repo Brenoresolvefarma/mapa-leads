@@ -1,5 +1,11 @@
 # Motor do MapaLeads: roda o scraper do Google Maps e grava os leads no Firestore.
 #
+# Quem dispara:
+#  - a Netlify Function (a cada busca criada), com o ID da busca;
+#  - o agendamento a cada 15 min (rede de segurança da fila e RN agendado/pausado);
+#  - o próprio motor, quando o tempo da execução acaba e ainda há fila;
+#  - o admin, manualmente pelo "Run workflow" (formulário abaixo).
+#
 # Repositório PÚBLICO: os logs são visíveis para qualquer pessoa.
 #  - o motor só imprime contagens e status (nunca dados de leads);
 #  - nada de upload-artifact nem commit de resultados;
@@ -7,6 +13,9 @@
 name: Motor MapaLeads
 
 on:
+  schedule:
+    # A cada 15 min (UTC). Com fila vazia, sai em segundos (grátis em repo público).
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       termos:
@@ -33,7 +42,7 @@ on:
           - normal
           - completa
       busca_id:
-        description: "(Uso interno, Fase 2) ID de uma busca já criada na fila"
+        description: "(Uso interno) ID da busca criada pela tela; o motor processa a fila inteira"
         required: false
         type: string
 
@@ -47,6 +56,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write # para o motor disparar a próxima execução quando a fila não coube numa só
 
 jobs:
   motor:
@@ -69,14 +79,15 @@ jobs:
       - name: Instalar dependências
         run: pip install -r motor/requirements.txt
 
-      - name: Baixar imagem do scraper
-        run: docker pull -q "$SCRAPER_IMAGE"
-
       - name: Rodar motor
         working-directory: motor
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          MAPALEADS_ADMIN_UID: ${{ vars.MAPALEADS_ADMIN_UID }}
+          # UID do admin agora é SECRET (não aparece no log público).
+          MAPALEADS_ADMIN_UID: ${{ secrets.MAPALEADS_ADMIN_UID }}
+          # Segundo motor em paralelo: pronto no código, DESLIGADO (aprovado).
+          MOTOR_PARALELO: "false"
+          GITHUB_TOKEN: ${{ github.token }}
         run: python motor.py
 
       - name: Limpar arquivos temporários

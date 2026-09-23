@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MapaLeads — teste da Fase 2</title>
+<!--
+  Página TEMPORÁRIA da Fase 2: serve só para testar login, Functions, fila,
+  limite diário, RN inteiro e cancelamento. A tela definitiva vem na Fase 3.
+  Não há nenhuma chave no código: a config pública do Firebase vem de /api/config-publica.
+-->
+<style>
+  :root { --fundo:#f5f7fb; --cartao:#fff; --texto:#1d2433; --suave:#667085; --borda:#e3e8ef; --azul:#2563eb; --verde:#16a34a; --vermelho:#dc2626; --amarelo:#b45309; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--fundo); color:var(--texto); }
+  header { background:#0f172a; color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  header b { font-size:18px; }
+  main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  section { background:var(--cartao); border:1px solid var(--borda); border-radius:12px; padding:16px; min-width:0; }
+  h2 { margin:0 0 12px; font-size:16px; }
+  label { display:block; font-size:13px; color:var(--suave); margin:8px 0 4px; }
+  input, select { width:100%; padding:9px 10px; border:1px solid var(--borda); border-radius:8px; font:inherit; }
+  input[type=checkbox] { width:auto; }
+  .linha { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  button { padding:9px 14px; border:0; border-radius:8px; background:var(--azul); color:#fff; font:inherit; cursor:pointer; }
+  button.sec { background:#e8eefc; color:var(--azul); }
+  button.perigo { background:#fdecec; color:var(--vermelho); }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { font-size:14px; margin-top:8px; min-height:18px; }
+  .erro { color:var(--vermelho); } .ok { color:var(--verde); }
+  .busca { border:1px solid var(--borda); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:14px; }
+  .busca .topo { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .pilula { font-size:12px; padding:2px 8px; border-radius:99px; background:#eef2f7; }
+  .na_fila { background:#fff7e6; color:var(--amarelo); } .rodando { background:#e8eefc; color:var(--azul); }
+  .concluida { background:#e7f7ed; color:var(--verde); } .erro-st, .cancelada { background:#fdecec; color:var(--vermelho); }
+  .suave { color:var(--suave); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td, th { border-bottom:1px solid var(--borda); padding:6px 4px; text-align:left; }
+  .oculto { display:none !important; }
+  .grade { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; }
+</style>
+</head>
+<body>
+<header>
+  <b>MapaLeads <span class="suave" style="color:#cbd5e1">· teste Fase 2</span></b>
+  <div id="quem" class="oculto"><span id="email"></span> <span id="selo" class="pilula oculto">admin</span> <button class="sec" id="sair">Sair</button></div>
+</header>
+<main>
+  <section id="login">
+    <h2>Entrar</h2>
+    <label for="le">E-mail</label><input id="le" type="email" autocomplete="username">
+    <label for="ls">Senha</label><input id="ls" type="password" autocomplete="current-password">
+    <div class="linha"><button id="entrar">Entrar</button></div>
+    <div class="msg" id="msg-login"></div>
+  </section>
+
+  <section id="nova" class="oculto">
+    <h2>Nova busca</h2>
+    <label for="termos">Termos (separados por vírgula)</label><input id="termos" placeholder="ex.: home care, cuidador de idosos">
+    <label for="cidades">Cidades (separadas por vírgula)</label><input id="cidades" value="Natal RN">
+    <div class="grade">
+      <div><label for="prof">Profundidade</label>
+        <select id="prof"><option value="rapida">Rápida (~20 por consulta)</option><option value="normal" selected>Normal (~60)</option><option value="completa">Completa (até ~120)</option></select></div>
+      <div><label>&nbsp;</label><label style="color:var(--texto)"><input type="checkbox" id="email-sn"> Extrair e-mail (mais lento)</label></div>
+    </div>
+    <div class="linha"><button class="sec" id="estimar">Estimar tempo</button><button id="buscar">Buscar</button></div>
+    <div class="msg" id="msg-nova"></div>
+  </section>
+
+  <section id="rn" class="oculto">
+    <h2>RN inteiro (só admin)</h2>
+    <label for="rn-termos">Segmento / termos (separados por vírgula)</label><input id="rn-termos" placeholder="ex.: dentista, odontologia">
+    <div class="linha">
+      <label style="color:var(--texto);margin:0"><input type="checkbox" id="rn-email"> Extrair e-mail</label>
+      <label style="color:var(--texto);margin:0"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label>
+    </div>
+    <div class="linha"><button class="sec" id="rn-estimar">Estimar</button><button id="rn-confirmar" disabled>Confirmar RN inteiro</button></div>
+    <div class="msg" id="msg-rn"></div>
+  </section>
+
+  <section id="minhas" class="oculto">
+    <h2 id="titulo-lista">Minhas buscas</h2>
+    <div class="linha oculto" id="filtro-admin">
+      <select id="filtro"><option value="">Todas as buscas (admin)</option><option value="eu">Só as minhas</option></select>
+    </div>
+    <div id="lista"><p class="suave">Carregando…</p></div>
+  </section>
+
+  <section id="usuarios" class="oculto">
+    <h2>Usuários (admin)</h2>
+    <div class="grade">
+      <div><label for="u-email">E-mail</label><input id="u-email" type="email"></div>
+      <div><label for="u-senha">Senha inicial (mín. 8)</label><input id="u-senha" type="text"></div>
+      <div><label for="u-nome">Nome</label><input id="u-nome"></div>
+      <div><label for="u-limite">Limite diário (vazio = padrão)</label><input id="u-limite" type="number" min="0"></div>
+    </div>
+    <div class="linha"><button id="u-criar">Criar usuário</button><button class="sec" id="u-atualizar">Atualizar lista</button></div>
+    <div class="msg" id="msg-u"></div>
+    <div style="overflow-x:auto"><table id="u-tabela"></table></div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc }
+  from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+const $ = (id) => document.getElementById(id);
+const config = await (await fetch("/api/config-publica")).json();
+const app = initializeApp(config);
+const auth = getAuth(app);
+const db = getFirestore(app);
+// Só para testes locais com os emuladores (?emulador=1). Em produção não faz nada.
+if (new URLSearchParams(location.search).get("emulador") === "1") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+}
+
+let usuario = null, ehAdmin = false, estadoFila = null, buscasAtuais = [], pararLista = null, pararFila = null;
+
+const STATUS = { na_fila: "na fila", rodando: "rodando", concluida: "concluída", erro: "erro", cancelada: "cancelada" };
+const tempo = (s) => { s = Math.max(0, Math.round(s)); return s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`; };
+// Datas sempre no horário de Natal (America/Fortaleza), seja qual for o fuso do aparelho.
+const FUSO = { timeZone: "America/Fortaleza" };
+const dataHora = (d) => d.toLocaleString("pt-BR", FUSO);
+const hora = (d) => d.toLocaleTimeString("pt-BR", FUSO);
+const texto = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function mensagem(id, txt, tipo = "") { const el = $(id); el.textContent = txt; el.className = `msg ${tipo}`; }
+
+async function api(caminho, corpo) {
+  const token = await usuario.getIdToken();
+  const r = await fetch(`/api/${caminho}`, {
+    method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(corpo),
+  });
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
+  return dados;
+}
+
+// ------------------------------------------------------------- login
+$("entrar").onclick = async () => {
+  mensagem("msg-login", "Entrando…");
+  try { await signInWithEmailAndPassword(auth, $("le").value.trim(), $("ls").value); mensagem("msg-login", ""); }
+  catch { mensagem("msg-login", "E-mail ou senha inválidos.", "erro"); }
+};
+$("sair").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, async (u) => {
+  usuario = u;
+  pararLista?.(); pararFila?.();
+  for (const id of ["nova", "minhas", "quem"]) $(id).classList.toggle("oculto", !u);
+  $("login").classList.toggle("oculto", !!u);
+  if (!u) { for (const id of ["rn", "usuarios", "filtro-admin"]) $(id).classList.add("oculto"); return; }
+  // Força token novo: se o admin mudou algo, vale na hora.
+  const claims = (await u.getIdTokenResult(true)).claims;
+  ehAdmin = claims.admin === true;
+  $("email").textContent = u.email;
+  for (const id of ["rn", "usuarios", "filtro-admin", "selo"]) $(id).classList.toggle("oculto", !ehAdmin);
+  $("filtro").value = ehAdmin ? "" : "eu";
+  pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...d.data(), lidoEm: Date.now() }; desenharLista(); });
+  ouvirLista();
+  if (ehAdmin) carregarUsuarios();
+});
+
+// ------------------------------------------------------------- busca comum
+function pedidoComum(simular) {
+  return { termos: $("termos").value, cidades: $("cidades").value, profundidade: $("prof").value, extrair_email: $("email-sn").checked, simular };
+}
+$("estimar").onclick = async () => {
+  try { const r = await api("criar-busca", pedidoComum(true)); mensagem("msg-nova", `${r.consultas} consulta(s) · cerca de ${tempo(r.estimativa_seg)} depois de começar.`, "ok"); }
+  catch (e) { mensagem("msg-nova", e.message, "erro"); }
+};
+$("buscar").onclick = async () => {
+  $("buscar").disabled = true;
+  try { const r = await api("criar-busca", pedidoComum(false)); mensagem("msg-nova", `Busca criada. Você ainda pode fazer ${r.restantes_hoje} hoje.`, "ok"); }
+  catch (e) { mensagem("msg-nova", e.message, "erro"); }
+  finally { $("buscar").disabled = false; }
+};
+
+// ------------------------------------------------------------- RN inteiro
+const pedidoRn = (simular) => ({ modo: "rn_inteiro", termos: $("rn-termos").value, extrair_email: $("rn-email").checked, agendar_noite: $("rn-noite").checked, simular });
+$("rn-estimar").onclick = async () => {
+  try {
+    const r = await api("criar-busca", pedidoRn(true));
+    mensagem("msg-rn", `${r.consultas} consultas em ${r.lotes} lotes · tempo estimado ~${tempo(r.estimativa_seg)}. Confirme para enfileirar.`, "ok");
+    $("rn-confirmar").disabled = false;
+  } catch (e) { mensagem("msg-rn", e.message, "erro"); }
+};
+for (const id of ["rn-termos", "rn-email", "rn-noite"]) $(id).oninput = () => ($("rn-confirmar").disabled = true);
+$("rn-confirmar").onclick = async () => {
+  $("rn-confirmar").disabled = true;
+  try {
+    const r = await api("criar-busca", pedidoRn(false));
+    mensagem("msg-rn", r.agendada_para ? `RN inteiro agendado para ${dataHora(new Date(r.agendada_para))}.` : "RN inteiro enfileirado.", "ok");
+  } catch (e) { mensagem("msg-rn", e.message, "erro"); }
+};
+
+// ------------------------------------------------------------- lista + fila
+$("filtro").onchange = ouvirLista;
+function ouvirLista() {
+  pararLista?.();
+  const col = collection(db, "buscas");
+  const soMinhas = !ehAdmin || $("filtro").value === "eu";
+  $("titulo-lista").textContent = soMinhas ? "Minhas buscas" : "Todas as buscas";
+  // Só as 20 mais recentes: poucas leituras (cota grátis do Firestore).
+  const q = soMinhas
+    ? query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(20))
+    : query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(20));
+  pararLista = onSnapshot(q, (snap) => { buscasAtuais = snap.docs.map((d) => ({ id: d.id, ...d.data() })); desenharLista(); },
+    (e) => { $("lista").innerHTML = `<p class="erro">Não foi possível carregar (${texto(e.code)}). Se for "failed-precondition", crie os índices do README.</p>`; });
+}
+
+function posicaoNaFila(b) {
+  if (!estadoFila) return "";
+  const pertence = (i) => i.id === b.id || i.mae_id === b.id;
+  if ((estadoFila.aguardando || []).some(pertence)) return b.agendada_para ? `agendada para ${dataHora(b.agendada_para.toDate())}` : "aguardando (pausa ou agendamento)";
+  const itens = estadoFila.itens || [];
+  const idx = itens.findIndex(pertence);
+  if (idx < 0) return "";
+  const decorrido = (Date.now() - estadoFila.lidoEm) / 1000;
+  const rodando = (estadoFila.rodando || []).reduce((t, r) => t + Math.max(0, r.restante_seg - decorrido), 0);
+  const antes = itens.slice(0, idx).reduce((t, i) => t + (i.estimativa_seg || 0), 0);
+  return `${idx + 1}º na fila · início em ~${tempo(rodando + antes + (estadoFila.rodando?.length ? 0 : 60))}`;
+}
+
+function desenharLista() {
+  if (!usuario) return;
+  if (!buscasAtuais.length) { $("lista").innerHTML = `<p class="suave">Nenhuma busca ainda.</p>`; return; }
+  $("lista").innerHTML = buscasAtuais.map((b) => {
+    const p = b.parametros || {};
+    const rotulo = b.tipo === "rn_mae" ? `RN inteiro · ${(p.termos || []).join(", ")}` : `${(p.termos || []).join(", ")} · ${(p.cidades || []).join(", ")}`;
+    const r = b.resumo;
+    const progresso = b.tipo === "rn_mae" ? `${b.consultas_feitas || 0}/${b.total_consultas || 0} consultas` : (b.progresso || "");
+    const podeCancelar = ["na_fila", "rodando"].includes(b.status) && !b.cancelar_solicitado;
+    const pausa = b.pausada_ate && b.pausada_ate.toDate() > new Date() ? `pausada até ${hora(b.pausada_ate.toDate())}` : "";
+    return `<div class="busca">
+      <div class="topo"><b>${texto(rotulo)}</b><span class="pilula ${b.status === "erro" ? "erro-st" : texto(b.status)}">${texto(STATUS[b.status] || b.status)}</span></div>
+      <div class="suave">${ehAdmin && b.dono_email ? texto(b.dono_email) + " · " : ""}${b.criada_em ? dataHora(b.criada_em.toDate()) : ""}
+        ${progresso ? " · " + texto(progresso) : ""} ${b.status === "na_fila" ? " · " + texto(posicaoNaFila(b)) : ""} ${pausa ? " · " + texto(pausa) : ""}
+        ${b.cancelar_solicitado && !["cancelada", "concluida", "erro"].includes(b.status) ? " · cancelando…" : ""}</div>
+      ${r ? `<div>Total ${r.total} · com telefone ${r.com_telefone} · e-mail ${r.com_email} · site ${r.com_site} · WhatsApp ${r.com_whatsapp} · na cidade pedida ${r.na_cidade_buscada ?? "-"}</div>` : ""}
+      ${b.aviso ? `<div class="suave">⚠️ ${texto(b.aviso)}</div>` : ""}
+      ${b.mensagem_erro ? `<div class="erro">${texto(b.mensagem_erro)}</div>` : ""}
+      ${podeCancelar ? `<div class="linha"><button class="perigo" data-cancelar="${texto(b.id)}">Cancelar</button></div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+$("lista").onclick = async (ev) => {
+  const id = ev.target?.dataset?.cancelar;
+  if (!id || !confirm("Cancelar esta busca? Os leads já coletados ficam guardados.")) return;
+  try { await api("cancelar-busca", { id }); } catch (e) { alert(e.message); }
+};
+setInterval(desenharLista, 30000); // atualiza o "início em" sem novas leituras
+
+// ------------------------------------------------------------- usuários (admin)
+async function carregarUsuarios() {
+  try {
+    const { usuarios, limite_padrao } = await api("admin-usuarios", { acao: "listar" });
+    $("u-tabela").innerHTML = `<tr><th>E-mail</th><th>Buscas hoje</th><th>Limite/dia</th><th></th></tr>` + usuarios.map((u) => `
+      <tr><td>${texto(u.email)} ${u.admin ? '<span class="pilula">admin</span>' : ""} ${u.removido ? '<span class="pilula cancelada">removido</span>' : ""}</td>
+      <td>${u.removido ? "-" : u.buscas_hoje}</td>
+      <td>${u.removido || u.admin ? "-" : `<input type="number" min="0" style="width:90px" data-limite="${texto(u.uid)}" placeholder="${limite_padrao}" value="${u.limite_diario ?? ""}">`}</td>
+      <td>${u.removido || u.admin ? "" : `<button class="perigo" data-remover="${texto(u.uid)}">Remover</button>`}</td></tr>`).join("");
+  } catch (e) { mensagem("msg-u", e.message, "erro"); }
+}
+$("u-atualizar").onclick = carregarUsuarios;
+$("u-criar").onclick = async () => {
+  const limite = $("u-limite").value === "" ? undefined : Number($("u-limite").value);
+  try {
+    await api("admin-usuarios", { acao: "criar", email: $("u-email").value, senha: $("u-senha").value, nome: $("u-nome").value, limite_diario: limite });
+    mensagem("msg-u", "Usuário criado.", "ok"); carregarUsuarios();
+  } catch (e) { mensagem("msg-u", e.message, "erro"); }
+};
+$("u-tabela").onchange = async (ev) => {
+  const uid = ev.target?.dataset?.limite;
+  if (!uid) return;
+  const valor = ev.target.value === "" ? null : Number(ev.target.value);
+  try { await api("admin-usuarios", { acao: "definir_limite", uid, limite_diario: valor }); mensagem("msg-u", "Limite atualizado.", "ok"); }
+  catch (e) { mensagem("msg-u", e.message, "erro"); }
+};
+$("u-tabela").onclick = async (ev) => {
+  const uid = ev.target?.dataset?.remover;
+  if (!uid || !confirm("Remover este usuário? As buscas dele continuam visíveis para o admin.")) return;
+  try { await api("admin-usuarios", { acao: "remover", uid }); mensagem("msg-u", "Usuário removido.", "ok"); carregarUsuarios(); }
+  catch (e) { mensagem("msg-u", e.message, "erro"); }
+};
+</script>
+</body>
+</html>

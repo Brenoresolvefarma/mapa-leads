@@ -1,138 +1,179 @@
 # MapaLeads
 
 Prospecção B2B multiusuário via Google Maps, 100% na nuvem e com **custo zero**
-(GitHub Actions em repositório público + Firebase plano Spark + Netlify Free).
+(GitHub Actions em repositório público + Firebase plano **Spark** + Netlify **Free**).
 
-> **Estado atual: Fase 1** — motor no GitHub Actions gravando no Firestore,
-> disparado manualmente pelo botão **Run workflow**. Login, fila pela tela,
-> limite diário (Fase 2) e a tela HTML (Fase 3) ainda não existem.
+> **Estado atual: Fase 2** — login, Netlify Functions, regras de segurança, fila com
+> prioridade, limite diário, RN inteiro e uma **página de teste** simples.
+> A tela definitiva (tabela de leads, download .xlsx, painel completo) vem na **Fase 3**.
 
-## Como funciona (Fase 1)
+## Como funciona
 
-1. Você abre **Actions › Motor MapaLeads › Run workflow** e preenche:
-   - **termos**: vários, separados por vírgula (ex.: `home care, cuidador de idosos`);
-   - **cidades**: várias, separadas por vírgula (padrão `Natal RN`);
-   - **extrair e-mail**: marca se quiser (a busca fica ~2× mais lenta);
-   - **profundidade**: `rapida` (~20 lugares por consulta), `normal` (~60) ou `completa` (até ~120, o teto do Google).
-2. O motor cria a busca no Firestore (`status: na_fila`), pega a busca mais antiga da fila,
-   marca `rodando` e roda o scraper [gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper)
-   (Docker, versão fixa `v1.18.1`) uma vez para cada combinação **termo × cidade**.
-3. Os dados são tratados:
-   - duplicados removidos (ID do lugar no Google; na falta, nome + telefone);
-   - telefone no formato `(84) 99999-9999` e link `wa.me` quando é celular;
-   - Instagram só quando o site cadastrado no Maps é um perfil do Instagram;
-   - **nada é inventado**: campo não encontrado fica vazio.
-4. Os leads são gravados no Firestore e a busca fica `concluida` (ou `erro`, com mensagem clara).
+```
+Navegador (publico/index.html) ──login──> Firebase Auth
+      │  (ID token)
+      ▼
+Netlify Functions (/api/...) ──valida token, limite, admin──> Firestore (buscas na fila)
+      │  dispara
+      ▼
+GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) ──> Firestore (leads em lotes)
+```
 
-### Tempo estimado por busca
+- **Busca comum** (qualquer usuário): termos e cidades livres, profundidade, e-mail sim/não.
+  Conta no **limite diário** (padrão **20 por dia**, o admin muda por usuário; o dia vira à
+  meia-noite de **Fortaleza/Natal**).
+- **RN inteiro** (**só admin**, bloqueado no servidor): um segmento nos 167 municípios do RN.
+  Não conta no limite diário. Detalhes abaixo.
+- **Fila sem perda e sem travar ninguém**: buscas comuns passam na frente dos lotes do RN
+  (o motor olha a fila antes de cada consulta do RN); entre usuários comuns, a fila alterna
+  por dono. A tela mostra a posição na fila e o tempo estimado de espera.
+- **Cancelar**: na fila, cancela na hora; rodando, para antes da próxima consulta e guarda os
+  leads já coletados. No RN inteiro, cancela os lotes que faltam e fecha com o que já veio.
 
-Por consulta (termo × cidade), além de ~1,5 min de preparo por execução:
+### Tratamento dos dados (nada é inventado)
+- duplicados removidos (ID do lugar no Google; na falta, nome + telefone). No RN inteiro, a
+  remoção vale para **todo o RN** (entre todos os lotes);
+- telefone `(84) 99999-9999` e link `wa.me` só para celular;
+- Instagram só quando o site cadastrado no Maps é um perfil do Instagram;
+- **cidade conferida**: cada lead tem `cidade_buscada` e `cidade_confere` (`sim` / `nao` /
+  `indefinido`). Lead de cidade vizinha é **marcado, nunca apagado**. No RN inteiro o critério
+  é "está no RN". A tela da Fase 3 terá o filtro "só da cidade pedida" ligado por padrão e o
+  .xlsx sai com a coluna `cidade_confere`;
+- campo que o Google não trouxe fica vazio.
 
-| Profundidade | Sem e-mail | Com e-mail |
+### Profundidade e tempo (medido em 23/09/2026 e recalibrado sozinho)
+| Profundidade | Lugares por consulta | Tempo por consulta (sem e-mail) |
 |---|---|---|
-| Rápida (~20) | ~1–2 min | ~2–3 min |
-| Normal (~60) | ~3–4 min | ~5–7 min |
-| Completa (~120) | ~5–7 min | ~9–13 min |
+| Rápida | ~20 | ~40 s (medido) |
+| Normal | ~60 | ~1,5–2 min (estimado) |
+| Completa | até ~120 (teto do Google) | ~3 min (estimado) |
+
+Mais uma **pausa aleatória de 20–40 s entre consultas** (reduz o risco de bloqueio) e ~1 min
+para a máquina do GitHub ligar. Com e-mail, ~1,6×. O motor grava o tempo real de cada
+consulta em `config/metricas` e as estimativas da tela se ajustam sozinhas.
 
 ### Vigia de tempo (nenhuma consulta fica presa)
+O scraper termina o trabalho mas às vezes não encerra o processo. A vigia:
+1. **fim real**: quando o scraper avisa `scrapemate exited` no log interno, espera 5 s sem lead
+   novo e encerra o container;
+2. **plano B**: encerra após **60 s sem atividade** (sem e-mail) ou **3 min** (com e-mail);
+3. encerra se nenhum lead nos primeiros 5 min;
+4. limite rígido por consulta: rápida 6 / normal 12 / completa 20 min (o dobro com e-mail).
 
-O scraper às vezes não encerra sozinho. Cada consulta roda sob uma vigia que encerra o
-container e **aproveita os leads já coletados** (o scraper grava cada lead assim que o encontra):
+O log público mostra só números, ex.:
+`término: fim real detectado (código -15), 36s, fim real aos 31s, etapas ok=21 falhas=0, inatividade=não, consentimento=não`.
 
-| Profundidade | Limite sem e-mail | Limite com e-mail |
-|---|---|---|
-| Rápida | 6 min | 12 min |
-| Normal | 12 min | 24 min |
-| Completa | 20 min | 40 min |
+### RN inteiro
+- 167 municípios, população do **Censo 2022 (IBGE)** em [`dados/municipios_rn.json`](dados/municipios_rn.json).
+- Profundidade automática: até 20 mil hab. = rápida; 20–100 mil = normal;
+  **Natal, Mossoró e Parnamirim por bairro** (bairros oficiais do IBGE, Censo 2022, em
+  [`dados/bairros_rn.json`](dados/bairros_rn.json): 36, 27 e 22) na normal;
+  **São Gonçalo do Amarante** cidade inteira na completa.
+- 1 termo = **249 consultas**, divididas em lotes de ~40 min (buscas-filhas) agrupados numa
+  **busca-mãe** (status e progresso consolidados, um único resultado sem duplicados).
+- Tempo estimado (1 termo, sem e-mail): **~7 h** (11 lotes). Com e-mail ~10 h; 2 termos ~14 h.
+- Opção **"agendar para a noite"** (começa às 22h de Natal).
+- **Disjuntor**: 3 consultas seguidas sem nenhum lead pausam o RN por 30 min (possível
+  bloqueio); as buscas comuns continuam. Obs.: município pequeno sem nenhum resultado também
+  conta como "vazia".
+- 2 execuções em paralelo: código pronto, **desligado** (`MOTOR_PARALELO: "false"` no workflow).
 
-Além do limite, a consulta é encerrada se **não gravar nenhum lead nos primeiros 5 min** ou se
-ficar **3 min sem gravar lead novo**. Consulta encerrada com leads = aviso "encerrada por tempo"
-na busca (status `concluida`); só vira `erro` se todas as consultas terminarem sem nenhum lugar.
-
-Para cada consulta, o log mostra só um diagnóstico em números, por exemplo:
-`término: sozinha (código 0), 142s, etapas ok=21 falhas=0, inatividade=não, consentimento=não`.
-A telemetria do scraper fica desligada (`DISABLE_TELEMETRY=1`).
-
-Cada busca grava `duracao_segundos` no Firestore para calibrarmos esses números com dados reais.
-Minutos do Actions são gratuitos e ilimitados em repositório público; uma execução pode durar
-até ~5h50 (limite configurado).
-
-## Onde ficam os dados (Firestore)
-
-- `buscas/{id}` — dono, data, status (`na_fila`, `rodando`, `concluida`, `erro`), parâmetros,
-  progresso (`2/6`), resumo (total, com telefone, com e-mail, com site, com WhatsApp),
-  aviso, mensagem de erro, duração.
-- `buscas/{id}/lotes/{0,1,2…}` — até 300 leads por documento, com os campos:
-  `nome, categoria, telefone, whatsapp_link, email, site, instagram, endereco, cidade,
-  nota, qtd_avaliacoes, link_maps, termo_que_encontrou`.
-
-Guardar os leads em lotes é o que mantém o projeto dentro da cota grátis do Firestore
-(50 mil leituras / 20 mil gravações por dia): uma busca de 300 leads custa **1 gravação**
-para salvar e **1 leitura** para abrir, em vez de 300.
+### Custo zero e cotas do Firestore (50 mil leituras / 20 mil gravações por dia)
+- Leads gravados em **lotes de 300 por documento**: uma busca de 300 leads = 1 gravação.
+- A lista de buscas lê só os 20 documentos mais recentes (o resumo fica no documento da busca).
+- Um RN inteiro ≈ 600–800 gravações. O agendamento de 15 em 15 min com fila vazia ≈ 8 leituras
+  por execução e não grava nada se a fila não mudou.
+- Se a cota estourar, o plano Spark só bloqueia até o dia seguinte — nunca cobra.
 
 ## Privacidade (repositório público)
+- Logs do Actions: **só contagens e status**. Nunca leads, termos, cidades, UID ou tokens.
+- Saída do scraper só em arquivo temporário do runner, apagado ao final. Sem upload de artefatos.
+- A tela manda só o ID da busca para o GitHub; os termos ficam no Firestore.
 
-- Os logs do Actions mostram **só contagens e status**. Nunca dados de leads, termos ou tokens.
-- A saída bruta do scraper fica num arquivo temporário do runner e é apagada ao final.
-- Não há upload de artefatos nem commit de resultados: os dados vão só para o Firestore.
-- Os campos do formulário são lidos pelo motor direto do evento do GitHub (não aparecem no
-  cabeçalho do log). Eles ficam visíveis na página da execução para quem abrir o Actions,
-  por isso na Fase 2 a tela passará a enviar só o ID da busca.
+## Segurança
+- **Papéis por custom claim** (`admin: true`), gravada só pelo servidor (workflow "Definir admin").
+  O usuário não consegue se promover.
+- **Regras do Firestore** ([`firestore.rules`](firestore.rules)): usuário comum lê só as próprias
+  buscas e leads; admin lê tudo; **ninguém grava pelo navegador** (nem o admin).
+- **Netlify Functions** validam o ID token em toda chamada (token revogado/usuário removido perde
+  acesso na hora). RN inteiro e gestão de usuários exigem a claim `admin` **no servidor**.
+- Usuário removido: a conta é apagada, as buscas dele ficam visíveis para o admin (marcado "removido").
+- Não há cadastro público nem "promover a admin" pela tela.
 
-## Configuração (na ordem)
+## Configuração da Fase 2 (na ordem)
 
-### 1. Firebase (plano Spark — sem cartão)
+> A Fase 1 já está configurada (projeto Firebase, secret `FIREBASE_SERVICE_ACCOUNT`).
 
-Nunca clique em "Fazer upgrade" / plano Blaze. Tudo aqui funciona no Spark.
+### 1. GitHub — secret do UID (se ainda não fez)
+**Settings › Secrets and variables › Actions › aba Secrets › New repository secret**
+- Name `MAPALEADS_ADMIN_UID` — Value: seu UID (Firebase › Authentication › Usuários).
+- Depois do merge da Fase 2, apague a **variável** antiga: aba **Variables** › `MAPALEADS_ADMIN_UID` › Delete.
 
-1. Acesse <https://console.firebase.google.com> › **Adicionar projeto** › nome `mapaleads`
-   (pode desativar o Google Analytics).
-2. **Criação › Firestore Database › Criar banco de dados** › modo **produção** ›
-   local `southamerica-east1 (São Paulo)`.
-3. Na aba **Regras** do Firestore, cole o conteúdo de [`firestore.rules`](firestore.rules) e clique **Publicar**.
-4. **Criação › Authentication › Vamos começar** › método **E-mail/senha** › ativar.
-5. Em **Authentication › Usuários › Adicionar usuário**, crie o seu usuário (e-mail e senha)
-   e copie o **UID** que aparece na lista.
-6. **Configurações do projeto (engrenagem) › Contas de serviço › Gerar nova chave privada**.
-   Um arquivo `.json` será baixado. **Não envie esse arquivo para o repositório nem para ninguém.**
+### 2. GitHub — tornar-se admin
+**Actions › Definir admin › Run workflow** (branch `main`). O log deve terminar com
+"Claim de administrador aplicada". Também cria `config/geral` com o limite padrão 20.
 
-### 2. GitHub
+### 3. Firebase — regras e índices
+1. **Firestore › Regras**: cole o conteúdo de [`firestore.rules`](firestore.rules) › **Publicar**.
+2. **Firestore › Índices › Composto › Criar índice** (2 índices, coleção `buscas`, escopo Coleção):
+   - `lista` Crescente, `dono_uid` Crescente, `criada_em` Decrescente;
+   - `lista` Crescente, `criada_em` Decrescente.
+   (Ou abra a página de teste: se faltar índice, o erro do Firebase traz um link que cria o índice.)
+3. **Configurações do projeto › Geral › Seus apps › `</>` (Web)** › registre o app "mapaleads-web"
+   (sem Hosting) e copie o **apiKey** (não é segredo, mas fica em variável de ambiente).
+4. **Authentication › Configurações › Domínios autorizados** › adicione o domínio do Netlify
+   (ex.: `mapaleads.netlify.app`) depois do passo 5.
 
-Em **github.com/Brenoresolvefarma/mapa-leads › Settings › Secrets and variables › Actions**:
+### 4. GitHub — token para o Netlify disparar o motor
+**Foto do perfil › Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token**
+- Nome `mapaleads-netlify`; validade: até 1 ano (anote para renovar);
+- Repository access: **Only select repositories** › `Brenoresolvefarma/mapa-leads`;
+- Permissions › Repository › **Actions: Read and write** (só isso);
+- Gerar e copiar o token (começa com `github_pat_`).
 
-| Tipo | Nome | Valor |
-|---|---|---|
-| Aba **Secrets** › New repository secret | `FIREBASE_SERVICE_ACCOUNT` | conteúdo **inteiro** do arquivo `.json` da chave (abra no bloco de notas, copie tudo, cole) |
-| Aba **Variables** › New repository variable | `MAPALEADS_ADMIN_UID` | o seu UID do passo 1.5 |
+### 5. Netlify (plano Free, sem cartão)
+1. <https://app.netlify.com> › **Add new project › Import an existing project › GitHub** ›
+   `Brenoresolvefarma/mapa-leads`, branch `main`. As configurações vêm do `netlify.toml`.
+2. **Project configuration › Environment variables › Add a variable** (escopo: todos):
 
-Depois de cadastrar o secret, apague o `.json` do seu computador (ou guarde em local seguro).
+| Variável | Valor |
+|---|---|
+| `FIREBASE_PROJECT_ID` | campo `project_id` do JSON da chave do Firebase |
+| `FIREBASE_CLIENT_EMAIL` | campo `client_email` do JSON |
+| `FIREBASE_PRIVATE_KEY` | campo `private_key` do JSON (tudo entre as aspas, com os `\n`) — marque **Contains secret values** |
+| `FIREBASE_WEB_API_KEY` | apiKey do passo 3.3 |
+| `MAPALEADS_GITHUB_TOKEN` | token do passo 4 — marque **Contains secret values** |
+| `MAPALEADS_GITHUB_REPO` | `Brenoresolvefarma/mapa-leads` |
 
-### 3. Rodar uma busca
+3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
+4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
 
-1. **Actions › Motor MapaLeads › Run workflow** (branch `main`).
-2. Preencha os campos e clique **Run workflow**.
-3. Acompanhe o status no log (só contagens) e veja os dados no console do Firebase:
-   **Firestore › buscas › (documento) › lotes**.
-
-O botão **Run workflow** só aparece quando o workflow está na branch padrão (`main`).
-
-## Desenvolvimento
-
+## Desenvolvimento e testes
 ```bash
 pip install -r motor/requirements.txt -r motor/requirements-dev.txt
-cd motor && pytest -q
+npm ci
+(cd motor && pytest -q)     # tratamento, vigia, fila
+npm test                    # lógica das Functions
+npm run test:regras         # regras do Firestore (emulador; precisa de Java)
+npm run test:funcoes        # Functions contra emuladores de Auth + Firestore
+npm run test:motor          # motor inteiro contra o emulador, com scraper falso
 ```
-
-Os testes usam somente dados fictícios e rodam automaticamente no workflow **Testes** a cada push/PR.
+Tudo com dados fictícios; roda automaticamente no workflow **Testes** a cada push/PR.
 
 ## Estrutura
-
 ```
-.github/workflows/motor.yml   # motor (workflow_dispatch + fila por concurrency)
-.github/workflows/testes.yml  # pytest a cada push/PR
-motor/motor.py                # fila, status, scraper, gravação no Firestore
-motor/tratamento.py           # limpeza dos dados (funções puras)
-motor/vigia.py                # vigia de tempo do scraper + diagnóstico em números
-motor/test_*.py               # testes
-firestore.rules               # regras de segurança (Fase 1: navegador sem acesso)
+.github/workflows/motor.yml          # motor (dispatch + agendamento 15 min + fila)
+.github/workflows/definir-admin.yml  # aplica a claim admin ao UID do secret
+.github/workflows/testes.yml         # pytest + node + emuladores
+motor/motor.py        # laço principal: fila, preempção, pausa, disjuntor, gravação
+motor/fila.py         # prioridade, rodízio por dono, estado público da fila, órfãs
+motor/rn_inteiro.py   # busca-mãe/filhas, consolidação sem duplicados, pausa
+motor/vigia.py        # vigia de tempo do scraper + diagnóstico só com números
+motor/tratamento.py   # limpeza dos dados, cidade conferida, estimativas
+netlify/functions/    # criar-busca, cancelar-busca, admin-usuarios, config-publica
+netlify/lib/          # lógica pura (testável) + utilidades de servidor
+dados/                # municípios (Censo 2022) e bairros oficiais (IBGE)
+publico/index.html    # página TEMPORÁRIA de teste da Fase 2
+firestore.rules, firestore.indexes.json, firebase.json, netlify.toml
+testes/               # testes Node (lógica, regras, Functions)
 ```

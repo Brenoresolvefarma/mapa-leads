@@ -2,11 +2,11 @@
 
 ## O que é
 Sistema multiusuário de prospecção B2B via Google Maps para o Breno (prospecção comercial, RN).
-Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres.
+Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e "RN inteiro" (só admin).
 
 ## Regras de trabalho combinadas com o Breno
 - Mostrar o plano e esperar autorização antes de criar/alterar arquivos.
-- Perguntar quando algo for ambíguo; **não definir valores de negócio** (ex.: limite diário) sem perguntar.
+- Perguntar quando algo for ambíguo; **não definir valores de negócio** sem perguntar.
 - **Custo ZERO obrigatório**: só repo público (Actions grátis), Firebase **Spark** (sem cartão, sem Blaze,
   sem Cloud Functions), Netlify Free. Qualquer coisa que exija plano pago: avisar antes e propor alternativa.
 - Respeitar a cota grátis do Firestore (50 mil leituras / 20 mil gravações por dia) no motor e na tela.
@@ -14,64 +14,98 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres.
 - Código simples, comentado em português.
 - Ao fim de cada fase: atualizar README.md e CLAUDE.md; passar passo a passo de configuração.
 - Trabalhar na branch designada, abrir PR para `main` e **nunca fazer merge sozinho** (o Breno faz).
-- Repositório PÚBLICO: nunca logar dados de leads, conteúdo da busca ou tokens; sem upload-artifact;
+- Repositório PÚBLICO: nunca logar dados de leads, termos, cidades, UID ou tokens; sem upload-artifact;
   sem commit de CSV/JSON de resultados; temporários apagados do runner.
+- Só dados reais (IBGE oficial + leads coletados); nada estimado apresentado como dado.
 
-## Arquitetura (alvo)
-1. Tela HTML single-file (CDN) no Netlify — Fase 3.
-2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — Fase 2.
-3. Netlify Functions: guardam token do GitHub e credencial admin do Firebase; validam ID token — Fase 2.
-4. Motor: GitHub Actions (`workflow_dispatch`) — **Fase 1 (feito)**.
+## Arquitetura
+1. Tela HTML single-file (CDN) no Netlify — Fase 3 (hoje: `publico/index.html` = página de TESTE da Fase 2).
+2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
+3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/admin-usuarios`, `/api/config-publica`):
+   guardam token do GitHub e credencial admin do Firebase; validam ID token (checkRevoked) — **Fase 2 (feito)**.
+4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` */15) — Fases 1 e 2 (feito).
 5. Banco: Firestore.
 
 ## Decisões tomadas
-- **Scraper**: `gosom/google-maps-scraper:v1.18.1` (Docker Hub, fixado). Flags usadas: `-input -results -json
-  -depth -c 4 -lang pt-BR -exit-on-inactivity 3m [-email]`. Saída JSON por linha; campos usados:
-  `title, category, categories, phone, web_site, emails, address, complete_address.city, review_rating,
-  review_count, link, place_id, cid, input_id`.
-- **Profundidade** (3 níveis, padrão Normal): rapida=`-depth 1` (~20), normal=`-depth 5` (~60),
-  completa=`-depth 10` (até ~120, teto do Google).
-- **Extrair e-mail**: padrão Não.
-- **Papéis**: Custom Claims (`admin: true`) gravadas só pelo servidor (Admin SDK nas Netlify Functions);
-  limite diário e perfil em `/usuarios/{uid}`, gravável só pelo servidor. (Implementar na Fase 2.)
-- **Scraper roda uma vez por consulta** (termo × cidade): dá progresso "n/N" e isola falhas.
-  A dedup entre consultas é feita no Python (place_id → cid → nome+telefone normalizado);
-  termos que encontraram o mesmo lugar são juntados em `termo_que_encontrou`.
-- **Leads em lotes** de 300 por documento (`buscas/{id}/lotes/{n}`) para caber na cota do Firestore.
-  Resumo fica no doc da busca (lista de buscas não lê leads).
-- **Fila sem perda**: `concurrency: mapaleads-motor` + `cancel-in-progress: false`; o motor esvazia a fila
-  (transação pega a `na_fila` mais antiga; ordenação no Python para evitar índice composto).
-  Ao iniciar, buscas em `rodando` são órfãs (só roda um motor por vez) → marcadas `erro`.
-- Telefone: celular (DDD + 9 dígitos começando com 9) → `(84) 99999-9999` + `https://wa.me/55…`;
-  fixo (10 dígitos) → `(84) 3333-3333`; número antigo de 8 dígitos NÃO ganha o 9; resto fica como veio.
-- Instagram: só quando `web_site` é instagram.com (o scraper não traz Instagram de outro jeito).
-- Nota 0 do scraper = sem nota → `None`.
-- Inputs do formulário são lidos de `GITHUB_EVENT_PATH` (não aparecem no cabeçalho do log).
-- `firestore.rules` na Fase 1 nega tudo ao navegador.
-- **Vigia de tempo** (`motor/vigia.py`), aprovada pelo Breno após a 1ª execução real travar
-  (run 35865786166, cancelada após ~14 min parada na consulta 1):
-  - Causa provável (lida no código da v1.18.1/scrapemate v1.4.0): o scraper só encerra quando os contadores
-    lugares encontrados = concluídos batem; senão depende do `-exit-on-inactivity`, e mesmo assim espera
-    todos os workers/abas do navegador terminarem (`wg.Wait`) — uma aba travada prende o processo.
-    Além disso, o `subprocess.run(timeout=...)` antigo matava só o cliente `docker`, não o container.
-  - Limite rígido por consulta: rapida 6 / normal 12 / completa 20 min (×2 com e-mail).
-    Encerra também se nenhum lead em 5 min ou 3 min sem lead novo. Parada via `docker stop`/`kill`
-    pelo nome do container; leads já gravados são aproveitados (jsonwriter grava cada lead na hora).
-  - Consulta encerrada com leads → aviso "encerrada por tempo" (status `concluida`); todas sem leads → `erro`.
-  - `DISABLE_TELEMETRY=1` no container (scraper enviava telemetria ao PostHog por padrão).
-  - Diagnóstico no log só com números: motivo de término, código, segundos, etapas ok/falhas
-    (linhas "scrapemate stats"), inatividade sim/não, consentimento sim/não.
+### Motor / scraper (Fase 1)
+- `gosom/google-maps-scraper:v1.18.1` fixado. Flags: `-input -results -json -depth -c 4 -lang pt-BR
+  -exit-on-inactivity 3m [-email]`, container com `-e DISABLE_TELEMETRY=1`. Imagem baixada só quando há trabalho.
+- Profundidade: rapida=`-depth 1` (~20), normal=`-depth 5` (~60), completa=`-depth 10` (até ~120). Padrão normal.
+  Extrair e-mail: padrão Não.
+- Scraper roda uma vez por consulta. Dedup: place_id → cid → nome+telefone normalizado; termos juntados.
+- Telefone: celular → `(84) 99999-9999` + `wa.me`; fixo 10 dígitos sem wa.me; nunca acrescenta o 9.
+- Instagram só quando `web_site` é instagram.com. Nota 0 = sem nota.
+- Leads em lotes de 300 por documento (`buscas/{id}/lotes/{n}`); resumo no doc da busca.
+
+### Vigia (execuções reais 1 e 2)
+- Execução real 2 (23/09, home care, Natal, rápida): 20 leads em ~30 s, depois o scraper NÃO encerrou;
+  vigia cortou após 3 min (código 137). Causa (lida no código v1.18.1 / scrapemate v1.4.0): o scraper
+  termina o trabalho mas fica preso no encerramento (wg.Wait / fechar navegador). As linhas
+  "scrapemate stats" só saem a cada 90 s enquanto ativo, por isso "etapas ?" na Fase 1.
+- Fase 2: **fim real** = `scrapemate exited` no log interno (+5 s sem lead novo) → encerra;
+  **plano B** = 60 s sem atividade (sem e-mail) / 3 min (com e-mail), atividade = lead novo OU linha
+  `job finished`; sem lead em 5 min → encerra; limites rígidos rapida 6 / normal 12 / completa 20 min (×2 e-mail).
+- Diagnóstico público só com números: motivo, código, segundos, segundo do fim real, etapas ok/falhas
+  (contagem de `job finished` por nível), inatividade, consentimento (só sim/não).
+- Pausa aleatória de 20–40 s entre TODAS as consultas (comuns e RN).
+- Execução real 2 também confirmou: sem tela de consentimento; 20/20 telefones formatados; 14 wa.me;
+  lead de São Gonçalo numa busca de Natal → decisão "marcar, não apagar".
+
+### Fase 2
+- **Papéis**: custom claim `admin: true`, aplicada só pelo workflow "Definir admin" ao UID do secret
+  `MAPALEADS_ADMIN_UID` (não há promoção pela tela). Motor confere a claim do dono antes de rodar RN.
+- **Limite diário**: padrão 20 buscas comuns/usuário (`config/geral.limite_padrao`), por usuário em
+  `usuarios/{uid}.limite_diario`; dia no fuso America/Fortaleza; conferido e contado na mesma transação
+  que cria a busca. RN inteiro não conta e não tem limite (o disjuntor segura o ritmo). Cancelar não devolve a cota.
+- **Busca comum grande demais** (> 5 h estimadas) é recusada (limite técnico da execução do Actions).
+- **Fila**: comuns primeiro (rodízio por dono), depois filhas do RN (FIFO). **Preempção entre consultas**:
+  antes de cada consulta do RN o motor olha se há busca comum (1 leitura) e a roda antes.
+  Filhas de ~40 min estimados; se o tempo da execução acaba, as consultas restantes viram nova filha e o
+  motor se redispara (GITHUB_TOKEN, `actions: write`). Agendamento */15 como rede de segurança.
+- **Órfãs**: sem paralelo, toda busca "rodando" no início é órfã (comum → erro; filha → volta à fila 1 vez).
+  Com paralelo (desligado), órfã após 45 min sem `batimento_em`.
+- **2 motores em paralelo**: código pronto, DESLIGADO (`MOTOR_PARALELO: "false"`). Ligar só após semanas
+  sem sinais de bloqueio (e mudar o `concurrency` do workflow).
+- **Disjuntor**: 3 consultas seguidas sem nenhum lead no RN → pausa de 30 min (mãe + filhas na fila com
+  `pausada_ate`), consultas restantes voltam à fila. Município pequeno sem resultado também conta.
+- **Agendar para a noite**: 22h America/Fortaleza (= 01h UTC).
+- **Cancelar**: dono ou admin. Na fila → cancelada; rodando → `cancelar_solicitado` e o motor para antes
+  da próxima consulta, guardando os leads parciais. Mãe → filhas na fila canceladas, mãe consolidada.
+- **Remover usuário**: apaga a conta do Auth; `usuarios/{uid}.removido = true`; buscas continuam visíveis ao admin.
+- **Cidade conferida**: `cidade_buscada`, `cidade_confere` (sim/nao/indefinido), `id_lugar` em cada lead.
+  Comum: cidade do endereço == cidade pedida (sem acento/UF; Açu=Assú). RN: estado == RN (ou sigla no endereço).
+  Marcar, nunca apagar. Fase 3: filtro "só da cidade pedida" ligado por padrão; xlsx com coluna `cidade_confere`.
+- **RN inteiro**: `dados/municipios_rn.json` (167, Censo 2022 via SIDRA t4709 v93; soma 3.302.729) e
+  `dados/bairros_rn.json` (malha de bairros IBGE CD2022: Natal 36, Mossoró 27, Parnamirim 22).
+  Faixas: ≤20 mil rápida; ≤100 mil normal; Natal/Mossoró/Parnamirim por bairro (normal); SGA completa.
+  1 termo = 249 consultas (140 rápida, 108 normal, 1 completa) ≈ 7 h / 11 lotes (sem e-mail).
+  Dados coletados por um workflow temporário na branch (o proxy do ambiente de dev bloqueia o IBGE); removido.
+- **Estado público da fila** (`fila/estado`): só id, tipo, mae_id, estimativa; `rodando` com restante;
+  `aguardando` (agendadas/pausadas). Gravado só quando muda.
+- **Métricas** (`config/metricas`): média real por consulta por profundidade/e-mail (n até 50), usada nas estimativas.
+- **Documentos**: `buscas` tem `tipo` (comum | rn_mae | rn_filha) e `lista: true` (comum e mãe) para
+  "Minhas buscas". Índices compostos em `firestore.indexes.json`.
+- **Netlify**: credencial do Firebase em 3 variáveis (limite de tamanho das env vars de Functions);
+  token GitHub fine-grained só com Actions RW. Config web pública via `/api/config-publica`.
+- Datas na tela sempre em America/Fortaleza.
 
 ## Estado atual
-- Fase 1 implementada: `motor/`, `.github/workflows/motor.yml`, `.github/workflows/testes.yml`,
-  `firestore.rules`. Vigia de tempo adicionada (PR 2). 35 testes pytest passando (dados fictícios).
-- Firebase e secrets do GitHub já configurados pelo Breno; motor conecta e cria a busca.
-- Pendente: execução real completa após o merge da vigia; recalibrar tabela de tempos com
-  `duracao_segundos` reais e checar o diagnóstico (inatividade/consentimento).
+- Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
+- Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
+  + 11 Functions no emulador) + teste de fumaça da página no Chromium com emuladores.
+- Pendente após o merge: configuração (README "Configuração da Fase 2") e validação real
+  (busca comum pela página, limite, 403 no RN para usuário comum, preempção durante RN, cancelamento).
+- Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 
-## Próximos passos (Fase 2 — só após aprovação)
-- Perguntar ao Breno: limite diário padrão por usuário; fuso para "dia" (sugestão America/Fortaleza).
-- Netlify Functions: criar busca (valida ID token + limite diário via contador em `/usuarios/{uid}`),
-  disparar workflow com `busca_id`, CRUD de usuários + custom claims (admin).
-- Regras do Firestore completas (dono lê o próprio; admin lê tudo; leads nunca gravados pelo navegador).
-- `schedule` de segurança no motor para processar buscas que ficarem na fila; manter tudo no plano grátis.
+## Pendências da Fase 3 (não implementar antes)
+- Tela definitiva single-file (login, nova busca, minhas buscas com filtro "só da cidade pedida" ligado
+  por padrão, tabela de leads, download .xlsx no navegador `segmento-cidade-data.xlsx` / `segmento-RN-data.xlsx`
+  com coluna `cidade_confere`, painel admin).
+- **Aba "Oportunidades x IBGE"** (pedido do Breno em 23/09): cruza os leads de um segmento com dados do IBGE
+  por município do RN — qtd de leads, leads por 10 mil habitantes, % com WhatsApp, destaque de cidades com
+  poucos estabelecimentos para o tamanho da população (possível mercado pouco atendido). Tabela ordenável +
+  mapa do RN colorido por município. Só CDN, custo zero, sem leituras pesadas no Firestore (usar os leads
+  da busca-mãe já consolidada); números do IBGE em arquivo fixo no repo. **Só dados reais** (IBGE oficial +
+  leads coletados), nada estimado. **Antes de implementar: perguntar ao Breno quais indicadores do IBGE usar
+  (população, PIB per capita, etc.) e a fonte exata de cada um.** A malha geográfica do mapa também
+  precisa de fonte oficial (IBGE) — confirmar com ele.
