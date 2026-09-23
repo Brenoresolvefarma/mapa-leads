@@ -1,0 +1,37 @@
+# Verifica as Netlify Functions no ar (chamadas reais, sem login): cada uma precisa
+# carregar e responder (200/401/405). Só status HTTP no log. Grátis (repo público).
+# Uso: Actions > Verificar Functions > Run workflow (URL padrão = produção).
+# Obs.: em deploy preview, as variáveis marcadas como secretas no Netlify (FIREBASE_PRIVATE_KEY,
+# MAPALEADS_GITHUB_TOKEN) não existem; as checagens "com token inválido" dão 500 lá. Use em produção.
+name: Verificar Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL do site (produção ou deploy preview)"
+        required: true
+        default: "https://mapaleads-rn.netlify.app"
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Verificar (com novas tentativas enquanto o deploy termina)
+        env:
+          URL_SITE: ${{ github.event.inputs.url }}
+        run: |
+          for tentativa in $(seq 1 20); do
+            if node ferramentas/verificar_functions.mjs "$URL_SITE"; then exit 0; fi
+            echo "Tentativa $tentativa falhou; aguardando o deploy (60 s)..."
+            sleep 60
+          done
+          exit 1

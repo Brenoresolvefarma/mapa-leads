@@ -85,15 +85,28 @@ Admin (Breno) + usuários comuns. Buscas sob demanda: termos e cidades livres, e
 - **Métricas** (`config/metricas`): média real por consulta por profundidade/e-mail (n até 50), usada nas estimativas.
 - **Documentos**: `buscas` tem `tipo` (comum | rn_mae | rn_filha) e `lista: true` (comum e mãe) para
   "Minhas buscas". Índices compostos em `firestore.indexes.json`.
+- **firebase-admin fixado em 13.x (13.10.0)**: a 14.x traz `jwks-rsa` 4 + `jose` 6 (só ESM) e o runtime das
+  Functions do Netlify não faz `require()` de ES Module → 502 `ERR_REQUIRE_ESM` em produção (24/09).
+  A 13.x usa `jwks-rsa` 3 + `jose` 4 (CommonJS). Não subir para 14 sem rodar `npm run test:empacotadas`
+  (empacota com o zip-it-and-ship-it do Netlify e roda com `--no-experimental-require-module`; está no CI).
+  `ferramentas/verificar_functions.mjs` + workflow "Verificar Functions" checam as Functions no ar (só status HTTP).
 - **Netlify**: credencial do Firebase em 3 variáveis (limite de tamanho das env vars de Functions);
   token GitHub fine-grained só com Actions RW. Config web pública via `/api/config-publica`.
 - Datas na tela sempre em America/Fortaleza.
+
+## Pendente para o próximo PR (decidido pelo Breno em 24/09)
+- **Disjuntor**: cidade pequena sem resultado NÃO conta como sinal de bloqueio. Só contar consulta vazia se
+  o scraper também teve falha/erro (motivo da vigia ≠ fim normal, ou código de erro) OU se a cidade tem
+  mais de 20 mil habitantes (Censo 2022). Consultas por bairro (Natal/Mossoró/Parnamirim) contam como > 20 mil.
+- Somar a isso o que aparecer no teste real da Fase 2.
 
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
   + 11 Functions no emulador) + teste de fumaça da página no Chromium com emuladores.
-- Pendente após o merge: configuração (README "Configuração da Fase 2") e validação real
+- Configuração da Fase 2 feita pelo Breno (site: https://mapaleads-rn.netlify.app). 1º teste real: login falhou
+  (502 em /api/config-publica, ERR_REQUIRE_ESM) → corrigido no PR 4 (firebase-admin 13.10.0).
+- Pendente: validação real
   (busca comum pela página, limite, 403 no RN para usuário comum, preempção durante RN, cancelamento).
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 

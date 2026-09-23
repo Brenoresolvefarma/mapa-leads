@@ -49,5 +49,7 @@ jobs:
         run: npm run test:regras
       - name: Functions contra os emuladores (Auth + Firestore)
         run: npm run test:funcoes
+      - name: Functions EMPACOTADAS como no Netlify, sem require() de ES Module (runtime de produção)
+        run: npm run test:empacotadas
       - name: Motor contra o emulador (scraper falso)
         run: npm run test:motor
