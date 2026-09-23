@@ -41,9 +41,27 @@ export function handler(fn, { metodo = "POST" } = {}) {
       return await fn(req);
     } catch (erro) {
       if (erro instanceof ErroHttp) return json(erro.status, { erro: erro.message });
-      console.error("Erro inesperado na Function:", erro?.name || "Erro"); // sem dados do usuário
-      return json(500, { erro: "Erro inesperado no servidor. Tente novamente." });
+      // Log técnico (vai só para o log privado do Netlify): nome, código e mensagem do erro.
+      // Nunca inclui o corpo do pedido, o token nem dados de leads.
+      console.error("Erro inesperado na Function:", JSON.stringify(resumoDoErro(erro)));
+      // Para quem chamou, só o código técnico (ex.: 7 = PERMISSION_DENIED do Firestore).
+      return json(500, {
+        erro: "Erro inesperado no servidor. Tente novamente.",
+        codigo: erro?.code === undefined ? null : String(erro.code).slice(0, 40),
+      });
     }
+  };
+}
+
+/** Resumo seguro de um erro para o log: nome, código, mensagem e detalhes (cortados). */
+export function resumoDoErro(erro) {
+  const cortar = (v, n = 400) => (v === undefined || v === null ? null : String(v).slice(0, n));
+  return {
+    nome: cortar(erro?.name, 80),
+    codigo: cortar(erro?.code, 80),
+    mensagem: cortar(erro?.message),
+    detalhes: cortar(erro?.details),
+    causa: cortar(erro?.cause?.message ?? erro?.cause?.code),
   };
 }
 

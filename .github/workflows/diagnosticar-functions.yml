@@ -1,0 +1,37 @@
+# Diagnóstico do /api/criar-busca contra o Firebase de PRODUÇÃO, sem gravar buscas
+# (só "simular"). Usa um login de teste temporário que é apagado no final.
+# Log público: só status, códigos e mensagens técnicas (e-mail da conta e chave mascarados).
+# Uso: Actions > Diagnosticar Functions > Run workflow.
+name: Diagnosticar Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL do site"
+        required: true
+        default: "https://mapaleads-rn.netlify.app"
+  # TEMPORÁRIO (investigação do 500 no criar-busca): roda a cada push nesta branch.
+  push:
+    branches: [claude/great-darwin-pt5gmw]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnosticar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Empacotar as Functions como o Netlify
+        run: node testes/empacotar.mjs
+      - name: Diagnosticar
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node --no-experimental-require-module ferramentas/diagnosticar_criar_busca.mjs "${{ github.event.inputs.url || 'https://mapaleads-rn.netlify.app' }}"
