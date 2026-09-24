@@ -21,6 +21,10 @@ on:
           - completo
           - crm-pb
           - comemoracao
+      api_local:
+        description: "Só para comemoracao: Functions deste commit no runner (para o deploy preview de um PR, que não tem os secrets)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -54,9 +58,13 @@ jobs:
           NAVEGADOR: /usr/bin/google-chrome
           PASTA_CAPTURAS: ${{ runner.temp }}/capturas
         run: node testes/capturas-crm-pb.mjs "${{ github.event.inputs.url }}"
-      - name: Comemoração no ar (vendedor novo com vídeo + master só com números; criação simulada, nada na fila)
+      - name: Empacotar as Functions como o Netlify (só com api_local)
+        if: github.event.inputs.api_local == 'true'
+        run: node testes/empacotar.mjs
+      - name: Comemoração no ar (vendedor novo com vídeo + master só com números; criação simulada ou real e apagada na hora)
         if: github.event.inputs.conjunto == 'comemoracao'
         env:
+          API_LOCAL: ${{ github.event.inputs.api_local == 'true' && '1' || '0' }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           NAVEGADOR: /usr/bin/google-chrome
           PASTA_CAPTURAS: ${{ runner.temp }}/capturas

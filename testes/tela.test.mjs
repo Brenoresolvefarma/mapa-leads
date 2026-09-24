@@ -807,7 +807,9 @@ test("apagar busca: vendedor apaga a própria em dois passos (celular); em andam
 
 // Acompanha a comemoração: espera o canvas, lê o máximo de quadros/peças enquanto existe e quanto tempo ficou na tela.
 async function acompanharComemoracao(p, { travarMs = 0 } = {}) {
-  await p.waitForSelector("#comemoracao", { state: "attached", timeout: 15000 });
+  await p.waitForSelector("#comemoracao", { state: "attached", timeout: 15000 }).catch(async (e) => {
+    throw new Error(`${e.message.split("\n")[0]} · avisos: ${await p.textContent("#toasts").catch(() => "")} · ${await p.evaluate(() => location.hash)}`);
+  });
   const inicio = Date.now();
   const c = await p.$eval("#comemoracao", (e) => {
     const z = (sel) => Number(getComputedStyle(document.querySelector(sel)).zIndex) || 0, r = e.getBoundingClientRect();
@@ -819,10 +821,12 @@ async function acompanharComemoracao(p, { travarMs = 0 } = {}) {
   // Tela travada logo depois (como no celular do master em produção: 3 s de trava ao chegar a busca nova e redesenhar o Início).
   if (travarMs) await p.evaluate((ms) => { const fim = performance.now() + ms; while (performance.now() < fim) { /* trava */ } }, travarMs);
   let quadros = 0;
-  while (await p.locator("#comemoracao").count()) {
-    quadros = Math.max(quadros, Number(await p.locator("#comemoracao").getAttribute("data-quadros").catch(() => 0)) || 0);
+  for (;;) {
+    const q = await p.evaluate(() => { const e = document.querySelector("#comemoracao"); return e ? Number(e.dataset.quadros) || 0 : -1; });
+    if (q < 0) break;
+    quadros = Math.max(quadros, q);
     await p.waitForTimeout(100);
-    if (Date.now() - inicio > 9000) throw new Error("a comemoração não sumiu");
+    if (Date.now() - inicio > 9000) throw new Error(`a comemoração não sumiu (quadros ${quadros})`);
   }
   return { ...c, quadros, durou: Date.now() - inicio };
 }
@@ -839,6 +843,9 @@ test("comemoração: ao criar a busca, 25–40 logos saltam por ~2 s por cima de
   const criar = async (p) => {
     const cel = p.viewportSize().width < 500, toque = (sel) => (cel ? p.locator(sel).first().tap() : p.locator(sel).first().click());
     await p.evaluate(() => { location.hash = "#nova"; });
+    // Segunda busca: a Nova busca continua no passo 3 → volta ao passo 1
+    for (const v of ["[data-passo-conteudo='3'] [data-ir-passo='2']", "[data-passo-conteudo='2'] [data-ir-passo='1']"])
+      if (await p.locator(v).first().isVisible()) await toque(v);
     await p.fill("#termo-input", "pet shop"); await p.press("#termo-input", "Enter");
     await toque("[data-passo-conteudo='1'] [data-ir-passo='2']");
     await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
@@ -846,20 +853,21 @@ test("comemoração: ao criar a busca, 25–40 logos saltam por ~2 s por cima de
     await toque("[data-passo-conteudo='2'] [data-ir-passo='3']");
     await toque("#buscar");
   };
-  for (const [largura, altura] of [[1366, 768], [390, 844]]) {
+  // Cota do dia da Ana livre para as 3 buscas daqui (os testes anteriores já usaram parte); devolvida no fim.
+  const refAna = firebase().db.doc(`usuarios/${uids.ana}`), antesAna = (await refAna.get()).data();
+  await refAna.update({ contagem_dia: 0, consultas_dia: 0 });
+  // 390 px: com a tela TRAVADA 1,5 s logo depois de começar (como no celular do master em produção, quando a busca nova
+  // chega e o Início redesenha) — o relógio antigo perdia a festa inteira; agora ela espera e continua.
+  for (const [largura, altura, travarMs] of [[1366, 768, 0], [390, 844, 1500]]) {
     const p = await abrir("ana@x.example", "senha-forte-2", { width: largura, height: altura });
     await criar(p);
     const cap = process.env.PASTA_CAPTURAS ? p.waitForTimeout(700).then(() => capturar(p, `comemoracao-nova-busca-${largura}`)) : null;
-    const c = await acompanharComemoracao(p);
+    const c = await acompanharComemoracao(p, { travarMs });
     await cap;
     conferirChuva(c, largura);
     assert.equal(c.hash, "#nova", "a festa começa antes de trocar de página");
     await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
     await p.waitForFunction(() => location.hash === "#inicio", null, { timeout: 5000 }); // e depois vai para o Início
-    // Tela travada 1,5 s logo depois de começar (o relógio antigo perdia a festa inteira): continua e desenha
-    await criar(p);
-    const t = await acompanharComemoracao(p, { travarMs: 1500 });
-    conferirChuva(t, largura);
     assert.deepEqual(erros, []);
     await p.context().close();
   }
@@ -885,6 +893,7 @@ test("comemoração: ao criar a busca, 25–40 logos saltam por ~2 s por cima de
   const { db } = firebase();
   for (const d of (await db.collection("buscas").where("dono_uid", "==", uids.ana).get()).docs)
     if ((d.data().parametros?.termos || []).includes("pet shop")) await d.ref.delete();
+  await refAna.update({ contagem_dia: antesAna.contagem_dia ?? 0, consultas_dia: antesAna.consultas_dia ?? 0 }); // devolve a cota como estava
 });
 
 test("paralelismo: busca rodando mostra 'X de Y cidades prontas' e os leads já prontos; aviso de cidades pequenas na Nova busca", async () => {

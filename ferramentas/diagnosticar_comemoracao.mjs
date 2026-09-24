@@ -12,6 +12,7 @@ import { chromium } from "playwright-core";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { carregarFuncoesLocais, rotearApiLocal } from "./api_local.mjs";
 
 const SITE = (process.argv[2] || "https://mapaleads-rn.netlify.app").replace(/\/$/, "");
 const PASTA = process.env.PASTA_CAPTURAS || "capturas-comemoracao";
@@ -20,6 +21,8 @@ const conta = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
 if (!conta.private_key) { console.log("ERRO: secret FIREBASE_SERVICE_ACCOUNT ausente."); process.exit(1); }
 const app = initializeApp({ credential: cert(conta) }, "diag-comemoracao");
 const auth = getAuth(app), db = getFirestore(app);
+// API_LOCAL=1: página do deploy preview (sem os secrets) + Functions DESTE commit no runner, com as credenciais reais.
+const funcoesLocais = process.env.API_LOCAL === "1" ? await carregarFuncoesLocais(conta) : null;
 const sufixo = randomBytes(4).toString("hex");
 const contas = {
   vendedor: { email: `diag-com-v-${sufixo}@example.com`, senha: randomBytes(12).toString("base64url"), nome: "Vendedor Teste" },
@@ -72,11 +75,12 @@ async function abrir(u, { largura, reduzir = false, video = "", real = false, cp
     reducedMotion: reduzir ? "reduce" : "no-preference", ...(video ? { recordVideo: { dir: PASTA, size: viewport } } : {}) });
   await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
   await ctx.addInitScript(INSTRUMENTOS);
+  if (funcoesLocais) await rotearApiLocal(ctx, SITE, funcoesLocais);
   // Criação simulada: nada vai para a fila. Com real=true a busca é criada DE VERDADE (como o usuário faz: a lista de
   // buscas recebe a nova e a tela redesenha) e apagada logo depois da medição (limparReais), antes de o motor pegar.
   if (!real) await ctx.route("**/api/criar-busca", async (r) => {
     let corpo = {}; try { corpo = r.request().postDataJSON() || {}; } catch {}
-    if (corpo.simular) return r.continue();
+    if (corpo.simular) return r.fallback(); // estimativa: servidor de verdade (ou as Functions locais)
     await new Promise((ok) => setTimeout(ok, 300));
     return r.fulfill({ json: { ok: true, id: `diag-${sufixo}`, estimativa_seg: 900, restantes_hoje: 19, consultas: 249, lotes: 11, agendada_para: null } });
   });
