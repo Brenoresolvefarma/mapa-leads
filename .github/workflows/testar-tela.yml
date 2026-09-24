@@ -13,13 +13,14 @@ on:
         required: true
         default: "https://mapaleads-rn.netlify.app"
       modo:
-        description: "so_tela (não cria busca real) ou criar_e_cancelar (clica Buscar, cancela na hora e apaga)"
+        description: "so_tela (não cria busca real), criar_e_cancelar (clica Buscar, cancela na hora e apaga) ou equipes (master/gestor/vendedor: regras, Functions e tela)"
         required: true
         default: "so_tela"
         type: choice
         options:
           - so_tela
           - criar_e_cancelar
+          - equipes
       api_local:
         description: "Functions deste commit rodando no runner (para testar o deploy preview de um PR antes do merge)"
         type: boolean
@@ -43,7 +44,14 @@ jobs:
       - name: Empacotar as Functions como o Netlify (só com api_local)
         if: github.event.inputs.api_local == 'true'
         run: node testes/empacotar.mjs
+      - name: Equipes no ar (contas temporárias de master, gestores e prepostos; tudo apagado no fim)
+        if: github.event.inputs.modo == 'equipes'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          NAVEGADOR: /usr/bin/google-chrome
+        run: node ferramentas/testar_equipes_producao.mjs "${{ github.event.inputs.url }}"
       - name: Testar a tela no ar
+        if: github.event.inputs.modo != 'equipes'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           MODO: ${{ github.event.inputs.modo }}
