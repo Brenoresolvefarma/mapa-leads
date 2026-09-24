@@ -1329,3 +1329,88 @@ test("mini-CRM e carteira (390 px): status em um toque, 'Como foi?', histórico,
   for (const id of ["crmA", "crmB"]) { await db.doc(`buscas/${id}/lotes/0`).delete(); await db.doc(`buscas/${id}`).delete(); }
   void breno;
 });
+
+test("PB (390 px): Nova busca na Paraíba manda as cidades com 'PB'; Mapa PB com aprofundamento até os leads; Mercado PB; Estado inteiro PB estima", async () => {
+  const { db } = firebase();
+  const breno = (await firebase().auth.getUserByEmail("breno@x.example")).uid;
+  // Uma busca fictícia em João Pessoa (PB) com um lead
+  await db.doc("buscas/pbA").set({ tipo: "comum", lista: true, dono_uid: uids.ana, status: "concluida", criada_em: new Date(), finalizada_em: new Date(),
+    parametros: { termos: ["clínica"], cidades: ["João Pessoa PB"] }, qtd_lotes: 1, resumo: { total: 1 } });
+  await db.doc("buscas/pbA/lotes/0").set({ dono_uid: uids.ana, leads: [lead({ nome: "Clínica Paraibana", cidade: "João Pessoa", uf: "PB", cidade_buscada: "João Pessoa PB", id_lugar: "pb1",
+    latitude: -7.115, longitude: -34.86 })] });
+  const tel = { width: 390, height: 844 };
+  const esperarPB = (pg, fn) => pg.waitForFunction(fn, null, { timeout: 15000 }).catch(async (e) => {
+    throw new Error(`${e.message} [${String(fn).slice(6, 70)}] — hash ${await pg.evaluate(() => location.hash)} · painel: ${await pg.evaluate(() => (document.querySelector("#mapa-painel")?.innerText || "").replace(/\s+/g, " ").slice(0, 400))} · erros: ${erros.join(" | ")}`); });
+  const p = await abrir("ana@x.example", "senha-forte-2", tel);
+  // ---- Nova busca: seletor de estado com RN e PB; ao trocar, regiões e cidades da PB
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  assert.deepEqual(await p.$$eval("#uf option", (o) => o.map((x) => x.textContent)), ["Rio Grande do Norte", "Paraíba"]);
+  await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  await p.selectOption("#uf", "PB");
+  await p.waitForSelector("#regioes input[data-regiao='25022']", { state: "attached" }); // microrregião de João Pessoa
+  assert.match(await p.textContent("#lista-cidades"), /Campina Grande/);
+  assert.doesNotMatch(await p.textContent("#lista-cidades"), /Mossoró/);
+  assert.equal(await p.locator("#lista-cidades input[data-cidade]").count(), 223);
+  assert.match(await p.textContent("#outras-rot"), /fora da PB/);
+  await p.$eval("#regioes input[data-regiao='25022']", (e) => e.closest("label").scrollIntoView({ block: "center" }));
+  await p.check("#regioes input[data-regiao='25022']");
+  await esperarTexto(p, "#qtd-cidades", /^6 de 40 cidades$/);
+  let m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `Nova busca PB: ${m.fora.join(", ")}`);
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  const [pedidoSim] = await Promise.all([p.waitForRequest((r) => r.url().includes("/api/criar-busca") && JSON.parse(r.postData() || "{}").simular === true)]);
+  const cidadesSim = JSON.parse(pedidoSim.postData()).cidades.split(",");
+  assert.deepEqual(cidadesSim, ["Bayeux PB", "Cabedelo PB", "Conde PB", "João Pessoa PB", "Lucena PB", "Santa Rita PB"]);
+  // O servidor recebe e grava as consultas com "PB"
+  const [resp] = await Promise.all([p.waitForResponse((r) => r.url().includes("/api/criar-busca") && JSON.parse(r.request().postData() || "{}").simular !== true), p.tap("#buscar")]);
+  const criada = await resp.json();
+  const b = (await db.doc(`buscas/${criada.id}`).get()).data();
+  assert.ok(b.parametros.cidades.every((c) => / PB$/.test(c)));
+  // ---- Mapa da PB: estado › microrregião › município › leads
+  await p.evaluate(() => { location.hash = "#mapa/pb"; });
+  await esperarPB(p, () => /Paraíba/.test(document.querySelector("#mapa-painel h2")?.textContent || ""));
+  assert.equal(await p.$eval("#uf-mapa", (e) => e.value), "PB");
+  assert.match(await p.textContent("#migalhas"), /^PB/);
+  await p.locator("#mapa-painel [data-ir-micro='25022']").tap();
+  await esperarPB(p, () => location.hash === "#mapa/pb/joao-pessoa");
+  await p.locator("#mapa-painel [data-ir-mun='2507507']").tap();
+  await esperarPB(p, () => location.hash === "#mapa/pb/joao-pessoa/joao-pessoa");
+  await esperarPB(p, () => /^PB›JoãoPessoa›JoãoPessoa$/.test(document.querySelector("#migalhas").textContent.replace(/\s+/g, "")));
+  await esperarPB(p, () => /Leads do segmento\s*i?\s*1\s/.test(document.querySelector("#mapa-painel")?.innerText || ""));
+  m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `Mapa PB: ${m.fora.join(", ")}`);
+  await p.tap("#mapa-ver-tabela");
+  await p.locator("#cartoes .cartao-lead", { hasText: "Clínica Paraibana" }).waitFor();
+  // Voltar ao Mapa do RN continua como sempre
+  await p.evaluate(() => { location.hash = "#mapa/rn"; });
+  await esperarPB(p, () => /Rio Grande do Norte/.test(document.querySelector("#mapa-painel h2")?.textContent || ""));
+  // ---- Mercado da PB: números do estado (IBGE)
+  await p.tap("#barra-inferior a[data-ir=mercado]").catch(() => p.evaluate(() => { location.hash = "#mercado"; }));
+  await p.evaluate(() => { location.hash = "#mercado"; });
+  await p.waitForSelector("#uf-mercado");
+  await p.selectOption("#uf-mercado", "PB");
+  await esperarTexto(p, "#kpis-mercado", /População da PB\s*i?\s*3\.974\.687/);
+  assert.match(await p.textContent("#kpis-mercado"), /PIB per capita \(PB\)\s*i?\s*R\$\s*21\.66\d/);
+  assert.match(await p.textContent("#kpis-mercado"), /Empresas \(CEMPRE · PB\)\s*i?\s*127\.114/);
+  assert.match(await p.textContent("#kpis-mercado"), /de 223 municípios pesquisados/);
+  m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `Mercado PB: ${m.fora.join(", ")}`);
+  assert.deepEqual(erros, []);
+  await p.context().close();
+  // ---- Estado inteiro (admin): PB estima 345 consultas
+  const a = await abrir("breno@x.example", "senha-forte-1", tel);
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await a.waitForSelector("#rn-uf");
+  assert.match(await a.textContent("#estados"), /✓ Paraíba/);
+  assert.match(await a.textContent("#estados"), /Pernambuco · em breve/);
+  await a.selectOption("#rn-uf", "PB");
+  await a.fill("#rn-termos", "dentista");
+  await a.tap("#rn-estimar");
+  await esperarTexto(a, "#msg-rn", /^345 consultas em \d+ lotes · tempo estimado ~[\d,]+ h/);
+  assert.match(await a.textContent("#rn-confirmar"), /Estado inteiro \(PB\)/);
+  assert.deepEqual(erros, []);
+  await a.context().close();
+  for (const id of [criada.id]) for (const d of (await db.collection("buscas").where("mae_id", "==", id).get()).docs) await d.ref.delete();
+  await db.doc(`buscas/${criada.id}`).delete();
+  await db.doc("buscas/pbA/lotes/0").delete(); await db.doc("buscas/pbA").delete();
+  void breno;
+});

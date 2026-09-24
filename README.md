@@ -49,6 +49,25 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
   - "Lista inteira": a busca e os lotes ganham `liberada_para` (uid).
   - Recorte (algumas cidades ou dividida): cópia só com os leads das cidades do vendedor em
     `buscas/{id}/liberacoes/{uid}/lotes/{n}` — a regra deixa cada um ler só o seu caminho.
+- **Status de cada lead (mini-CRM)** — Function `/api/crm-lead`:
+  - Novo › Contatado › Negociando › Cliente › Descartado (com motivo: sem interesse, fechou, número errado, outro),
+    anotação e "Próximo contato em"; histórico na ficha ("23/09 · Flávio · Contatado · ligar sexta", 10 últimos).
+  - No celular: botões grandes de status no cartão e na ficha (um toque); depois de tocar em WhatsApp ou Ligar,
+    a tela pergunta **"Como foi?"** com os status em botões.
+  - Meus leads: contador por status no topo (clicável = filtra) e a aba **"Para hoje"** (próximo contato hoje ou
+    atrasado). Início do vendedor: cartão **"Para hoje: X contatos"**. O .xlsx ganhou Status, Próximo contato,
+    Última anotação e Vendedor.
+  - Cada vendedor vê e muda só os dele (`crm/{uid}__{fatia}`); o admin vê todos (sem mudar). Log sem dados de lead.
+- **Carteira (sem conflito entre vendedores)**: o mesmo estabelecimento em buscas diferentes é reconhecido (place_id
+  do Google; sem ele, telefone + nome). Marcou Contatado/Negociando/Cliente → o lead é **da carteira** do vendedor;
+  para os outros aparece **"Na carteira de <nome>"**, sem WhatsApp/Ligar e fora do "Para hoje". Descartado ou sem
+  contato há **60 dias** (ajustável em Admin › Configurações) volta a ficar livre. O admin transfere pela ficha e vê
+  o painel **Carteiras** (leads por vendedor e status, conversão = Clientes ÷ Contatado+Negociando+Cliente).
+  A liberação "Dividir entre os vendedores" já respeita a carteira (lead de alguém não vai para outro).
+- **Estados ativos: RN e Paraíba (PB, ativada em 24/09)**. Nova busca, Mapa e Mercado têm o seletor de estado (um só,
+  guardado no aparelho); as consultas da PB vão ao Google com "PB". Estado inteiro (admin): RN ou PB, com a estimativa
+  (PB: 345 consultas por termo, ~9,8 h — mesmas faixas do RN; João Pessoa e Campina Grande por bairro). Limites do
+  vendedor, aviso de cidades pequenas, liberação, carteira e status valem igual na PB. Os outros estados: "em breve".
 - **RN inteiro** (**só admin**, bloqueado no servidor): um segmento nos 167 municípios do RN.
   Não conta no limite diário. Detalhes abaixo.
 - **Fila sem perda e sem travar ninguém**: buscas comuns passam na frente dos lotes do RN
@@ -285,8 +304,9 @@ O log público mostra só números, ex.:
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
 
 ## Configuração depois do merge do PR 16 (liberar busca para vendedor)
-**Obrigatório** (sem isso o vendedor não vê as listas liberadas; o resto continua funcionando):
-1. Firebase › Firestore › **Regras**: cole o conteúdo novo de [`firestore.rules`](firestore.rules) › **Publicar**.
+**Obrigatório** (sem isso o vendedor não vê as listas liberadas nem os status/carteira; o resto continua funcionando):
+1. Firebase › Firestore › **Regras**: cole o conteúdo novo de [`firestore.rules`](firestore.rules) › **Publicar**
+   (novas: buscas liberadas, `crm/{uid}__{fatia}` e `carteira/{fatia}`).
 2. Firebase › Firestore › **Índices** › Composto › **Criar índice** (coleção `buscas`, escopo Coleção):
    `lista` Crescente · `liberada_para` **Arrays** (contém) · `criada_em` Decrescente. Leva alguns minutos para ficar pronto.
 

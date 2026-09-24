@@ -729,4 +729,18 @@ test("PB: Estado inteiro (admin) estima com 'PB'; vendedor recebe 403; busca com
   const s2 = await pedido(criarBusca, { termos: "dentista", cidades: muitas, profundidade: "rapida", simular: true }, tokens.ana);
   assert.equal(s2.status, 400);
   assert.match(s2.corpo.erro, /41 cidades/);
+  // Liberação dividida, status e carteira com leads da PB (mesmas regras do RN)
+  const { auth, db } = firebase();
+  const [fla, gil, ana] = await Promise.all(["fla", "gil", "ana"].map((n) => auth.getUserByEmail(`${n}@x.example`)));
+  await db.doc("buscas/pbL").set({ dono_uid: ana.uid, tipo: "comum", lista: true, status: "concluida", qtd_lotes: 1, criada_em: new Date(), parametros: { termos: ["x"], cidades: ["João Pessoa PB", "Patos PB"] } });
+  await db.doc("buscas/pbL/lotes/0").set({ dono_uid: ana.uid, leads: [
+    { nome: "JP1", cidade: "João Pessoa", uf: "PB", id_lugar: "PBJ1" }, { nome: "JP2", cidade: "João Pessoa", uf: "PB", id_lugar: "PBJ2" },
+    { nome: "PT1", cidade: "Patos", uf: "PB", id_lugar: "PBP1" }] });
+  const lib = await pedido(liberarBusca, { acao: "liberar", id: "pbL", vendedores: [fla.uid, gil.uid], modo: "inteira", dividir: true }, tokens.breno);
+  assert.equal(lib.status, 200);
+  const deFla = lib.corpo.por_vendedor.find((x) => x.uid === fla.uid);
+  const chave = deFla.cidades.includes("João Pessoa") ? "p_PBJ1" : "p_PBP1";
+  assert.equal((await pedido(crmLead, { acao: "status", busca_id: "pbL", chave, status: "contatado" }, tokens.fla)).status, 200);
+  assert.equal((await pedido(crmLead, { acao: "status", busca_id: "pbL", chave, status: "contatado" }, tokens.gil)).status, 403); // não é da parte dele
+  await pedido(apagarBusca, { id: "pbL" }, tokens.breno);
 });

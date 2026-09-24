@@ -31,7 +31,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 ## Arquitetura
 1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a v2** no ar; celular primeiro no PR 13).
 2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
-3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/liberar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
+3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/liberar-busca`, `/api/crm-lead`, `/api/admin-usuarios`, `/api/config-publica`,
    `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
    Firebase; validam ID token (checkRevoked) — Fases 2 e 3a (feito).
 4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify;
@@ -349,6 +349,51 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   cidades, divisão sem repetir, revogar, cota, apagar), lógica (divisão) e tela 390 px (admin divide com prévia,
   vendedor vê etiqueta sem Apagar e só as cidades dele, revogar some na hora, sem rolagem lateral).
 
+### Mini-CRM e carteira (PR 16, aprovados pelo Breno em 24/09)
+- **Function `/api/crm-lead`**: `status` (vendedor: só lead de busca dele ou liberada p/ ele — o servidor confere se a
+  chave está nos lotes/cópia), `transferir` (admin), `carteiras` (admin). Log sem chave, nome ou anotação.
+- **Chave do estabelecimento** (`logica.chaveLead` = bloco `<crm>` do index.html `chaveCrm`; `testes/crm.test.mjs`
+  confere que batem): `p_<place_id>`; sem ele `t_<telefone>_<nome>`; sem telefone `n_<nome>_<cidade>`. A deduplicação
+  da tela continua com a chave antiga (números do RN não mudam). 16 fatias por hash (`fatiaDe`).
+- **Firestore**: `crm/{uid}__{fatia}` = `{dono_uid, leads: {chave: {s, m, n, p, em, busca, h[10]}}}` (regra pelo id:
+  o próprio e o admin); `carteira/{fatia}` = `{leads: {chave: {uid, nome, s, desde, ultimo}}}` (logados leem). Gravação
+  só pela Function (transação). Vendedor lê 32 docs por visita; admin lê todos os `crm/*`.
+- **Carteira**: Contatado/Negociando/Cliente põem na carteira; Descartado/Novo tiram; vale enquanto
+  `agora − ultimo ≤ config/geral.carteira_dias` (padrão 60, Admin › Configurações, 1–3650). Lead na carteira de outro →
+  409 "Este lead está na carteira de X"; na tela: etiqueta, sem WhatsApp/Ligar/status, fora do Para hoje.
+  Transferir: novo dono com o status da carteira + nota no histórico dos dois. Liberar dividindo: lead da carteira de
+  um escolhido vai só para ele; de não escolhido, para ninguém (`planoLiberacao({donoDe})`, `na_carteira_de_outros`).
+- **Tela**: `CRM` (meu/todos/carteira/dias), `crmDe(l)`, `htmlCrmCartao`, `htmlCrmFicha`, `#folha-crm` ("Como foi?" e
+  motivo do descarte), `#crm-barra` (contador + aba Para hoje, filtros `F.status`/`F.paraHoje`), `#para-hoje` no Início,
+  painel `#cartao-carteiras` no Admin. Admin vê o status do dono da carteira (ou o mais recente), sem botões.
+- **.xlsx**: + Status, Próximo contato, Última anotação, Vendedor (filtro em A1:T).
+
+### PB ativada (24/09, decisão do Breno)
+- **Dados** (workflow "Coletar dados de um estado", `ferramentas/coletar_estado.py`, UF=PB, coletado em 2026-09-24):
+  `municipios_pb.json` (API de Localidades v1 + SIDRA 4714 v93, Censo 2022: **223 municípios** = total da API, 3.974.687
+  hab.), `microrregioes_pb.json` (23 microrregiões, 15 regiões imediatas), `malha_pb_{municipio,microrregiao}_{minima,
+  intermediaria}.geojson.json` (API de Malhas v3, coordenadas com 4 casas), `ibge_pb_indicadores.json` (SIDRA 4714
+  população/área/densidade 2022; 5938 v37 PIB 2022; PIB per capita calculado = PIB ÷ Censo 2022; 9509 CEMPRE 2024
+  empresas/unidades/pessoal/salário) — nenhum município sem dado; `bairros_pb.json` (malha de bairros CD2022:
+  João Pessoa 64, Campina Grande 60).
+- **Estado inteiro PB** (respostas do Breno): mesmas faixas do RN (≤20 mil rápida, ≤100 mil normal, >100 mil completa),
+  João Pessoa e Campina Grande por bairro (normal), Santa Rita e Patos completa; 345 consultas/termo, ~9,8 h, 15 lotes;
+  só estimativa (sem limite extra), no máximo 2 máquinas, vendedor na frente, agendar para a noite.
+- **Servidor** (`logica.ESTADOS`/`UFS_ATIVAS` = RN, PB): `planoEstadoInteiro(termos, uf)`, `prepararRnInteiro({uf})`
+  (estado não ativo → 400), `parametros.uf` na mãe e nas filhas, consultas com `uf`; `cidadesPequenas` por estado
+  ("Nome PB"); perfis até 223 cidades. Tipos `rn_mae`/`rn_filha` mantidos (nome histórico = Estado inteiro).
+- **Motor**: `conferir_cidade` com estado (Estado inteiro: estado do endereço == `consulta.uf`, padrão RN; busca comum com
+  sigla: cidade e estado batem, sem estado no endereço vale a cidade); lead ganha `uf`; população do disjuntor por
+  (UF, nome).
+- **Tela**: carrega RN e PB no início (`ESTADOS_UI`); `usarEstado(uf)` troca MUNS/REGIOES/contornos/indicadores do estado
+  escolhido (seletor `.uf-seletor` em Nova busca, Mapa e Mercado; `?uf=PB`; guardado em `mapaleads.uf`); `porCodigo` e
+  `microPorId` globais; `infoCidade(nome, uf)` pela sigla; lead `_uf` (`uf` do motor → sigla da cidade pedida → busca → RN).
+  Mapa: URL `#mapa/pb/<micro>/<município>` (RN sem prefixo, como sempre); camadas refeitas ao trocar; só leads do estado
+  da tela. RN: mesma projeção e números de antes.
+- Testes: dados (223 = API), plano/estimativa PB, pequenas PB, Functions PB (Estado inteiro, limites, liberação e CRM
+  com leads da PB), motor (estado no endereço, nomes repetidos, população), tela 390 px (Nova busca PB com "PB", Mapa PB
+  até os leads, Mercado PB, Estado inteiro PB).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -367,7 +412,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   Mergeado; Verificar Functions e "Testar tela em produção" passaram.
 - **PR 15 (limites do vendedor)**: 40 cidades / 120 consultas por busca, 300 consultas/dia, 2 máquinas por vendedor.
   Mergeado; Verificar Functions e "Testar tela em produção" passaram.
-- **PR 16 (liberar busca para vendedor)**: Function, regras, índice e tela. Depende do Breno publicar regras + índice.
+- **PR 16**: liberar busca para vendedor + mini-CRM + carteira + PB ativa (um PR só, pedido do Breno). Depende do Breno
+  publicar as regras novas e criar o índice de `liberada_para`.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 
@@ -384,6 +430,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - Cuidados já identificados: nomes de município repetidos entre estados (ex.: Santa Cruz RN/PE, "Santa Luzia")
   → cidade sempre identificada por **código IBGE + UF**; `cidade_confere` passa a comparar cidade **e** UF;
   dedup continua por id_lugar. Dados atuais do RN (buscas/leads sem `uf`) contam como RN.
+- **Atualização 24/09: PB ativada** (ver "PB ativada" acima). Antes: "por enquanto SÓ O RN ativo".
 - **Decisão do Breno (após o PR 9): por enquanto SÓ O RN ativo.** Deixar a estrutura pronta — campo UF,
   cidade por código IBGE + UF, config de estados ativos (só `RN` ligado) — sem ativar outro estado.
 - **Adiado para quando o Breno for ativar outro estado** (perguntar nessa hora, não antes): (1) faixas de
