@@ -58,3 +58,9 @@ jobs:
           NAVEGADOR: /usr/bin/google-chrome
           TESTAR_XLSX: "1"
         run: npm run test:tela
+      - name: Tema no WebKit (motor do Safari do iPhone)
+        env:
+          MOTOR: webkit
+        run: |
+          npx --yes playwright@1.63.0 install --with-deps webkit
+          npx firebase emulators:exec --only firestore,auth --project demo-mapaleads "node --test --test-concurrency=1 --test-name-pattern='^tema' testes/tela.test.mjs"

@@ -43,6 +43,7 @@ await checar("criar-busca sem login", "/api/criar-busca", post({ termos: "x" }),
 await checar("criar-busca com token inválido", "/api/criar-busca", post({ termos: "x" }, "token-invalido"), 401);
 await checar("criar-busca método errado", "/api/criar-busca", {}, 405);
 await checar("cancelar-busca sem login", "/api/cancelar-busca", post({ id: "x" }), 401);
+await checar("apagar-busca sem login", "/api/apagar-busca", post({ id: "x" }), 401);
 await checar("admin-usuarios sem login", "/api/admin-usuarios", post({ acao: "listar" }), 401);
 await checar("perfis sem login", "/api/perfis", post({ acao: "listar" }), 401);
 await checar("saude-motor sem login", "/api/saude-motor", post({}), 401);

@@ -35,6 +35,8 @@ const usuarios = {
   admin: { email: `teste-tela-adm-${sufixo}@example.com`, senha: randomBytes(12).toString("base64url") },
 };
 const BUSCA = `teste-tela-${sufixo}`;
+// Buscas fictícias extras para testar o "Apagar busca" (vendedor apaga a própria; admin apaga a de outro; 403).
+const APAGAR = { comum: `teste-tela-apagar-${sufixo}`, admin: `teste-tela-apagar-adm-${sufixo}`, doAdmin: `teste-tela-do-adm-${sufixo}` };
 const pasta = mkdtempSync(join(tmpdir(), "tela-"));
 const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const criadas = [];
@@ -68,7 +70,8 @@ try {
 
   navegador = await chromium.launch({ executablePath: process.env.NAVEGADOR || "/usr/bin/google-chrome" });
   const abrir = async (u, viewport = { width: 1366, height: 768 }) => {
-    const ctx = await navegador.newContext({ acceptDownloads: true, locale: "pt-BR", viewport, hasTouch: viewport.width < 500 });
+    const ctx = await navegador.newContext({ acceptDownloads: true, locale: "pt-BR", viewport, hasTouch: viewport.width < 500, isMobile: viewport.width < 500,
+      colorScheme: viewport.width < 500 ? "dark" : "light" }); // celular com o aparelho em modo escuro: a tela tem que abrir clara
     // Sem o tour do primeiro acesso.
     await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
     if (API_LOCAL) await rotearApiLocal(ctx, SITE, funcoesLocais);
@@ -191,17 +194,32 @@ try {
       await p.click("#passos [data-passo='3']");
       await p.click("#buscar");
       await esperarHash(p, "#inicio");
+      await esperar(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
       const snap = await db.collection("buscas").where("dono_uid", "==", usuarios.comum.uid).where("status", "in", ["na_fila", "rodando"]).get();
       confere(snap.size === 1, "busca criada no banco");
       criadas.push(snap.docs[0].id);
       await p.click(`#ultimas [data-cancelar='${snap.docs[0].id}']`);
+      await p.click("#conf-sim"); // confirmação em dois passos
       await new Promise((r) => setTimeout(r, 4000));
       const st = (await db.doc(`buscas/${snap.docs[0].id}`).get()).data();
       confere(st.status === "cancelada" || st.cancelar_solicitado === true, "cancelamento");
+      // cancelada antes de começar → já pode apagar (pela Function)
+      if (st.status === "cancelada") {
+        await p.click("[data-ir=leads]"); await p.click("#abrir-buscas");
+        await p.click(`#caixa-buscas [data-apagar='${snap.docs[0].id}']`); await p.click("#conf-sim");
+        await esperar(p, "#toasts", /Busca apagada/);
+        confere(!(await db.doc(`buscas/${snap.docs[0].id}`).get()).exists, "busca cancelada não foi apagada");
+      }
     });
   }
   await etapa("sem erros de JavaScript (comum)", async () => confere(!p.erros.length, `${p.erros.length} erro(s)`));
 
+  // Buscas fictícias para o "Apagar busca" (criadas só agora para não mudar os números conferidos acima).
+  for (const [id, dono] of [[APAGAR.comum, usuarios.comum], [APAGAR.admin, usuarios.comum], [APAGAR.doAdmin, usuarios.admin]]) {
+    await db.doc(`buscas/${id}`).set({ tipo: "comum", lista: true, dono_uid: dono.uid, dono_email: dono.email, status: "concluida",
+      criada_em: new Date(Date.now() - 60000), finalizada_em: new Date(), parametros: { termos: ["apagar teste"], cidades: ["Macau RN"] }, qtd_lotes: 1, resumo: { total: 1 } });
+    await db.doc(`buscas/${id}/lotes/0`).set({ dono_uid: dono.uid, leads: [lead({ nome: "Fictício Apagar", cidade: "Macau", cidade_buscada: "Macau RN", id_lugar: "fx" })] });
+  }
   // ---------- celular (390 px): nada passa da largura da tela
   const c = await abrir(usuarios.comum, { width: 390, height: 844 });
   await etapa("celular 390 px: largura da página = largura da tela em todas as telas", async () => {
@@ -212,6 +230,54 @@ try {
       const m = await medirLargura(c);
       confere(m.rolagem === m.largura && !m.fora.length, `#${pag}: ${m.rolagem}px > ${m.largura}px`);
     }
+  });
+  await etapa("celular: abre claro, menu de baixo com 4 atalhos, botão de tema troca e fica salvo", async () => {
+    confere(await c.evaluate(() => document.documentElement.dataset.tema) === "claro", "não abriu no tema claro");
+    const menu = (await c.locator("#barra-inferior a").allTextContents()).map((t) => t.trim()).join("|");
+    confere(menu === "Início|Nova busca|Leads|Mapa", `menu de baixo: ${menu}`);
+    await c.tap("#tema-btn");
+    confere(await c.evaluate(() => document.documentElement.dataset.tema) === "escuro", "o botão não trocou para escuro");
+    await c.reload();
+    await c.waitForSelector("#tela-app:not(.oculto)", { timeout: 30000 });
+    confere(await c.evaluate(() => document.documentElement.dataset.tema) === "escuro", "a escolha não ficou salva");
+    await c.tap("#tema-btn");
+  });
+  await etapa("celular: cada (i) do Início abre com um toque, fica dentro da tela e some ao tocar de novo", async () => {
+    await c.evaluate(() => { location.hash = "#inicio"; });
+    await c.waitForSelector("#kpis .kpi [data-ajuda]"); await c.waitForTimeout(3000); // buscas e lotes chegando redesenham o Início
+    const n = await c.locator("[data-ajuda]:visible").count();
+    confere(n > 0, "nenhum (i) visível");
+    for (let i = 0; i < n; i++) {
+      const b = c.locator("[data-ajuda]:visible").nth(i);
+      await b.scrollIntoViewIfNeeded(); await b.tap();
+      await c.waitForSelector("#balao:not(.oculto)", { timeout: 3000 }).catch(() => { throw new Error(`(i) nº ${i} de ${n}: não abriu com o toque`); });
+      const r = await c.$eval("#balao", (e) => { const q = e.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth && q.top >= 0 && q.bottom <= innerHeight && e.textContent.length > 10; });
+      confere(r, `(i) nº ${i}: balão fora da tela ou sem texto`);
+      await b.tap();
+      await c.waitForSelector("#balao.oculto", { state: "attached", timeout: 3000 }).catch(() => { throw new Error(`(i) nº ${i} de ${n}: não fechou no 2º toque`); });
+    }
+  });
+  await etapa("celular: vendedor apaga a própria busca em dois passos (Apagar → Sim, apagar)", async () => {
+    await c.evaluate(() => { location.hash = "#leads"; });
+    await c.waitForSelector("[data-pagina=leads]:not(.oculto)");
+    await c.tap("#abrir-buscas");
+    await c.locator(`#caixa-buscas [data-apagar='${APAGAR.comum}']`).tap();
+    await c.waitForSelector("#confirmacao:not(.oculto)");
+    confere(/^Apagar a busca .+ com 1 lead\? Isso não pode ser desfeito\.$/.test(await c.textContent("#conf-texto")), "texto da confirmação");
+    await c.tap("#conf-sim");
+    await esperar(c, "#toasts", /Busca apagada/);
+    confere(!(await db.doc(`buscas/${APAGAR.comum}`).get()).exists, "a busca continua no banco");
+    confere(!(await db.collection(`buscas/${APAGAR.comum}/lotes`).get()).size, "os leads continuam no banco");
+  });
+  await etapa("vendedor tentando apagar a busca de outro recebe 403 (servidor)", async () => {
+    const r = await c.evaluate(async (id) => {
+      const { getAuth } = await import("https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js");
+      const token = await getAuth().currentUser.getIdToken();
+      const resp = await fetch("/api/apagar-busca", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ id }) });
+      return resp.status;
+    }, APAGAR.doAdmin);
+    confere(r === 403, `status ${r}`);
+    confere((await db.doc(`buscas/${APAGAR.doAdmin}`).get()).exists, "a busca do admin sumiu");
   });
   await etapa("sem erros de JavaScript (celular)", async () => confere(!c.erros.length, `${c.erros.length} erro(s)`));
 
@@ -230,6 +296,13 @@ try {
     await a.click("#rn-estimar");
     await esperar(a, "#msg-rn", /249 consultas/);
   });
+  await etapa("admin apaga a busca de um vendedor (lista de buscas do Admin)", async () => {
+    await a.waitForSelector(`#buscas-admin [data-apagar='${APAGAR.admin}']`, { timeout: 15000 });
+    await a.click(`#buscas-admin [data-apagar='${APAGAR.admin}']`);
+    await a.click("#conf-sim");
+    await esperar(a, "#toasts", /Busca apagada/);
+    confere(!(await db.doc(`buscas/${APAGAR.admin}`).get()).exists, "a busca do vendedor continua no banco");
+  });
   await etapa("sem erros de JavaScript (admin)", async () => confere(!a.erros.length, `${a.erros.length} erro(s)`));
   await etapa("troca de usuário na mesma aba: admin sai, comum entra, nada do admin aparece", async () => {
     await a.click("#avatar");
@@ -247,7 +320,7 @@ try {
 } finally {
   // ---------- limpeza: nada do teste fica em produção
   await navegador?.close();
-  for (const id of [BUSCA, ...criadas]) {
+  for (const id of [BUSCA, ...Object.values(APAGAR), ...criadas]) {
     for (const l of (await db.collection(`buscas/${id}/lotes`).get()).docs) await l.ref.delete();
     await db.doc(`buscas/${id}`).delete();
   }

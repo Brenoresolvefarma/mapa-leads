@@ -29,9 +29,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - Só dados reais (IBGE oficial + leads coletados); nada estimado apresentado como dado.
 
 ## Arquitetura
-1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a v2** no PR 12, aguardando aprovação).
+1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a v2** no ar; celular primeiro no PR 13).
 2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
-3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
+3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
    `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
    Firebase; validam ID token (checkRevoked) — Fases 2 e 3a (feito).
 4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify.
@@ -207,6 +207,38 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - Testes: `testes/rotas-cdn.mjs` (CDN do node_modules + `medirLargura`); `tela.test.mjs` reescrito (6 testes);
   `ferramentas/testar_tela_producao.mjs` e `capturar_telas.mjs` (SEMEAR=1 = busca fictícia temporária) para a v2.
 
+### Celular primeiro + ajustes de produção (PR 13, pedidos do Breno em 24/09)
+- **Mobile-first**: o vendedor usa principalmente o celular. Menu fixo embaixo com 4 atalhos (Início, Nova busca, Leads,
+  Mapa; `PAGINAS[].barra`); Mercado/Sobre/tema no menu do avatar. Nova busca: a linha de ação de cada passo
+  (`.barra-passo`) fica `sticky` acima do menu (Próximo/Buscar sempre visível). Lead = cartão com nome, cidade · bairro
+  e botões grandes (48 px) WhatsApp (`wa.me`) e Ligar (`tel:`). Ficha em tela cheia com "Fechar" embaixo (polegar).
+  Opções longas quebram linha (`.alternar`, `.segmentado`) em vez de passar do cartão.
+- **Etiquetas de população (bug)**: colisão de classe `.pop` (balão `position:fixed`) com o `span.pop` da linha da
+  cidade → etiquetas soltas na tela. Balão virou `#balao`/`.balao`; a população fica dentro da linha, à direita, com
+  guia pontilhada (`.nome-cid` · `.guia` · `.hab`).
+- **Tema**: abre **sempre claro** (não segue o sistema). `<meta name="color-scheme" content="only light">` +
+  `:root{color-scheme:only light}` impedem o escurecimento forçado do Chrome/Samsung (causa provável do "botão de tema
+  não muda nada" no Android). Escuro só pela escolha (`#tema-btn` no topo, lua/sol, ou menu do avatar), salva em
+  `localStorage["mapaleads.tema"]`; `?tema=escuro` aplica sem salvar (capturas). Trocar o tema recria o mapa.
+  Teste no Chromium e, no CI, no **WebKit** (motor do Safari do iPhone).
+- **Ícones (i)**: um só balão (`#balao`), listener de clique em fase de captura (não marca a caixa do rótulo nem
+  abre o cartão), toque abre/fecha, toque fora fecha, mouse abre ao passar e clique fixa; posicionado dentro da tela
+  (acima do ícone se não couber embaixo do menu). Helper `aj(texto)`; textos dos indicadores em `AJ_TXT`.
+  (i) novos no Mapa (indicadores do painel, "Colorir municípios por"), Mercado (cartões, mapa, ranking) e Admin.
+- **Apagar busca** (`/api/apagar-busca`): vendedor só as dele (`dono_uid` = uid do token), senão **403**; admin
+  qualquer uma. Filha do Estado inteiro → 400 (apaga pela mãe, que leva as filhas e os lotes delas). Em andamento
+  (na_fila/rodando) → 409 "cancele primeiro". Apaga lotes + documento, tira da `fila/estado`. **Não devolve a cota**;
+  `estatisticas` não mudam (histórico). Log só `busca <id> apagada por <uid>` via `logPrivado()`: vai para o log privado do Netlify e NÃO escreve nada no GitHub Actions (`GITHUB_ACTIONS=true`), porque lá o log é público (visto no teste do preview com api_local, que chegou a imprimir o uid de logins temporários — corrigido).
+  Tela: "Apagar busca" na lista de buscas de Meus leads (`#caixa-buscas`, agora com todas as buscas; em andamento
+  mostra "Cancelar") e no card "Buscas de todos os vendedores" do Admin (`#buscas-admin`). Confirmação em dois passos
+  (`confirmar()`, gaveta de baixo no celular): "Apagar a busca X com N leads? Isso não pode ser desfeito." →
+  "Sim, apagar". Cancelar também usa `confirmar()` (não mais o `confirm()` do navegador).
+- **Comemoração** (`comemorar()`): ao criar busca comum, 16 (celular) / 26 logos (pino azul, desenhado uma vez num
+  canvas de 64 px e copiado) saltam, quicam e giram por 2 s num `<canvas id="comemoracao">` com `pointer-events:none`,
+  sem biblioteca; `prefers-reduced-motion: reduce` → só a mensagem "Busca criada! Te aviso quando os leads chegarem.".
+- **Workflow "Capturas da tela"** (manual): capturas do celular em produção (login temporário + busca fictícia) na
+  branch `capturas-tela`; a criação da busca nas capturas dos logos é **simulada** (rota interceptada, nada na fila).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -217,8 +249,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - PRs 5–8: Firestore REST, chave privada normalizada, diagnóstico criar_e_cancelar — Fase 2 validada em produção.
 - **Fase 3a (PR 9)**: tela definitiva + perfis + saúde do motor + despertador + disjuntor novo + estatísticas.
 - **PR 11**: bug de sessão corrigido + relevância do segmento (categorias, sinônimos, sem cidade).
-- **Fase 3a v2 (tela nova)**: Etapa 0 aprovada com ajustes; todas as telas no PR 12 (deploy preview) — aguardando a
-  aprovação visual do Breno (capturas 1366 e celular) antes do merge; depois CI verde + teste real → merge.
+- **Fase 3a v2 (tela nova)**: aprovada e mergeada (PR 12); Verificar Functions e "Testar tela em produção" passaram.
+- **PR 13 (celular primeiro)**: etiquetas de população, tema claro padrão, botão de tema no celular, telas do vendedor,
+  ícones (i), apagar busca e comemoração — um commit só; merge após CI verde + teste real em produção.
   Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 

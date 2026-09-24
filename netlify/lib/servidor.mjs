@@ -134,6 +134,16 @@ export function handler(fn, { metodo = "POST" } = {}) {
   };
 }
 
+/**
+ * Log de auditoria (ex.: quem apagou qual busca). Vai só para o log PRIVADO do Netlify.
+ * No GitHub Actions (log público: testes e Functions rodando no runner com api_local) não escreve nada,
+ * porque lá não pode aparecer UID.
+ */
+export function logPrivado(mensagem) {
+  if (process.env.GITHUB_ACTIONS === "true") return;
+  console.log(mensagem);
+}
+
 /** Resumo seguro de um erro para o log: nome, código, mensagem e detalhes (cortados). */
 export function resumoDoErro(erro) {
   const cortar = (v, n = 400) => (v === undefined || v === null ? null : String(v).slice(0, n));
