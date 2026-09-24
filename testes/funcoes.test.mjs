@@ -707,3 +707,26 @@ test("mini-CRM e carteira: status com histórico; vendedor B recebe 409 no lead 
   await pedido(apagarBusca, { id: "crm3" }, tokens.breno);
   for (const id of ["crm1", "crm2"]) { await db.doc(`buscas/${id}/lotes/0`).delete(); await db.doc(`buscas/${id}`).delete(); }
 });
+
+test("PB: Estado inteiro (admin) estima com 'PB'; vendedor recebe 403; busca comum na PB com limites e aviso de pequenas", async () => {
+  const sim = await pedido(criarBusca, { modo: "rn_inteiro", termos: "dentista", uf: "PB", simular: true }, tokens.breno);
+  assert.equal(sim.status, 200);
+  assert.equal(sim.corpo.uf, "PB");
+  assert.equal(sim.corpo.consultas, 345);
+  assert.ok(sim.corpo.estimativa_seg > 7 * 3600);
+  assert.equal((await pedido(criarBusca, { modo: "rn_inteiro", termos: "dentista", uf: "CE", simular: true }, tokens.breno)).status, 400);
+  assert.equal((await pedido(criarBusca, { modo: "rn_inteiro", termos: "dentista", uf: "PB", simular: true }, tokens.ana)).status, 403);
+  // RN sem uf continua igual
+  const rn = await pedido(criarBusca, { modo: "rn_inteiro", termos: "dentista", simular: true }, tokens.breno);
+  assert.deepEqual([rn.corpo.uf, rn.corpo.consultas], ["RN", 249]);
+  // Busca comum na PB (vendedor): pequenas (< 5 mil hab.) avisadas; limite de 40 cidades vale igual
+  const pb = (await import("../dados/municipios_pb.json", { with: { type: "json" } })).default.municipios;
+  const pequenas = pb.filter((m) => m.populacao_2022 < 5000).slice(0, 2).map((m) => `${m.nome} PB`);
+  const s1 = await pedido(criarBusca, { termos: "dentista", cidades: ["João Pessoa PB", ...pequenas].join(","), profundidade: "rapida", simular: true }, tokens.ana);
+  assert.equal(s1.status, 200);
+  assert.equal(s1.corpo.pequenas, 2);
+  const muitas = pb.slice(0, 41).map((m) => `${m.nome} PB`).join(",");
+  const s2 = await pedido(criarBusca, { termos: "dentista", cidades: muitas, profundidade: "rapida", simular: true }, tokens.ana);
+  assert.equal(s2.status, 400);
+  assert.match(s2.corpo.erro, /41 cidades/);
+});

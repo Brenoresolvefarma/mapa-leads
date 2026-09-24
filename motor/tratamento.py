@@ -207,6 +207,11 @@ UFS = {
     "ac", "al", "ap", "am", "ba", "ce", "df", "es", "go", "ma", "mt", "ms", "mg", "pa",
     "pb", "pr", "pe", "pi", "rj", "rn", "rs", "ro", "rr", "sc", "sp", "se", "to",
 }
+# Nome do estado (como o Google escreve no endereço) → sigla. Só os do Nordeste (onde o MapaLeads busca).
+NOMES_UF = {
+    "rio grande do norte": "RN", "paraiba": "PB", "pernambuco": "PE", "ceara": "CE", "alagoas": "AL",
+    "sergipe": "SE", "bahia": "BA", "piaui": "PI", "maranhao": "MA",
+}
 # Grafias alternativas conhecidas (IBGE x Google).
 ALIASES_CIDADE = {"acu": "assu"}
 
@@ -227,6 +232,26 @@ def cidade_sem_uf(cidade):
     return ALIASES_CIDADE.get(" ".join(partes), " ".join(partes))
 
 
+def uf_da_cidade(cidade):
+    """ "Natal RN" -> "RN"; "João Pessoa PB" -> "PB"; sem sigla -> "". """
+    partes = (cidade or "").strip().split()
+    return partes[-1].upper() if len(partes) > 1 and partes[-1].lower() in UFS else ""
+
+
+def uf_do_endereco(entrada):
+    """Sigla do estado do endereço do Google ("PB", "Paraíba", "State of Paraíba"); "" se não der para saber."""
+    estado = normalizar_nome((entrada.get("complete_address") or {}).get("state"))
+    if estado:
+        if estado in UFS:
+            return estado.upper()
+        for nome, sigla in NOMES_UF.items():
+            if estado.endswith(nome):
+                return sigla
+    texto = entrada.get("address") or ""
+    siglas = [x for x in re.findall(r"(?:^|[\s,/-])([A-Z]{2})(?=[\s,]|$)", texto) if x.lower() in UFS]
+    return siglas[-1] if siglas else ""
+
+
 def _como_consulta(consulta):
     """Aceita a consulta como dict ou só o termo (texto)."""
     if isinstance(consulta, dict):
@@ -239,26 +264,26 @@ def conferir_cidade(entrada, consulta):
 
     Nunca apaga nem corrige nada: só marca.
       - criterio "cidade" (busca comum): cidade do endereço == cidade pedida;
-      - criterio "uf" (RN inteiro): o endereço é do RN.
+      - criterio "uf" (Estado inteiro): o endereço é do estado pedido (RN por padrão; PB desde 24/09);
+      - com sigla na cidade pedida ("Santa Luzia PB"), o estado do endereço também precisa bater
+        (nomes repetidos entre estados); sem estado no endereço, vale só a cidade.
     """
     consulta = _como_consulta(consulta)
     endereco = entrada.get("complete_address") or {}
     if consulta.get("criterio") == "uf":
-        estado = normalizar_nome(endereco.get("state"))
-        if estado:
-            return "sim" if estado in ("rn", "rio grande do norte") else "nao"
-        texto = entrada.get("address") or ""
-        siglas = re.findall(r"(?:^|[\s,/-])([A-Z]{2})(?=[\s,]|$)", texto)
-        siglas = [s for s in siglas if s.lower() in UFS]
-        if not siglas:
+        uf_lead = uf_do_endereco(entrada)
+        if not uf_lead:
             return "indefinido"
-        return "sim" if siglas[-1] == "RN" else "nao"
+        return "sim" if uf_lead == (consulta.get("uf") or "RN") else "nao"
 
     alvo = cidade_sem_uf(consulta.get("cidade"))
     cidade_lead = normalizar_nome(endereco.get("city"))
     if not alvo or not cidade_lead:
         return "indefinido"
-    return "sim" if cidade_lead == alvo else "nao"
+    if cidade_lead != alvo:
+        return "nao"
+    uf_pedida, uf_lead = uf_da_cidade(consulta.get("cidade")), uf_do_endereco(entrada)
+    return "nao" if uf_pedida and uf_lead and uf_pedida != uf_lead else "sim"
 
 
 def id_do_lugar(entrada):
@@ -319,6 +344,8 @@ def montar_lead(entrada, consulta):
         "termo_que_encontrou": consulta.get("termo") or "",
         # Campos da Fase 2:
         "cidade_buscada": consulta.get("cidade") or "",
+        # Estado do lead (24/09, PB ativada): o do endereço; sem ele, o pedido na consulta.
+        "uf": uf_do_endereco(entrada) or consulta.get("uf") or uf_da_cidade(consulta.get("cidade")) or "",
         "cidade_confere": conferir_cidade(entrada, consulta),
         "id_lugar": id_do_lugar(entrada),  # uso interno (duplicados); fora do .xlsx
     }

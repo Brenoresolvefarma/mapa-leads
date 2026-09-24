@@ -3,6 +3,17 @@
 
 import municipiosRN from "../../dados/municipios_rn.json" with { type: "json" };
 import bairrosRN from "../../dados/bairros_rn.json" with { type: "json" };
+import municipiosPB from "../../dados/municipios_pb.json" with { type: "json" };
+import bairrosPB from "../../dados/bairros_pb.json" with { type: "json" };
+
+// Estados com dados carregados e ATIVOS (decisão do Breno: RN; PB ativada em 24/09). Os outros do Nordeste: "em breve".
+// Cidades grandes por bairro (malha de bairros do IBGE, Censo 2022): RN = Natal, Mossoró, Parnamirim;
+// PB = João Pessoa e Campina Grande (aprovado pelo Breno em 24/09). Mesmas faixas de profundidade nos dois.
+export const ESTADOS = {
+  RN: { nome: "Rio Grande do Norte", municipios: municipiosRN.municipios, bairros: bairrosRN.cidades },
+  PB: { nome: "Paraíba", municipios: municipiosPB.municipios, bairros: bairrosPB.cidades },
+};
+export const UFS_ATIVAS = Object.keys(ESTADOS);
 
 export const PROFUNDIDADES = ["rapida", "normal", "completa"];
 export const FUSO = "America/Fortaleza";
@@ -151,14 +162,18 @@ export function estimarComPartes(consultas, partes, extrairEmail, metricas = {})
 }
 
 const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-const POPULACAO_RN = new Map(municipiosRN.municipios.map((m) => [semAcento(m.nome), m.populacao_2022]));
+const POPULACAO = new Map(Object.entries(ESTADOS).map(([uf, e]) => [uf, new Map(e.municipios.map((m) => [semAcento(m.nome), m.populacao_2022]))]));
 
-/** Cidades do RN com menos de 5 mil hab. (Censo 2022) entre as pedidas ("Nome RN"); cidades de fora ficam de fora. */
+/**
+ * Cidades pequenas (menos de 5 mil hab., Censo 2022) entre as pedidas ("Nome RN" / "Nome PB"), nos estados ativos.
+ * Sem sigla conta como RN (buscas antigas); cidade de outro estado fica de fora.
+ */
 export function cidadesPequenas(cidades, abaixoDe = CIDADE_PEQUENA_ABAIXO_DE) {
   return cidades.filter((c) => {
-    const nome = semAcento(c).replace(/\s+rn$/, "");
-    const pop = POPULACAO_RN.get(nome);
-    return pop !== undefined && pop < abaixoDe;
+    const m = semAcento(c).match(/^(.*?)(?:\s+([a-z]{2}))?$/);
+    const uf = (m[2] || "rn").toUpperCase(), nome = m[2] ? m[1] : semAcento(c);
+    const pop = POPULACAO.get(uf)?.get(nome);
+    return pop !== undefined && pop !== null && pop < abaixoDe;
   });
 }
 
@@ -241,7 +256,7 @@ export function profundidadePorPopulacao(populacao) {
  * - Natal, Mossoró e Parnamirim: uma consulta por bairro (normal);
  * - demais acima de 100 mil (São Gonçalo do Amarante): cidade inteira, completa.
  */
-export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bairros = bairrosRN.cidades) {
+export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bairros = bairrosRN.cidades, uf = "RN") {
   const bairrosPorCidade = new Map(bairros.map((c) => [c.nome, c.bairros]));
   const consultas = [];
   for (const termo of termos) {
@@ -254,9 +269,10 @@ export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bai
             termo,
             cidade: m.nome,
             bairro,
-            texto: `${termo} ${bairro} ${m.nome} RN`,
+            texto: `${termo} ${bairro} ${m.nome} ${uf}`,
             profundidade: "normal",
             criterio: "uf",
+            uf,
           });
         }
       } else {
@@ -264,14 +280,22 @@ export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bai
           id: `c${consultas.length}`,
           termo,
           cidade: m.nome,
-          texto: `${termo} ${m.nome} RN`,
+          texto: `${termo} ${m.nome} ${uf}`,
           profundidade: profundidadePorPopulacao(m.populacao_2022),
           criterio: "uf",
+          uf,
         });
       }
     }
   }
   return consultas;
+}
+
+/** Plano do Estado inteiro de um estado ativo (mesmas regras do RN: faixas de população e cidades grandes por bairro). */
+export function planoEstadoInteiro(termos, uf = "RN") {
+  const e = ESTADOS[uf];
+  if (!e) throw new Error("Estado não ativo.");
+  return planoRnInteiro(termos, e.municipios, e.bairros, uf);
 }
 
 /** Divide as consultas em lotes de ~40 min estimados (cada lote vira uma busca-filha). */
@@ -298,14 +322,16 @@ export function prepararRnInteiro(corpo, metricas = {}) {
     throw new Error(`Cada termo pode ter no máximo ${MAX_TAMANHO_TEXTO} caracteres.`);
   }
   const extrairEmail = corpo?.extrair_email === true;
-  const consultas = planoRnInteiro(termos);
+  const uf = String(corpo?.uf || "RN").toUpperCase();
+  if (!UFS_ATIVAS.includes(uf)) throw new Error("Estado não ativo: escolha um dos estados liberados.");
+  const consultas = planoEstadoInteiro(termos, uf);
   const lotes = dividirEmLotes(consultas, extrairEmail, metricas);
   const soConsultas = estimarConsultasSeg(consultas, extrairEmail, metricas);
   // Cada execução do motor dura até ~5h20; cada uma tem ~1 min de partida.
   const execucoes = Math.max(1, Math.ceil(soConsultas / LIMITE_BUSCA_COMUM_SEG));
   const estimativa = soConsultas + PARTIDA_EXECUCAO_SEG * execucoes;
   return {
-    parametros: { termos, extrair_email: extrairEmail, agendar_noite: corpo?.agendar_noite === true },
+    parametros: { termos, extrair_email: extrairEmail, agendar_noite: corpo?.agendar_noite === true, uf },
     consultas,
     lotes,
     estimativa_seg: estimativa,
@@ -346,7 +372,7 @@ export function inserirNaFila(estado, novos) {
 // Limites técnicos (proteção contra abuso, não são regra de negócio).
 export const MAX_PERFIS_POR_USUARIO = 50;
 const MAX_NOME_PERFIL = 60;
-const MAX_CIDADES_PERFIL = 167; // todos os municípios do RN
+const MAX_CIDADES_PERFIL = Math.max(...Object.values(ESTADOS).map((e) => e.municipios.length)); // todos os municípios do maior estado ativo (PB: 223)
 
 /** Valida um perfil salvo: nome + os mesmos campos de uma busca comum. */
 export function validarPerfil(corpo) {

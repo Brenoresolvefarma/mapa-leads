@@ -179,3 +179,13 @@ def test_no_maximo_2_maquinas_por_vendedor_com_outro_esperando():
     assert ids(fila.limitar_por_vendedor(fila_, rodando[:1])) == ["A2", "B0"]
     # Lotes do Estado inteiro não entram nessa conta
     assert ids(fila.limitar_por_vendedor([filha("F1", -60)], rodando)) == ["F1"]
+
+
+
+def test_populacao_da_pb_e_do_rn_sem_confundir_nomes_repetidos():
+    assert fila.populacao_da_cidade("João Pessoa", "PB") == 833932
+    assert fila.populacao_da_cidade("João Pessoa PB") == 833932
+    assert fila.populacao_da_cidade("Natal") > 700000  # sem estado = RN (buscas antigas)
+    assert fila.populacao_da_cidade("Santa Cruz", "RN") != fila.populacao_da_cidade("Santa Cruz", "PB")
+    # disjuntor: cidade pequena da PB vazia não conta; João Pessoa conta
+    assert fila.vazia_conta_para_disjuntor({"cidade": "João Pessoa", "uf": "PB"}, False) is True

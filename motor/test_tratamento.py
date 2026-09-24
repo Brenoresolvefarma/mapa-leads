@@ -123,6 +123,7 @@ def test_montar_lead_campos_completos():
         "termo_que_encontrou": "dentista",
         "cidade_buscada": "",
         "cidade_confere": "indefinido",
+        "uf": "RN",
         "id_lugar": "ChIJficticio1",
     }
 
@@ -338,3 +339,30 @@ def test_bairro_vem_do_endereco_estruturado():
     lead = t.montar_lead(entrada_ficticia(complete_address={"city": "Natal", "borough": " Ponta Negra "}), "x")
     assert lead["bairro"] == "Ponta Negra"
     assert t.montar_lead(entrada_ficticia(complete_address={}), "x")["bairro"] == ""
+
+
+# ---- PB ativada em 24/09: estado do lead e cidade conferida com o estado
+def test_estado_inteiro_pb_confere_o_estado_do_endereco():
+    consulta = {"termo": "x", "cidade": "João Pessoa", "criterio": "uf", "uf": "PB"}
+    assert t.conferir_cidade({"complete_address": {"state": "Paraíba", "city": "João Pessoa"}}, consulta) == "sim"
+    assert t.conferir_cidade({"complete_address": {"state": "State of Paraíba"}}, consulta) == "sim"
+    assert t.conferir_cidade({"complete_address": {"state": "Rio Grande do Norte"}}, consulta) == "nao"
+    assert t.conferir_cidade({"address": "Rua X, 1 - Centro, João Pessoa - PB, 58000-000"}, consulta) == "sim"
+    assert t.conferir_cidade({"address": "sem estado"}, consulta) == "indefinido"
+    # Estado inteiro antigo (sem uf) continua sendo RN
+    assert t.conferir_cidade({"complete_address": {"state": "RN"}}, {"criterio": "uf", "cidade": "Natal"}) == "sim"
+
+
+def test_cidade_com_mesmo_nome_em_outro_estado_nao_confere():
+    pedido = {"termo": "x", "cidade": "Santa Luzia PB", "criterio": "cidade"}
+    assert t.conferir_cidade({"complete_address": {"city": "Santa Luzia", "state": "Paraíba"}}, pedido) == "sim"
+    assert t.conferir_cidade({"complete_address": {"city": "Santa Luzia", "state": "Minas Gerais", }, "address": "Santa Luzia - MG"}, pedido) == "nao"
+    assert t.conferir_cidade({"complete_address": {"city": "Santa Luzia"}}, pedido) == "sim"  # sem estado: só a cidade
+    # RN como sempre
+    assert t.conferir_cidade({"complete_address": {"city": "Natal", "state": "RN"}}, {"cidade": "Natal RN", "criterio": "cidade"}) == "sim"
+
+
+def test_lead_ganha_uf():
+    assert t.montar_lead({"title": "A", "complete_address": {"state": "Paraíba"}}, {"termo": "x", "cidade": "Patos PB"})["uf"] == "PB"
+    assert t.montar_lead({"title": "A"}, {"termo": "x", "cidade": "Patos PB"})["uf"] == "PB"
+    assert t.montar_lead({"title": "A"}, {"termo": "x", "cidade": "Patos", "uf": "PB", "criterio": "uf"})["uf"] == "PB"

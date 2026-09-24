@@ -220,3 +220,46 @@ test("liberar dividindo respeita a carteira: lead de um vendedor vai só para el
   assert.equal(v2.carteira, 1);
   assert.ok(!v1.cidades.some((c) => v2.cidades.includes(c)));
 });
+
+test("PB (ativada em 24/09): 223 municípios segundo a API de Localidades do IBGE, regiões e indicadores sem buraco", async () => {
+  const mun = (await import("../dados/municipios_pb.json", { with: { type: "json" } })).default;
+  const reg = (await import("../dados/microrregioes_pb.json", { with: { type: "json" } })).default;
+  const ind = (await import("../dados/ibge_pb_indicadores.json", { with: { type: "json" } })).default;
+  assert.equal(mun.total_api_localidades, 223);
+  assert.equal(mun.municipios.length, 223);
+  assert.ok(mun.municipios.every((m) => m.codigo_ibge.startsWith("25")));
+  const cods = new Set(mun.municipios.map((m) => m.codigo_ibge));
+  for (const tipo of ["microrregioes", "regioes_imediatas"]) assert.equal(reg[tipo].flatMap((r) => r.municipios).filter((c) => cods.has(c)).length, 223);
+  assert.equal(Object.keys(ind.municipios).length, 223);
+  assert.deepEqual(L.UFS_ATIVAS, ["RN", "PB"]);
+});
+
+test("Estado inteiro da PB: mesmas faixas do RN, João Pessoa e Campina Grande por bairro, consultas com 'PB'", () => {
+  const plano = L.planoEstadoInteiro(["dentista"], "PB");
+  const porCidade = (nome) => plano.filter((c) => c.cidade === nome);
+  assert.equal(porCidade("João Pessoa").length, 64);
+  assert.equal(porCidade("Campina Grande").length, 60);
+  assert.ok(porCidade("João Pessoa").every((c) => c.profundidade === "normal" && c.bairro && c.texto.endsWith("João Pessoa PB")));
+  assert.deepEqual(porCidade("Santa Rita").map((c) => c.profundidade), ["completa"]); // > 100 mil, sem bairro
+  assert.deepEqual(porCidade("Patos").map((c) => [c.profundidade, c.texto]), [["completa", "dentista Patos PB"]]);
+  assert.ok(plano.every((c) => c.uf === "PB" && c.criterio === "uf" && / PB$/.test(c.texto)));
+  assert.equal(plano.length, 345); // 221 municípios sem bairro + 124 bairros
+  const p = L.prepararRnInteiro({ termos: "dentista", uf: "PB" });
+  assert.equal(p.parametros.uf, "PB");
+  const horas = p.estimativa_seg / 3600;
+  assert.ok(horas > 7 && horas < 12, `estimativa ${horas.toFixed(1)} h`);
+  assert.throws(() => L.prepararRnInteiro({ termos: "dentista", uf: "CE" }), /Estado não ativo/);
+  // RN continua igual (sem uf = RN)
+  assert.equal(L.prepararRnInteiro({ termos: "dentista" }).consultas.length, 249);
+  assert.equal(L.prepararRnInteiro({ termos: "dentista" }).parametros.uf, "RN");
+});
+
+test("cidades pequenas (< 5 mil hab.) também na PB; nome repetido em outro estado não confunde", async () => {
+  const pb = (await import("../dados/municipios_pb.json", { with: { type: "json" } })).default.municipios;
+  const pequena = pb.find((m) => m.populacao_2022 < 5000), grande = pb.find((m) => m.nome === "João Pessoa");
+  assert.deepEqual(L.cidadesPequenas([`${pequena.nome} PB`, `${grande.nome} PB`, "Viçosa RN"]), [`${pequena.nome} PB`, "Viçosa RN"]);
+  // "Santa Cruz" existe no RN e na PB: cada uma com a população do seu estado
+  const scPb = pb.find((m) => m.nome === "Santa Cruz");
+  assert.equal(L.cidadesPequenas(["Santa Cruz PB"]).length, scPb.populacao_2022 < 5000 ? 1 : 0);
+  assert.equal(L.cidadesPequenas(["Santa Cruz RN"]).length, 0); // Santa Cruz/RN tem ~40 mil hab.
+});
