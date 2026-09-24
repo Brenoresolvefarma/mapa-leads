@@ -64,8 +64,8 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
   contato há **60 dias** (ajustável em Admin › Configurações) volta a ficar livre. O admin transfere pela ficha e vê
   o painel **Carteiras** (leads por vendedor e status, conversão = Clientes ÷ Contatado+Negociando+Cliente).
   A liberação "Dividir entre os vendedores" já respeita a carteira (lead de alguém não vai para outro).
-- **Estados ativos: RN e Paraíba (PB, ativada em 24/09)**. Nova busca, Mapa e Mercado têm o seletor de estado (um só,
-  guardado no aparelho); as consultas da PB vão ao Google com "PB". Estado inteiro (admin): RN ou PB, com a estimativa
+- **Estados ativos: RN e Paraíba (PB, ativada em 24/09)**. Nova busca, Mapa, Mercado e Admin › Estado inteiro têm o seletor de
+  estado (um só, guardado no aparelho; trocar desmarca as cidades do outro estado, com aviso; no celular também no Mapa); as consultas da PB vão ao Google com "PB". Estado inteiro (admin): RN ou PB, com a estimativa
   (PB: 345 consultas por termo, ~9,8 h — mesmas faixas do RN; João Pessoa e Campina Grande por bairro). Limites do
   vendedor, aviso de cidades pequenas, liberação, carteira e status valem igual na PB. Os outros estados: "em breve".
 - **RN inteiro** (**só admin**, bloqueado no servidor): um segmento nos 167 municípios do RN.

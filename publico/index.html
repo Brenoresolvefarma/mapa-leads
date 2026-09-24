@@ -366,8 +366,13 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 @media (max-width: 900px) {
   /* mapa ocupa a tela entre o título e a barra inferior; o painel vira gaveta de baixo */
   .mapa-area { grid-template-columns:1fr; height:calc(100dvh - var(--topo) - env(safe-area-inset-top) - 150px - env(safe-area-inset-bottom)); min-height:380px; }
-  [data-pagina=mapa] .cab { display:none; } /* o título já está no topo: mais espaço para o mapa */
-  .mapa-area { height:calc(100dvh - var(--topo) - env(safe-area-inset-top) - 96px - env(safe-area-inset-bottom)); }
+  /* o título já está no topo: do cabeçalho fica só a linha do seletor de estado (antes ela sumia junto e, no celular,
+     não havia como trocar o estado no Mapa) */
+  [data-pagina=mapa] .cab { margin:0 0 8px; }
+  [data-pagina=mapa] .cab > div:first-child, [data-pagina=mapa] #mapa-origem { display:none; }
+  [data-pagina=mapa] .cab .linha { flex-wrap:nowrap; width:100%; }
+  [data-pagina=mapa] .cab .uf-seletor { flex:1 1 auto; min-width:0; }
+  .mapa-area { height:calc(100dvh - var(--topo) - env(safe-area-inset-top) - 152px - env(safe-area-inset-bottom)); }
   .trilha .migalhas { flex:1 1 100%; }
   .mapa-painel::before { content:""; display:block; width:40px; height:4px; border-radius:2px; background:var(--line-2); margin:-6px auto 2px; }
   .mapa-painel { position:absolute; left:0; right:0; bottom:0; max-height:46%; z-index:1001; border-left:0; border-top:1px solid var(--line); border-radius:14px 14px 0 0; box-shadow:var(--shadow-lg); }
@@ -488,6 +493,11 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   .form-usuario { grid-template-columns:1fr !important; gap:0 !important; }
   #densidade, #colunas-btn { display:none; } /* no celular a tabela vira cartões */
 }
+
+/* Seletor de estado (Nova busca, Mapa, Mercado, Admin › Estado inteiro): grande para o dedo e com o estado ativo em
+   destaque (borda e texto na cor da marca, negrito). */
+select.uf-seletor { min-height:44px; min-width:180px; max-width:100%; font-weight:700; color:var(--brand); border:2px solid var(--brand);
+  background-color:var(--brand-soft, var(--surface)); border-radius:10px; padding-left:12px; cursor:pointer; }
 
 /* ============================================================ iPHONE: SEM ZOOM AO TOCAR NUM CAMPO
    O Safari do iPhone amplia a tela quando o campo de digitação tem fonte menor que 16 px.
@@ -811,7 +821,8 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <div class="pilha">
               <div class="cartao"><h2>Fila ao vivo <button type="button" class="info" data-ajuda="Buscas rodando agora e as que estão esperando a vez. As buscas comuns passam na frente das do Estado inteiro." aria-label="O que é isso?">i</button></h2><div id="fila-viva" class="small"></div></div>
               <div class="cartao"><h2>Estado inteiro <button type="button" class="info" data-ajuda="Busca o segmento em todos os municípios do estado escolhido (cidades grandes por bairro: Natal, Mossoró e Parnamirim no RN; João Pessoa e Campina Grande na PB). Só o admin pode usar; leva horas, no máximo 2 máquinas, vendedor na frente e não conta no limite diário." aria-label="O que é isso?">i</button></h2>
-                <label class="campo" for="rn-uf">Estado</label><select id="rn-uf" style="width:auto"><option value="RN">Rio Grande do Norte (167 municípios)</option><option value="PB">Paraíba (223 municípios)</option></select>
+                <label class="campo" for="rn-uf">Estado</label><select id="rn-uf" class="uf-seletor" style="width:auto"><option value="RN">Rio Grande do Norte</option><option value="PB">Paraíba</option></select>
+                <p class="small ink2" id="rn-info" style="margin-top:4px"></p>
                 <label class="campo" for="rn-termos">Segmento / termos (separados por vírgula)</label><input id="rn-termos" type="text" placeholder="ex.: dentista, odontologia">
                 <div class="linha" style="margin-top:8px"><label class="alternar"><input type="checkbox" id="rn-email"> Extrair e-mail</label><label class="alternar"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label></div>
                 <div class="linha" style="margin-top:8px"><button class="btn btn-sec" id="rn-estimar">Estimar</button><button class="btn btn-primario" id="rn-confirmar" disabled>Confirmar Estado inteiro (<span id="rn-uf-rot">RN</span>)</button></div>
@@ -1203,12 +1214,36 @@ for (const [uf, e] of Object.entries(ESTADOS_UI)) {
 }
 // Estado escolhido (um só para Nova busca, Mapa e Mercado; guardado no navegador; ?uf=PB abre direto).
 let UF_ATUAL, MUNS, REGIOES, CAMINHOS, CAMINHOS_MICRO, ALT, malhaMun, malhaMicro, ibgeJson;
+let telaPronta = false; // vira true quando a tela do usuário logado já foi montada (antes disso só troca os dados)
 function usarEstado(uf, guardarEscolha = true) {
+  const antes = UF_ATUAL;
   const e = ESTADOS_UI[uf] || ESTADOS_UI.RN;
   ({ uf: UF_ATUAL, MUNS, REGIOES, CAMINHOS, CAMINHOS_MICRO, ALT, malhaMun, malhaMicro, ibgeJson } = e);
-  if (guardarEscolha) guardar("mapaleads.uf", UF_ATUAL);
-  for (const sel of $$(".uf-seletor")) sel.value = UF_ATUAL;
+  if (guardarEscolha) guardar("mapaleads.uf", UF_ATUAL); // por aparelho: abre no último estado usado
+  sincronizarSeletoresUf();
   const r = $("#outras-rot"); if (r) r.textContent = `Outras cidades fora ${e.doEstado} (texto livre, separadas por vírgula)`;
+  if (telaPronta && antes && antes !== UF_ATUAL) depoisDeTrocarEstado(antes);
+}
+/** Todos os seletores de estado mostram o estado ativo — menos o que está aberto agora (no iPhone, trocar o valor com
+ *  o seletor nativo aberto desfazia a escolha do usuário). */
+function sincronizarSeletoresUf() {
+  for (const sel of $$(".uf-seletor")) if (sel !== document.activeElement && sel.value !== UF_ATUAL) sel.value = UF_ATUAL;
+}
+/**
+ * Liga um seletor de estado (Nova busca, Mapa, Mercado, Admin › Estado inteiro). No iPhone/Safari o <select> nativo
+ * manda "input" e/ou "change" só quando o seletor fecha (às vezes os dois): ouvimos os dois, lemos o valor no ciclo
+ * seguinte (depois do fechamento) e ignoramos o repetido. Erro na troca vira aviso (nunca fica parado sem dizer nada).
+ */
+function ligarSeletorUf(sel, depois) {
+  const tratar = () => setTimeout(() => {
+    const uf = sel.value;
+    if (!UFS_ATIVAS.includes(uf) || uf === UF_ATUAL) return;
+    try { usarEstado(uf); depois?.(uf); }
+    catch (e) { console.error(e); toast("Não foi possível trocar o estado agora. Tente de novo.", "erro"); sel.value = UF_ATUAL; }
+  }, 0);
+  sel.addEventListener("input", tratar);
+  sel.addEventListener("change", tratar);
+  sel.addEventListener("blur", () => setTimeout(sincronizarSeletoresUf, 400));
 }
 const estadoAtual = () => ESTADOS_UI[UF_ATUAL];
 /** Cidade → município do IBGE. "Natal RN"/"Patos PB" pela sigla; senão o estado dado; senão o escolhido e depois os outros. */
@@ -1755,8 +1790,19 @@ function atualizarTravaBuscar() {
   $("#aviso-limite").classList.toggle("oculto", !msg);
 }
 $("#outras").addEventListener("input", () => desenharCidades());
-// Trocar o estado: mapa, regiões, cidades e população passam a ser do estado escolhido (a seleção anterior sai).
-$("#uf").onchange = () => { usarEstado($("#uf").value); NB.cidades.clear(); $("#busca-cidade").value = ""; desenharRegioes(); desenharCidades(); estimar(); };
+// Trocar o estado (de qualquer tela: Nova busca, Mapa, Mercado, Admin ou link #mapa/pb): a Nova busca passa a mostrar
+// mapa, regiões, cidades e população do estado novo; as cidades marcadas do outro estado saem, com aviso.
+function depoisDeTrocarEstado(antes) {
+  const marcadas = [...NB.cidades.values()].filter(Boolean).length;
+  NB.cidades.clear(); $("#busca-cidade").value = "";
+  desenharRegioes(); desenharCidades();
+  if (paginaAtual === "nova") estimar();
+  if (marcadas) toast(`As cidades ${ESTADOS_UI[antes]?.doEstado || "do outro estado"} foram desmarcadas.`);
+  // Admin › Estado inteiro: a estimativa anterior era do outro estado
+  $("#rn-uf-rot").textContent = UF_ATUAL; $("#rn-confirmar").disabled = true; $("#msg-rn").textContent = "";
+  desenharCartaoEstadoInteiro();
+}
+ligarSeletorUf($("#uf"));
 function cidadesDoPedido() {
   // Cidades do estado escolhido vão como "Nome UF" (RN; PB desde 24/09): o Google recebe o sufixo do estado.
   const rn = [...NB.cidades].filter(([, v]) => v).map(([n]) => n).sort((a, b) => a.localeCompare(b, "pt-BR")).map((n) => `${n} ${UF_ATUAL}`);
@@ -1842,14 +1888,28 @@ const PINO = new Path2D("M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"), P
 function comemorar(mensagem = MSG_CRIADA, { tipo = "chuva" } = {}) {
   toast(mensagem, "ok");
   if (tipo === "pequena") return;
+  // iPhone: começa só depois que o teclado e a janela de confirmação fecham (senão o Safari mede a área errada e o
+  // desenho sai escondido/cortado). Tira o foco do campo (fecha o teclado) e espera a área visível parar de mudar.
+  document.activeElement?.blur?.();
+  const vv = window.visualViewport;
+  let feito = false, espera;
+  const vai = () => { if (feito) return; feito = true; clearTimeout(espera); vv?.removeEventListener("resize", aoMudar); requestAnimationFrame(() => requestAnimationFrame(animarComemoracao)); };
+  const aoMudar = () => { clearTimeout(espera); espera = setTimeout(vai, 120); };
+  if (vv && vv.height < innerHeight - 120) { vv.addEventListener("resize", aoMudar); espera = setTimeout(vai, 700); } // teclado aberto
+  else vai();
+}
+function animarComemoracao() {
   const reduzido = matchMedia("(prefers-reduced-motion: reduce)").matches;
   $("#comemoracao")?.remove();
-  // Tamanho da janela visível de verdade (no iPhone, 100vh inclui a barra do Safari).
-  const dpr = Math.min(devicePixelRatio || 1, 2), L = innerWidth, A = window.visualViewport?.height || innerHeight;
+  // Tamanho e posição da janela visível de verdade (no iPhone, 100vh inclui a barra do Safari; com a página rolada pelo
+  // teclado, a área visível começa em offsetTop). O canvas tem a resolução da tela (devicePixelRatio, até 2×).
+  const vv = window.visualViewport;
+  const dpr = Math.min(devicePixelRatio || 1, 2), L = vv?.width || innerWidth, A = vv?.height || innerHeight;
   const cv = document.createElement("canvas");
   cv.id = "comemoracao"; cv.className = "comemoracao"; cv.setAttribute("aria-hidden", "true");
   cv.dataset.modo = reduzido ? "um" : "chuva";
   cv.style.width = `${L}px`; cv.style.height = `${A}px`;
+  cv.style.left = `${vv?.offsetLeft || 0}px`; cv.style.top = `${vv?.offsetTop || 0}px`;
   cv.width = Math.round(L * dpr); cv.height = Math.round(A * dpr);
   document.body.appendChild(cv);
   const ctx = cv.getContext("2d");
@@ -2944,8 +3004,9 @@ function montarCamadasMapa() {
   }).addTo(M.mapa);
   M.micro = L.geoJSON(malhaMicro, { interactive: false, style: { weight: 1.6, color: cssVar("--map-region") || "#0e1726", opacity: 0.55, fill: false } }).addTo(M.mapa);
 }
-$("#uf-mapa").onchange = () => { location.hash = `#mapa/${$("#uf-mapa").value.toLowerCase()}`; };
-$("#uf-mercado").onchange = () => { usarEstado($("#uf-mercado").value); MK.cod = ""; desenharMercado(); };
+// Mapa: o estado vai para a URL (#mapa/pb; RN = #mapa) e o mapa refaz os contornos; Esc/Voltar continuam valendo.
+ligarSeletorUf($("#uf-mapa"), (uf) => { const h = prefixoMapa(uf); if (location.hash !== h) location.hash = h; else irPara(); });
+ligarSeletorUf($("#uf-mercado"), () => { MK.cod = ""; desenharMercado(); });
 // No Mapa, só os leads do estado que está na tela (pontos, categorias, bairros e WhatsApp do painel).
 const doEstadoAtual = (l) => (l._uf || "RN") === UF_ATUAL;
 function dicaMunicipio(cod) {
@@ -3112,7 +3173,7 @@ const MK = { metrica: "seg10k", nivel: "mun", ordem: { campo: "pop", sobe: false
 $("#mercado-metrica").innerHTML = Object.entries(METRICAS).map(([k, v]) => `<option value="${k}">${v.rot}</option>`).join("");
 $("#mercado-metrica").value = MK.metrica;
 async function abrirMercado() {
-  for (const sel of $$(".uf-seletor")) sel.value = UF_ATUAL;
+  sincronizarSeletoresUf();
   try { await prepararLeads(); } catch { /* só IBGE */ }
   const abertas = buscasAbertas();
   $("#mercado-origem").textContent = abertas.length ? `Segmento: ${W.segmento.termos.join(", ")} · ${abertas.length} busca(s)` : "Sem buscas abertas: só dados do IBGE";
@@ -3230,7 +3291,7 @@ async function desenharGraficosMercado(agg, pesq) {
 }
 
 // ============================================================ ADMIN
-async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); carregarCarteiras(); }
+async function carregarAdmin() { if (!ehAdmin) return; sincronizarSeletoresUf(); desenharCartaoEstadoInteiro(); desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); carregarCarteiras(); }
 // Painel "Carteiras": leads por vendedor e por status, conversão (Cliente ÷ Contatado+Negociando+Cliente).
 async function carregarCarteiras() {
   $("#carteiras-tabela").innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
@@ -3332,13 +3393,20 @@ async function carregarSaude() {
   } catch (e) { $("#saude").innerHTML = `<p class="small" style="color:var(--bad)">${txt(e.message)}</p>`; }
 }
 $("#saude-atualizar").onclick = carregarSaude;
-const pedidoRn = (simular) => ({ modo: "rn_inteiro", uf: $("#rn-uf").value, termos: $("#rn-termos").value, extrair_email: $("#rn-email").checked, agendar_noite: $("#rn-noite").checked, simular });
+const pedidoRn = (simular) => ({ modo: "rn_inteiro", uf: UF_ATUAL, termos: $("#rn-termos").value, extrair_email: $("#rn-email").checked, agendar_noite: $("#rn-noite").checked, simular });
 $("#rn-estimar").onclick = async () => {
   try { const r = await api("criar-busca", pedidoRn(true)); $("#msg-rn").textContent = `${r.consultas} consultas em ${r.lotes} lotes · tempo estimado ~${tempo(r.estimativa_seg)}. Confirme para enfileirar.`; $("#rn-confirmar").disabled = false; }
   catch (e) { $("#msg-rn").textContent = e.message; }
 };
-for (const id of ["#rn-termos", "#rn-email", "#rn-noite", "#rn-uf"]) $(id).oninput = () => { $("#rn-confirmar").disabled = true; $("#rn-uf-rot").textContent = $("#rn-uf").value; };
-$("#rn-uf").onchange = () => { $("#rn-confirmar").disabled = true; $("#rn-uf-rot").textContent = $("#rn-uf").value; $("#msg-rn").textContent = ""; };
+for (const id of ["#rn-termos", "#rn-email", "#rn-noite"]) $(id).oninput = () => { $("#rn-confirmar").disabled = true; };
+// O seletor do Estado inteiro é o mesmo estado da tela toda (Nova busca, Mapa, Mercado); trocar zera a estimativa.
+ligarSeletorUf($("#rn-uf"));
+/** Cartão do Estado inteiro: nome, municípios e população (Censo 2022) do estado escolhido. */
+function desenharCartaoEstadoInteiro() {
+  const e = estadoAtual(), pop = e.MUNS.reduce((t, m) => t + (m.ind?.populacao || 0), 0);
+  $("#rn-info").textContent = `${e.nome}: ${numero(e.MUNS.length)} municípios · ${numero(pop)} hab. (Censo 2022)`;
+  $("#rn-uf-rot").textContent = UF_ATUAL;
+}
 $("#rn-confirmar").onclick = async () => {
   $("#rn-confirmar").disabled = true;
   try {
@@ -3376,6 +3444,7 @@ $("#tour").onclick = (ev) => {
 };
 
 desenharTermos();
+telaPronta = true; // daqui em diante, trocar o estado redesenha a Nova busca e o Estado inteiro
 </script>
 </body>
 </html>

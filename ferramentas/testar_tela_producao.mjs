@@ -184,7 +184,9 @@ try {
     await p.click("#mapa-painel [data-ir-mun='2408102']");
     await esperarHash(p, "#mapa/natal/natal");
     await esperar(p, "#migalhas", /RN\s*›\s*Natal\s*›\s*Natal/);
-    confere(await p.locator("#mapa-leaflet .leaflet-tile-loaded").count() > 0, "mosaicos do mapa de fundo não carregaram");
+    // Os mosaicos vêm do OpenStreetMap (rede externa): espera até 15 s antes de acusar (antes era uma conferência instantânea).
+    const mosaicos = await p.waitForSelector("#mapa-leaflet .leaflet-tile-loaded", { state: "attached", timeout: 15000 }).then(() => true, () => false);
+    confere(mosaicos, "mosaicos do mapa de fundo não carregaram");
     const cat = p.locator("#mapa-painel [data-categoria]").first();
     const n = (await cat.locator(".num").textContent()).trim();
     await cat.click();

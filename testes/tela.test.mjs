@@ -117,6 +117,8 @@ async function esperarTexto(p, sel, re) {
   try { await p.waitForFunction(([s, r]) => new RegExp(r).test(document.querySelector(s)?.textContent || ""), [sel, re.source], { timeout: 15000 }); }
   catch { throw new Error(`${sel} não chegou a ${re}: "${(await p.textContent(sel).catch(() => "?"))?.replace(/\s+/g, " ").slice(0, 300)}" · erros: ${erros.join(" | ")}`); }
 }
+// PASTA_CAPTURAS=/pasta: guarda capturas de alguns momentos (para conferir o visual); sem ela, não faz nada.
+const capturar = (p, nome) => (process.env.PASTA_CAPTURAS ? p.screenshot({ path: join(process.env.PASTA_CAPTURAS, `${nome}.png`) }) : null);
 const esperarHash = (p, h) => p.waitForFunction((x) => decodeURIComponent(location.hash) === x, h, { timeout: 15000 });
 
 test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", async () => {
@@ -804,6 +806,7 @@ test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mens
   await criar(p);
   await p.waitForSelector("#comemoracao", { state: "attached", timeout: 10000 });
   await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
+  if (process.env.PASTA_CAPTURAS) { await p.waitForTimeout(450); await capturar(p, "comemoracao-nova-busca"); }
   const c = await p.$eval("#comemoracao", (e) => ({ pe: getComputedStyle(e).pointerEvents, w: e.getBoundingClientRect().width }));
   assert.deepEqual(c, { pe: "none", w: 390 }); // não bloqueia os toques
   await p.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 }); // some sozinho (~2 s)
@@ -1438,6 +1441,7 @@ test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por 
   await confirmar(a, "RN", false);
   await a.waitForSelector("#comemoracao[data-modo=chuva]", { state: "attached", timeout: 10000 });
   await esperarTexto(a, "#toasts", /Estado inteiro enfileirado! Te aviso quando os leads chegarem\./);
+  if (process.env.PASTA_CAPTURAS) { await a.waitForTimeout(450); await capturar(a, "comemoracao-admin-estado-inteiro"); }
   // Por cima de tudo: acima da barra de baixo, dos painéis e dos modais; cobre a tela visível; não pega os toques
   const c = await a.$eval("#comemoracao", (e) => {
     const z = (sel) => Number(getComputedStyle(document.querySelector(sel)).zIndex) || 0, r = e.getBoundingClientRect();
@@ -1465,9 +1469,111 @@ test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por 
   await confirmar(r, "PB", true);
   await r.waitForSelector("#comemoracao[data-modo=um]", { state: "attached", timeout: 10000 });
   await esperarTexto(r, "#toasts", /Estado inteiro agendado para .+! Te aviso quando os leads chegarem\./);
+  if (process.env.PASTA_CAPTURAS) { await r.waitForTimeout(250); await capturar(r, "comemoracao-admin-reduzir-movimento"); }
   await r.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 });
   assert.deepEqual(erros, []);
   await ctx.close();
   // Limpeza: as duas mães do Estado inteiro e as filhas
   for (const d of (await db.collection("buscas").where("tipo", "in", ["rn_mae", "rn_filha"]).get()).docs) await d.ref.delete();
+});
+
+test("seletor de estado (390 px, também no WebKit): Paraíba em Nova busca, Mapa, Mercado e Admin › Estado inteiro; guarda no aparelho; volta ao RN", async () => {
+  const tel = { width: 390, height: 844 };
+  const a = await abrir("breno@x.example", "senha-forte-1", tel);
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  // O iPhone manda "change" e/ou "input" só quando o seletor nativo fecha: testamos cada jeito (foco → valor → evento → sai).
+  const trocar = (sel, uf, eventos) => a.evaluate(([s, u, evs]) => {
+    const el = document.querySelector(s); el.focus(); el.value = u;
+    for (const e of evs) el.dispatchEvent(new Event(e, { bubbles: true }));
+    el.blur();
+  }, [sel, uf, eventos]);
+  const alturaOk = async (sel) => { const b = await a.locator(sel).boundingBox(); assert.ok(b && b.height >= 44, `${sel} com ${b?.height} px (mín. 44)`); };
+  const semRolagem = async (onde) => { const m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `${onde}: ${m.fora.join(", ")}`); };
+
+  // ---- Nova busca (etapa "Onde?"): marca Natal no RN, troca para PB só com "change"
+  await a.tap("#barra-inferior a[data-ir=nova]");
+  await a.fill("#termo-input", "clínica"); await a.press("#termo-input", "Enter");
+  await a.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  await alturaOk("#uf");
+  assert.equal(await a.$eval("#uf", (e) => e.value), "RN");
+  await a.$eval("#lista-cidades input[data-cidade='Natal']", (e) => e.click());
+  await esperarTexto(a, "#qtd-cidades", /^1 cidade marcada/);
+  await trocar("#uf", "PB", ["change"]);
+  await esperarTexto(a, "#toasts", /As cidades do RN foram desmarcadas\./);
+  await esperarTexto(a, "#lista-cidades", /João Pessoa/);
+  assert.match(await a.textContent("#lista-cidades"), /Campina Grande/);
+  assert.doesNotMatch(await a.textContent("#lista-cidades"), /Mossoró/);
+  assert.equal(await a.locator("#lista-cidades input[data-cidade]").count(), 223);
+  assert.equal(await a.locator("#mapa-escolha path.mun").count(), 223); // mapa da PB
+  assert.match(await a.textContent("#qtd-cidades"), /^0 cidades/);
+  assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem("mapaleads.uf"))), "PB");
+  await semRolagem("Nova busca PB");
+  await a.$eval("#uf", (e) => e.scrollIntoView({ block: "start" })); await capturar(a, "seletor-nova-busca-pb");
+
+  // ---- Mapa: já abre na PB (o estado é um só); volta ao RN só com "input" e de novo à PB pelo seletor do Playwright
+  await a.tap("#barra-inferior a[data-ir=mapa]");
+  await a.waitForFunction(() => /Paraíba/.test(document.querySelector("#mapa-painel h2")?.textContent || ""), null, { timeout: 15000 });
+  assert.equal(await a.$eval("#uf-mapa", (e) => e.value), "PB");
+  await alturaOk("#uf-mapa");
+  await trocar("#uf-mapa", "RN", ["input"]);
+  await a.waitForFunction(() => /Rio Grande do Norte/.test(document.querySelector("#mapa-painel h2")?.textContent || ""), null, { timeout: 15000 });
+  assert.equal(await a.evaluate(() => location.hash), "#mapa");
+  await a.selectOption("#uf-mapa", "PB");
+  await a.waitForFunction(() => /Paraíba/.test(document.querySelector("#mapa-painel h2")?.textContent || ""), null, { timeout: 15000 });
+  assert.equal(await a.evaluate(() => location.hash), "#mapa/pb");
+  assert.match(await a.textContent("#mapa-painel"), /de 223 município/);
+  assert.match(await a.textContent("#mapa-painel"), /População \(2022\)\s*i?\s*3\.974\.687/);
+  assert.match(await a.textContent("#migalhas"), /^\s*PB/);
+  // contornos: os 223 municípios da PB no Leaflet
+  await a.waitForFunction(() => document.querySelectorAll("#mapa-leaflet path.leaflet-interactive").length >= 223, null, { timeout: 15000 });
+  await a.waitForTimeout(600); await capturar(a, "seletor-mapa-pb");
+  await semRolagem("Mapa PB");
+  // (sem leads o painel não lista microrregiões: aprofunda pelo endereço, como um link compartilhado)
+  await a.evaluate(() => { location.hash = "#mapa/pb/campina-grande/campina-grande"; });
+  await a.waitForFunction(() => /^PB›CampinaGrande›CampinaGrande$/.test(document.querySelector("#migalhas").textContent.replace(/\s+/g, "")), null, { timeout: 15000 });
+  await a.evaluate(() => { location.hash = "#mapa/pb/joao-pessoa/joao-pessoa"; });
+  await a.waitForFunction(() => /^PB›JoãoPessoa›JoãoPessoa$/.test(document.querySelector("#migalhas").textContent.replace(/\s+/g, "")), null, { timeout: 15000 });
+
+  // ---- Guardado no aparelho: recarregar abre na PB
+  await a.evaluate(() => { location.hash = "#inicio"; });
+  await a.reload();
+  await a.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)", { timeout: 30000 });
+  assert.equal(await a.$eval("#uf", (e) => e.value), "PB");
+
+  // ---- Mercado: números do estado
+  await a.evaluate(() => { location.hash = "#mercado"; });
+  await esperarTexto(a, "#kpis-mercado", /População da PB\s*i?\s*3\.974\.687/);
+  assert.equal(await a.$eval("#uf-mercado", (e) => e.value), "PB");
+  await alturaOk("#uf-mercado");
+  await trocar("#uf-mercado", "RN", ["input", "change"]); // os dois eventos juntos: troca uma vez só
+  await esperarTexto(a, "#kpis-mercado", /População do RN\s*i?\s*3\.302\.729/);
+  await a.selectOption("#uf-mercado", "PB");
+  await esperarTexto(a, "#kpis-mercado", /População da PB\s*i?\s*3\.974\.687/);
+  await semRolagem("Mercado PB");
+
+  // ---- Admin › Estado inteiro: cartão com os números do estado; a estimativa anterior some ao trocar
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await a.waitForSelector("#rn-uf");
+  assert.equal(await a.$eval("#rn-uf", (e) => e.value), "PB");
+  await alturaOk("#rn-uf");
+  await esperarTexto(a, "#rn-info", /^Paraíba: 223 municípios · 3\.974\.687 hab\./);
+  await a.$eval("#rn-uf", (e) => e.scrollIntoView({ block: "center" })); await capturar(a, "seletor-admin-estado-inteiro-pb");
+  assert.match(await a.textContent("#rn-confirmar"), /\(PB\)/);
+  await trocar("#rn-uf", "RN", ["change"]);
+  await esperarTexto(a, "#rn-info", /^Rio Grande do Norte: 167 municípios · 3\.302\.729 hab\./);
+  assert.match(await a.textContent("#rn-confirmar"), /\(RN\)/);
+  await a.selectOption("#rn-uf", "PB");
+  await esperarTexto(a, "#rn-info", /^Paraíba: 223 municípios/);
+  await semRolagem("Admin PB");
+
+  // ---- De volta ao RN: a Nova busca mostra as cidades do RN de novo
+  await a.selectOption("#rn-uf", "RN");
+  await a.tap("#barra-inferior a[data-ir=nova]");
+  assert.equal(await a.$eval("#uf", (e) => e.value), "RN");
+  await esperarTexto(a, "#lista-cidades", /Mossoró/);
+  assert.equal(await a.locator("#lista-cidades input[data-cidade]").count(), 167);
+  assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem("mapaleads.uf"))), "RN");
+  // WebKit: o recarregamento corta a escuta do Firestore (emulador) e registra "... access control checks" (ver teste do tema).
+  assert.deepEqual(erros.filter((e) => !/Firestore\/Listen\/channel.*access control checks/.test(e)), []);
+  await a.context().close();
 });
