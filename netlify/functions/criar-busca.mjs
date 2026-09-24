@@ -2,6 +2,8 @@
 // Cria uma busca comum (qualquer usuário logado, respeitando o limite diário)
 // ou um RN inteiro (SÓ admin — conferido aqui no servidor pela claim do token).
 // Com { simular: true } só devolve a estimativa, sem criar nada.
+// Paralelismo (24/09): a busca comum com várias cidades já nasce dividida em até 4 PARTES
+// (por cidade), uma por máquina do motor; a estimativa é a da parte mais demorada.
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as L from "../lib/logica.mjs";
@@ -25,14 +27,24 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
   } catch (erro) {
     throw new ErroHttp(400, erro.message);
   }
-  const consultas = L.consultasBuscaComum(parametros);
-  const estimativa = L.estimarConsultasSeg(consultas, parametros.extrair_email, metricas);
-  if (estimativa > L.LIMITE_BUSCA_COMUM_SEG) {
+  const vagas = L.vagasEfetivas((await db.doc("config/paralelismo").get()).data() || {});
+  const plano = L.planoBuscaComum(parametros, metricas, vagas);
+  const { consultas, partes, estimativa } = plano;
+  if (plano.maiorParte > L.LIMITE_BUSCA_COMUM_SEG) {
     throw new ErroHttp(400, "Busca grande demais para uma execução (mais de 5 h estimadas). Divida em buscas menores.");
   }
-  if (corpo.simular) return json(200, { consultas: consultas.length, estimativa_seg: estimativa });
+  const resumoPlano = {
+    consultas: consultas.length,
+    estimativa_seg: estimativa,
+    maquinas: plano.vagas, // quantas partes/máquinas ao mesmo tempo
+    um_motor_seg: plano.umMotor, // quanto levaria numa máquina só (para comparar)
+    pequenas: plano.pequenas.length, // cidades do RN com menos de 5 mil hab. (IBGE, Censo 2022)
+    ...(plano.semPequenas ? { sem_pequenas: plano.semPequenas, cidades_pequenas: plano.pequenas } : {}),
+  };
+  if (corpo.simular) return json(200, resumoPlano);
 
   const ref = db.collection("buscas").doc();
+  const refsPartes = partes.map(() => db.collection("buscas").doc());
   // Limite diário conferido e contado na MESMA transação que cria a busca:
   // dois cliques ao mesmo tempo não furam o limite.
   const limite = await db.runTransaction(async (t) => {
@@ -45,7 +57,7 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
     t.set(refUsuario, { email: usuario.email, dia: situacao.dia, contagem_dia: situacao.contagem + 1 }, { merge: true });
     t.set(ref, {
       tipo: "comum",
-      lista: true, // aparece em "Minhas buscas" (filhas do RN não aparecem)
+      lista: true, // aparece em "Minhas buscas" (filhas do RN e partes não aparecem)
       dono_uid: usuario.uid,
       dono_email: usuario.email,
       criada_em: FieldValue.serverTimestamp(),
@@ -54,15 +66,34 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
       parametros,
       total_consultas: consultas.length,
       estimativa_seg: estimativa,
+      ...(partes.length ? { partes_total: partes.length, cidades_total: parametros.cidades.length, cidades_prontas: 0, consultas_feitas: 0 } : {}),
+    });
+    // Partes: cada uma roda numa máquina do motor (mesma transação: ou tudo, ou nada).
+    partes.forEach((parte, ordem) => {
+      t.set(refsPartes[ordem], {
+        tipo: "parte",
+        mae_id: ref.id,
+        dono_uid: usuario.uid,
+        dono_email: usuario.email,
+        parametros: { termos: parametros.termos, extrair_email: parametros.extrair_email },
+        cidades: parte.cidades,
+        consultas: parte.consultas,
+        ordem,
+        status: "na_fila",
+        criada_em: FieldValue.serverTimestamp(),
+      });
     });
     return situacao;
   });
 
-  await adicionarNaFila(db, [{ id: ref.id, tipo: "comum", estimativa_seg: estimativa }], false);
+  await adicionarNaFila(db, partes.length
+    ? partes.map((p, i) => ({ id: refsPartes[i].id, tipo: "comum", mae_id: ref.id,
+      estimativa_seg: L.estimarConsultasSeg(p.consultas, parametros.extrair_email, metricas) }))
+    : [{ id: ref.id, tipo: "comum", estimativa_seg: estimativa }], false);
   const disparado = await dispararMotor(ref.id);
   return json(201, {
     id: ref.id,
-    estimativa_seg: estimativa,
+    ...resumoPlano,
     restantes_hoje: limite.limite - limite.contagem - 1,
     disparado,
   });

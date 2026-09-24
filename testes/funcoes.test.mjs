@@ -76,7 +76,8 @@ test("método errado: 405", async () => {
 test("busca comum: simular não cria nada; criar grava busca, contador e fila", async () => {
   const { db } = firebase();
   const sim = await pedido(criarBusca, { termos: "home care", cidades: "Natal RN", profundidade: "rapida", simular: true }, tokens.ana);
-  assert.deepEqual(sim, { status: 200, corpo: { consultas: 1, estimativa_seg: 40 } });
+  // 1 cidade: uma máquina só; estimativa = partida (60 s) + a consulta (40 s)
+  assert.deepEqual(sim, { status: 200, corpo: { consultas: 1, estimativa_seg: 100, maquinas: 1, um_motor_seg: 100, pequenas: 0 } });
   assert.equal((await db.collection("buscas").get()).size, 0);
 
   const r = await pedido(criarBusca, { termos: "home care, cuidador", cidades: "Natal RN", profundidade: "rapida" }, tokens.ana);
@@ -105,7 +106,8 @@ test("limite diário por usuário é respeitado no servidor", async () => {
 });
 
 test("busca grande demais para uma execução é recusada", async () => {
-  const cidades = Array.from({ length: 40 }, (_, i) => `Cidade ${i}`).join(",");
+  // Mesmo dividida em 4 máquinas, cada parte passaria de 5 h.
+  const cidades = Array.from({ length: 80 }, (_, i) => `Cidade ${i}`).join(",");
   const r = await pedido(criarBusca, { termos: "a,b,c,d", cidades, profundidade: "completa", extrair_email: true, simular: true }, tokens.breno);
   assert.equal(r.status, 400);
   assert.match(r.corpo.erro, /grande demais/);
@@ -294,10 +296,17 @@ test("despertador: dispara só quando há trabalho e registra em config/desperta
   assert.equal(r.disparou, true);
   assert.equal(disparos.length, 1);
 
+  // Uma máquina rodando e trabalho na fila: com 4 vagas, dispara para as vagas livres.
   await db.doc("buscas/viva").set({ tipo: "comum", status: "rodando", batimento_em: new Date() });
   r = await acordar({ db, disparar });
+  assert.equal(r.motivo, "fila_com_trabalho");
+  assert.equal(disparos.length, 2);
+  // Paralelismo reduzido a 1 vaga (sinal de bloqueio): não dispara com a máquina viva.
+  await db.doc("config/paralelismo").set({ vagas_base: 1, ultimo_sinal_em: new Date() });
+  r = await acordar({ db, disparar });
   assert.equal(r.motivo, "motor_rodando");
-  assert.equal(disparos.length, 1);
+  assert.equal(disparos.length, 2);
+  await db.doc("config/paralelismo").delete();
   const registro = (await db.doc("config/despertador").get()).data();
   assert.equal(registro.disparou, false);
   assert.ok(registro.ultima_execucao);
@@ -380,4 +389,64 @@ test("apagar: busca em andamento precisa ser cancelada antes; mãe do Estado int
   const r = await pedido(apagarBusca, { id: "ap-mae" }, tokens.breno);
   assert.deepEqual(r.corpo, { resultado: "apagada", lotes: 3, buscas: 3 });
   for (const id of ["ap-mae", "ap-f1", "ap-f2"]) assert.equal((await db.doc(`buscas/${id}`).get()).exists, false);
+});
+
+test("paralelismo: busca com várias cidades nasce dividida em partes (até 4, por cidade) e a estimativa é a da maior parte", async () => {
+  const { db } = firebase();
+  const cidades = "Natal RN, Parnamirim RN, Macaíba RN, Extremoz RN, Ceará-Mirim RN";
+  const sim = await pedido(criarBusca, { termos: "pet shop, veterinário", cidades, profundidade: "rapida", simular: true }, tokens.breno);
+  assert.equal(sim.corpo.consultas, 10);
+  assert.equal(sim.corpo.maquinas, 4);
+  // 4 máquinas: a maior parte tem 2 cidades × 2 termos = 4 consultas → 60 + 4×40 + 3×30 = 310 s (uma só: 60 + 10×40 + 9×30 = 730 s)
+  assert.equal(sim.corpo.estimativa_seg, 310);
+  assert.equal(sim.corpo.um_motor_seg, 730);
+
+  const r = await pedido(criarBusca, { termos: "pet shop, veterinário", cidades, profundidade: "rapida" }, tokens.breno);
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+  const mae = (await db.doc(`buscas/${r.corpo.id}`).get()).data();
+  assert.equal(mae.partes_total, 4);
+  assert.equal(mae.cidades_total, 5);
+  assert.equal(mae.cidades_prontas, 0);
+  const partes = (await db.collection("buscas").where("mae_id", "==", r.corpo.id).get()).docs.map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => a.ordem - b.ordem);
+  assert.deepEqual(partes.map((p) => p.cidades), [["Natal RN", "Ceará-Mirim RN"], ["Parnamirim RN"], ["Macaíba RN"], ["Extremoz RN"]]);
+  assert.ok(partes.every((p) => p.tipo === "parte" && p.status === "na_fila" && !p.lista && p.dono_uid === mae.dono_uid));
+  // Cidade por cidade dentro da parte (os 2 termos de Natal, depois os 2 de Ceará-Mirim)
+  assert.deepEqual(partes[0].consultas.map((c) => c.texto), ["pet shop Natal RN", "veterinário Natal RN", "pet shop Ceará-Mirim RN", "veterinário Ceará-Mirim RN"]);
+  const fila = (await db.doc("fila/estado").get()).data();
+  const itens = fila.itens.filter((i) => i.mae_id === r.corpo.id);
+  assert.equal(itens.length, 4);
+
+  // Com o paralelismo reduzido (sinal de bloqueio), divide em menos partes.
+  await db.doc("config/paralelismo").set({ vagas_base: 2, ultimo_sinal_em: new Date() });
+  const sim2 = await pedido(criarBusca, { termos: "pet shop", cidades, profundidade: "rapida", simular: true }, tokens.breno);
+  assert.equal(sim2.corpo.maquinas, 2);
+  await db.doc("config/paralelismo").delete();
+
+  // Cancelar antes de começar: mãe e partes canceladas na hora.
+  const c = await pedido(cancelarBusca, { id: r.corpo.id }, tokens.breno);
+  assert.deepEqual(c.corpo, { resultado: "cancelada" });
+  assert.equal((await db.doc(`buscas/${r.corpo.id}`).get()).data().status, "cancelada");
+  const depois = (await db.collection("buscas").where("mae_id", "==", r.corpo.id).get()).docs.map((d) => d.data().status);
+  assert.deepEqual([...new Set(depois)], ["cancelada"]);
+  assert.equal((await pedido(cancelarBusca, { id: partes[0].id }, tokens.breno)).status, 400); // parte: só pela principal
+
+  // Apagar leva as partes (e os leads parciais delas).
+  await db.doc(`buscas/${partes[0].id}/lotes/0`).set({ dono_uid: mae.dono_uid, leads: [{ nome: "Parcial Fictício" }] });
+  const ap = await pedido(apagarBusca, { id: r.corpo.id }, tokens.breno);
+  assert.deepEqual(ap.corpo, { resultado: "apagada", lotes: 1, buscas: 5 });
+  assert.equal((await db.collection("buscas").where("mae_id", "==", r.corpo.id).get()).size, 0);
+});
+
+test("aviso de cidades pequenas: simular diz quantas têm menos de 5 mil hab. (IBGE) e quanto tempo tirá-las economiza", async () => {
+  // Água Nova (2.946) e Almino Afonso (4.687) são pequenas; Natal e Mossoró não; João Pessoa (fora do RN) não conta.
+  const r = await pedido(criarBusca, { termos: "farmácia", cidades: "Natal RN, Água Nova RN, Almino Afonso RN, Mossoró RN, João Pessoa PB",
+    profundidade: "rapida", simular: true }, tokens.ana);
+  assert.equal(r.corpo.pequenas, 2);
+  assert.deepEqual(r.corpo.cidades_pequenas, ["Água Nova RN", "Almino Afonso RN"]);
+  assert.equal(r.corpo.sem_pequenas.consultas, 3);
+  assert.ok(r.corpo.sem_pequenas.estimativa_seg <= r.corpo.estimativa_seg);
+  const sem = await pedido(criarBusca, { termos: "farmácia", cidades: "Natal RN, Mossoró RN", profundidade: "rapida", simular: true }, tokens.ana);
+  assert.equal(sem.corpo.pequenas, 0);
+  assert.equal(sem.corpo.sem_pequenas, undefined);
 });

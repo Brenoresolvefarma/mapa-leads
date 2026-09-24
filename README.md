@@ -7,7 +7,8 @@ dela precisa de aprovação antes.
 
 > **Estado atual: Fase 3a v2 no ar** (PR 12) + **celular primeiro** (PR 13): tela clara por padrão, menu fixo embaixo,
 > cartões com WhatsApp/Ligar, ícones (i) que funcionam no toque, **apagar busca** (dono ou admin) e comemoração ao
-> criar uma busca. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
+> criar uma busca. **Motor em paralelo** (PR 14): até 4 máquinas ao mesmo tempo, leads cidade a cidade e aviso de
+> cidades pequenas. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
 
 ## Como funciona
 
@@ -29,6 +30,22 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
 - **Fila sem perda e sem travar ninguém**: buscas comuns passam na frente dos lotes do RN
   (o motor olha a fila antes de cada consulta do RN); entre usuários comuns, a fila alterna
   por dono. A tela mostra a posição na fila e o tempo estimado de espera.
+- **Motor em paralelo** (aprovado pelo Breno em 24/09), sem custo (Actions grátis em repo público):
+  - cada disparo abre **4 vagas** (jobs da matrix do `motor.yml`, cada uma com o seu grupo de `concurrency`):
+    **no máximo 4 máquinas ao mesmo tempo**, somando todas as buscas;
+  - a busca comum com várias cidades **nasce dividida em até 4 partes por cidade** (Function `criar-busca`);
+    cada vaga pega a próxima parte da fila (rodízio por vendedor), então **buscas de vendedores diferentes
+    andam ao mesmo tempo**. Quem termina a última parte junta tudo **sem duplicar** (trava por transação);
+  - **resultados parciais**: a cada cidade pronta, a parte grava os leads dela; a tela mostra
+    "X de Y cidades prontas" e já deixa abrir esses leads (Início, Meus leads, Mapa);
+  - **ritmo de cada máquina igual ao de antes** (mesma pausa de 20–40 s, `-c 4`): o ganho vem de usar mais
+    máquinas (cada uma com outro IP), não de acelerar uma;
+  - **sinal de bloqueio** (tela de consentimento/captcha, ou consultas vazias em sequência pela regra do
+    disjuntor): as vagas caem para a **metade** (4 → 2 → 1), a parte pausa 30 min e as consultas restantes voltam
+    para a fila; a cada **2 h sem novo sinal volta +1 vaga**. O log só registra números, ex.:
+    `Sinal de bloqueio (consultas vazias em sequência): paralelismo 4 → 2`. Estado em `config/paralelismo`;
+  - o **Estado inteiro** usa no máximo **2** vagas, e buscas de vendedor sempre passam na frente;
+  - **cache da imagem do scraper: não** (medido: ~15 s para baixar; salvar/restaurar pelo cache levaria o mesmo ou mais).
 - **Cancelar**: na fila, cancela na hora; rodando, para antes da próxima consulta e guarda os
   leads já coletados. No RN inteiro, cancela os lotes que faltam e fecha com o que já veio.
 - **Apagar busca** (`/api/apagar-busca`): o vendedor apaga só as dele; o admin, qualquer uma. Confirmação em dois
@@ -93,7 +110,7 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
 - O GitHub **atrasa ou pula** agendamentos (o `*/15` nunca disparou). Agora são dois relógios:
   1. `schedule` do GitHub em minutos quebrados (`7,22,37,52 * * * *`);
   2. **despertador** no Netlify (Scheduled Function, a cada 15 min, plano Free): olha a fila e só
-     dispara o motor se houver trabalho (ou busca órfã) e nada rodando. Custa ~2 leituras e
+     dispara o motor se houver trabalho (ou busca órfã) e vaga livre (menos máquinas rodando que as vagas ligadas). Custa ~2 leituras e
      1 gravação (`config/despertador`) por vez.
 
 ### Tratamento dos dados (nada é inventado)
@@ -117,6 +134,15 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
 Mais uma **pausa aleatória de 20–40 s entre consultas** (reduz o risco de bloqueio) e ~1 min
 para a máquina do GitHub ligar. Com e-mail, ~1,6×. O motor grava o tempo real de cada
 consulta em `config/metricas` e as estimativas da tela se ajustam sozinhas.
+
+**Medido na execução real #7 (23/09, 30 consultas):** raspagem de 10–60 s por consulta (média ~25 s) + pausa
+de 20–40 s ≈ **56 s por consulta** (28 min no total); partida ~20–35 s (baixar a imagem ~15 s).
+**Estimativa honesta com paralelismo:** partida + a parte mais demorada (as partes rodam ao mesmo tempo). Ex.:
+30 cidades × 3 termos (Rápida) = 90 consultas → ~1h15–1h25 numa máquina; **~20–22 min com 4** (primeiros leads em
+~2–3 min). A Nova busca mostra "N máquinas em paralelo · numa só: ~X" e avisa que, com outras buscas rodando, as
+máquinas se dividem. **Cidades pequenas**: quando há cidades do RN com menos de 5 mil hab. (IBGE, Censo 2022; 52 dos
+167 municípios), a Nova busca avisa quantas são e quanto tempo tirá-las economiza, com o botão "Remover as pequenas"
+(nada é tirado sozinho).
 
 ### Vigia de tempo (nenhuma consulta fica presa)
 O scraper termina o trabalho mas às vezes não encerra o processo. A vigia:
@@ -225,6 +251,11 @@ O log público mostra só números, ex.:
 
 3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
+
+## Configuração depois do merge do PR 14 (motor em paralelo)
+Nada a cadastrar: o `motor.yml` já abre as 4 vagas e o `config/paralelismo` é criado sozinho no primeiro sinal de
+bloqueio (sem ele, valem 4 vagas). Para voltar a 1 máquina só, em caso de problema: Firebase › Firestore › `config` ›
+documento `paralelismo` com `vagas_base: 1` e `ultimo_sinal_em` = agora (volta +1 a cada 2 h), ou peça a mudança.
 
 ## Configuração depois do merge do PR 13 (celular primeiro)
 Nada a cadastrar: a Function `apagar-busca` usa as mesmas variáveis do Netlify e as regras do Firestore não mudam

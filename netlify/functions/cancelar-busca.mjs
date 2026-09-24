@@ -2,6 +2,7 @@
 // Dono da busca ou admin. Na fila: cancela na hora. Rodando: pede o cancelamento
 // e o motor para antes da próxima consulta, guardando os leads já coletados.
 // Busca-mãe do RN: cancela os lotes que ainda não rodaram e fecha a mãe com o que já foi coletado.
+// Busca comum dividida em partes (paralelismo): mesma coisa com as partes; se nenhuma começou, cancela na hora.
 
 import { FieldValue } from "firebase-admin/firestore";
 import { dispararMotor, ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
@@ -21,9 +22,21 @@ export default handler(async (req) => {
     throw new ErroHttp(404, "Busca não encontrada.");
   }
   if (dados.tipo === "rn_filha") throw new ErroHttp(400, "Cancele pela busca principal do RN inteiro.");
+  if (dados.tipo === "parte") throw new ErroHttp(400, "Cancele pela busca principal.");
   if (FINAIS.includes(dados.status)) throw new ErroHttp(409, "Esta busca já terminou.");
 
-  if (dados.tipo === "rn_mae") {
+  if (Number(dados.partes_total) > 0 && dados.status === "na_fila") {
+    // Nenhuma parte começou: cancela tudo agora (sem leads para guardar).
+    const partes = await db.collection("buscas").where("mae_id", "==", id).where("status", "==", "na_fila").get();
+    const lote = db.batch();
+    partes.forEach((p) => lote.update(p.ref, { status: "cancelada", finalizada_em: FieldValue.serverTimestamp() }));
+    lote.update(ref, { status: "cancelada", aviso: "Cancelada antes de começar.", finalizada_em: FieldValue.serverTimestamp() });
+    await lote.commit();
+    await removerDaFila(db, [id, ...partes.docs.map((p) => p.id)]);
+    return json(200, { resultado: "cancelada" });
+  }
+
+  if (dados.tipo === "rn_mae" || Number(dados.partes_total) > 0) {
     await ref.update({ cancelar_solicitado: true });
     const filhas = await db.collection("buscas")
       .where("mae_id", "==", id).where("status", "==", "na_fila").get();

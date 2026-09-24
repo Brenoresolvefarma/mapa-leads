@@ -358,10 +358,14 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await esperarHash(p, "#inicio");
   await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem.[\s\S]*ainda pode fazer 2 hoje/);
   const { db } = firebase();
-  const criadas = await db.collection("buscas").where("dono_uid", "==", uids.ana).where("status", "==", "na_fila").get();
-  assert.equal(criadas.size, 1);
-  assert.deepEqual(criadas.docs[0].data().parametros.cidades, ["Natal RN", "Parnamirim RN"]);
-  assert.deepEqual(criadas.docs[0].data().parametros.sinonimos, []);
+  const naFila = (await db.collection("buscas").where("dono_uid", "==", uids.ana).where("status", "==", "na_fila").get()).docs.map((d) => d.data());
+  const criadas = naFila.filter((b) => b.tipo === "comum");
+  assert.equal(criadas.length, 1);
+  assert.deepEqual(criadas[0].parametros.cidades, ["Natal RN", "Parnamirim RN"]);
+  assert.deepEqual(criadas[0].parametros.sinonimos, []);
+  // 2 cidades → 2 partes, uma por máquina (paralelismo)
+  assert.equal(criadas[0].partes_total, 2);
+  assert.deepEqual(naFila.filter((b) => b.tipo === "parte").map((b) => b.cidades).sort(), [["Natal RN"], ["Parnamirim RN"]]);
 
   // ---- Meus leads: juntar b1 + b2 pelo seletor de buscas
   await p.click("[data-ir=leads]");
@@ -824,4 +828,48 @@ test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mens
   assert.equal(await r.locator("#comemoracao").count(), 0, "sem animação com reduzir movimento");
   assert.deepEqual(erros, []);
   await ctx.close();
+});
+
+test("paralelismo: busca rodando mostra 'X de Y cidades prontas' e os leads já prontos; aviso de cidades pequenas na Nova busca", async () => {
+  const { db } = firebase();
+  // Busca dividida em 2 partes (2 máquinas): 1 de 3 cidades pronta, com o lote parcial da parte 0.
+  await db.doc("buscas/bp").set({ tipo: "comum", lista: true, dono_uid: uids.ana, dono_email: "ana@x.example", status: "rodando",
+    criada_em: new Date(), iniciada_em: new Date(), parametros: { termos: ["clínica"], cidades: ["Macaíba RN", "São José de Mipibu RN", "Nísia Floresta RN"] },
+    partes_total: 2, cidades_total: 3, cidades_prontas: 1, consultas_feitas: 1, total_consultas: 3, parciais: { bp_p0: 1 } });
+  await db.doc("buscas/bp_p0").set({ tipo: "parte", mae_id: "bp", dono_uid: uids.ana, status: "rodando", cidades: ["Macaíba RN", "Nísia Floresta RN"], qtd_lotes: 1 });
+  await db.doc("buscas/bp_p0/lotes/0").set({ dono_uid: uids.ana, leads: [
+    lead({ nome: "Clínica Parcial Macaíba", telefone: "(84) 99999-0077", whatsapp_link: "https://wa.me/5584999990077", cidade: "Macaíba", cidade_buscada: "Macaíba RN", id_lugar: "par1" })] });
+
+  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
+  await esperarTexto(p, "#ultimas", /1 de 3\s*cidades prontas/);
+  assert.match(await texto(p, "#ultimas"), /os leads delas já estão disponíveis · 2 máquinas em paralelo/);
+  assert.match(await texto(p, "#ultimas"), /Rodando \(1 de 3 cidades prontas\)/);
+  await p.locator("#ultimas [data-ver-busca=bp] >> text=Ver leads já prontos").tap();
+  await p.waitForSelector("#cartoes .cartao-lead >> text=Clínica Parcial Macaíba");
+  // Chegou mais uma cidade: a lista de buscas mostra 2 de 3 sem recarregar
+  await db.doc("buscas/bp").update({ cidades_prontas: 2 });
+  await p.tap("#abrir-buscas");
+  await esperarTexto(p, "#caixa-buscas", /2 de 3 cidades prontas/);
+  await p.tap("#titulo-pagina"); // tocar fora fecha a lista
+
+  // Nova busca: 1 cidade pequena (Água Nova, 2.946 hab.) entre 2 → aviso com a economia e botão para tirar
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  await p.fill("#termo-input", "farmácia"); await p.press("#termo-input", "Enter");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  for (const nome of ["Água Nova", "Natal"]) {
+    await p.fill("#busca-cidade", nome);
+    await p.locator(`#lista-cidades input[data-cidade="${nome}"]`).check();
+  }
+  await p.fill("#busca-cidade", "");
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  await p.waitForSelector("#aviso-pequenas:not(.oculto)");
+  assert.match(await texto(p, "#aviso-pequenas-txt"), /^1 de 2 cidades têm menos de 5 mil habitantes \(IBGE, Censo 2022\).*Tirá-las economiza \d+ consultas/);
+  assert.ok((await p.locator("#remover-pequenas").boundingBox()).height >= 44);
+  await p.tap("#remover-pequenas");
+  await p.waitForSelector("#aviso-pequenas.oculto", { state: "attached" });
+  await esperarTexto(p, "#r-resumo", /em 1 cidade\(s\)/);
+  assert.equal(await p.evaluate(() => [...document.querySelectorAll("#lista-cidades input:checked")].map((i) => i.dataset.cidade).join()), "Natal");
+  assert.deepEqual(erros, []);
+  await p.context().close();
+  for (const id of ["bp_p0/lotes/0", "bp_p0", "bp"]) await db.doc(`buscas/${id}`).delete();
 });

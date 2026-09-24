@@ -195,8 +195,12 @@ try {
       await p.click("#buscar");
       await esperarHash(p, "#inicio");
       await esperar(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
-      const snap = await db.collection("buscas").where("dono_uid", "==", usuarios.comum.uid).where("status", "in", ["na_fila", "rodando"]).get();
-      confere(snap.size === 1, "busca criada no banco");
+      const todas = await db.collection("buscas").where("dono_uid", "==", usuarios.comum.uid).where("status", "in", ["na_fila", "rodando"]).get();
+      // A busca (lista: true) e, com várias cidades, as partes dela (uma por máquina do motor).
+      const snap = { docs: todas.docs.filter((d) => d.data().lista === true) };
+      confere(snap.docs.length === 1, "busca criada no banco");
+      const partes = todas.docs.filter((d) => d.data().tipo === "parte" && d.data().mae_id === snap.docs[0].id).length;
+      confere(partes === Number(snap.docs[0].data().partes_total || 0), `partes criadas: ${partes}`);
       criadas.push(snap.docs[0].id);
       await p.click(`#ultimas [data-cancelar='${snap.docs[0].id}']`);
       await p.click("#conf-sim"); // confirmação em dois passos
@@ -320,7 +324,10 @@ try {
 } finally {
   // ---------- limpeza: nada do teste fica em produção
   await navegador?.close();
-  for (const id of [BUSCA, ...Object.values(APAGAR), ...criadas]) {
+  // Partes (paralelismo) das buscas criadas pelo teste também saem, com os lotes parciais.
+  const partesCriadas = [];
+  for (const id of criadas) partesCriadas.push(...(await db.collection("buscas").where("mae_id", "==", id).get()).docs.map((d) => d.id));
+  for (const id of [BUSCA, ...Object.values(APAGAR), ...criadas, ...partesCriadas]) {
     for (const l of (await db.collection(`buscas/${id}/lotes`).get()).docs) await l.ref.delete();
     await db.doc(`buscas/${id}`).delete();
   }

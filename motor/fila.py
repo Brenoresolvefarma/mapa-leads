@@ -3,6 +3,12 @@ Fila do MapaLeads.
 
 Regras (aprovadas pelo Breno):
   - buscas comuns passam na frente dos lotes (buscas-filhas) do RN inteiro;
+  - busca comum com várias cidades é dividida em PARTES (até 4, por cidade) na criação;
+    cada parte roda numa vaga (máquina) diferente ao mesmo tempo e, quando a última
+    termina, os leads são juntados sem duplicados na busca (a "mãe" comum);
+  - partes entram no rodízio por dono junto com as buscas comuns: buscas de
+    vendedores diferentes andam ao mesmo tempo;
+  - o Estado inteiro ocupa no máximo 2 vagas (paralelismo.VAGAS_RN_MAX);
   - entre as buscas comuns, a fila alterna por dono (quem disparou 5 buscas
     não passa na frente de quem disparou 1);
   - lotes do RN respeitam o agendamento ("agendar para a noite") e a pausa
@@ -29,9 +35,28 @@ DOC_METRICAS = ("config", "metricas")
 TIPO_COMUM = "comum"
 TIPO_MAE = "rn_mae"
 TIPO_FILHA = "rn_filha"
+TIPO_PARTE = "parte"  # pedaço de uma busca comum (algumas cidades), roda numa vaga
 
 # Com mais de um motor em paralelo, uma busca "rodando" só é órfã depois disto sem sinal de vida.
 ORFA_APOS_SEG = 45 * 60
+
+
+def orfa_apos_seg(dados):
+    """Prazo sem sinal de vida para considerar a busca órfã.
+
+    A parte dá sinal de vida a cada CIDADE pronta (todas as consultas daquela cidade):
+    prazo = nº de termos × (limite de uma consulta + 1 min) + 10 min de folga.
+    """
+    if dados.get("tipo") != TIPO_PARTE:
+        return ORFA_APOS_SEG
+    parametros = dados.get("parametros") or {}
+    consultas = dados.get("consultas") or []
+    termos = max(1, len({c.get("termo") for c in consultas}) or len(parametros.get("termos") or []))
+    profundidade = (consultas[0].get("profundidade") if consultas else None) or "normal"
+    if profundidade not in tratamento.PROFUNDIDADES:
+        profundidade = "normal"
+    limite = tratamento.limite_consulta_seg(profundidade, bool(parametros.get("extrair_email")))
+    return termos * (limite + 60) + 600
 
 
 def agora_utc():
@@ -48,9 +73,15 @@ def _segundos(valor):
         return float(valor)
 
 
+def eh_mae(dados):
+    """Busca que nunca roda direto: mãe do RN ou busca comum dividida em partes."""
+    tipo = dados.get("tipo", TIPO_COMUM)
+    return tipo == TIPO_MAE or (tipo == TIPO_COMUM and int(dados.get("partes_total") or 0) > 0)
+
+
 def elegivel(dados, agora):
     """A busca pode rodar agora? (na fila, não agendada para depois, não pausada)."""
-    if dados.get("status") != "na_fila" or dados.get("tipo", TIPO_COMUM) == TIPO_MAE:
+    if dados.get("status") != "na_fila" or eh_mae(dados):
         return False
     ts_agora = _segundos(agora)
     if _segundos(dados.get("agendada_para")) > ts_agora:
@@ -64,8 +95,8 @@ def ordenar_fila(buscas, agora):
     """Recebe [{"id":..., **dados}] e devolve as elegíveis na ordem de execução."""
     elegiveis = [b for b in buscas if elegivel(b, agora)]
     comuns = sorted(
-        (b for b in elegiveis if b.get("tipo", TIPO_COMUM) == TIPO_COMUM),
-        key=lambda b: _segundos(b.get("criada_em")),
+        (b for b in elegiveis if b.get("tipo", TIPO_COMUM) in (TIPO_COMUM, TIPO_PARTE)),
+        key=lambda b: (_segundos(b.get("criada_em")), b.get("ordem", 0)),
     )
     # Rodízio por dono: 1ª busca de cada dono, depois a 2ª de cada dono...
     rodada_por_dono = {}
@@ -74,8 +105,8 @@ def ordenar_fila(buscas, agora):
         dono = b.get("dono_uid") or ""
         rodada = rodada_por_dono.get(dono, 0)
         rodada_por_dono[dono] = rodada + 1
-        com_rodada.append((rodada, _segundos(b.get("criada_em")), b))
-    comuns_ordenadas = [b for _, _, b in sorted(com_rodada, key=lambda x: (x[0], x[1]))]
+        com_rodada.append((rodada, _segundos(b.get("criada_em")), b.get("ordem", 0), b))
+    comuns_ordenadas = [b for _, _, _, b in sorted(com_rodada, key=lambda x: (x[0], x[1], x[2]))]
 
     filhas = sorted(
         (b for b in elegiveis if b.get("tipo") == TIPO_FILHA),
@@ -85,8 +116,8 @@ def ordenar_fila(buscas, agora):
 
 
 def consultas_da_busca(dados):
-    """Lista de consultas de uma busca (comum: termo × cidade; filha: já vem pronta)."""
-    if dados.get("tipo") == TIPO_FILHA:
+    """Lista de consultas de uma busca (comum: termo × cidade; filha e parte: já vem pronta)."""
+    if dados.get("tipo") in (TIPO_FILHA, TIPO_PARTE):
         return list(dados.get("consultas") or [])
     parametros = dados.get("parametros") or {}
     profundidade = parametros.get("profundidade") or "normal"
@@ -113,7 +144,7 @@ def montar_estado_fila(buscas, agora, metricas=None):
         itens.append(item)
     rodando = []
     for b in buscas:
-        if b.get("status") == "rodando" and b.get("tipo", TIPO_COMUM) != TIPO_MAE:
+        if b.get("status") == "rodando" and not eh_mae(b):
             total = estimar_busca_seg(b, metricas)
             passou = max(0.0, _segundos(agora) - _segundos(b.get("iniciada_em"))) if b.get("iniciada_em") else 0
             rodando.append({"id": b["id"], "restante_seg": int(max(30, total - passou))})
@@ -121,7 +152,7 @@ def montar_estado_fila(buscas, agora, metricas=None):
     aguardando = [
         {"id": b["id"], "tipo": b.get("tipo", TIPO_COMUM), **({"mae_id": b["mae_id"]} if b.get("mae_id") else {})}
         for b in buscas
-        if b.get("status") == "na_fila" and b.get("tipo", TIPO_COMUM) != TIPO_MAE and not elegivel(b, agora)
+        if b.get("status") == "na_fila" and not eh_mae(b) and not elegivel(b, agora)
     ]
     return {"itens": itens, "rodando": rodando, "aguardando": aguardando}
 
@@ -188,11 +219,15 @@ def carregar_pendentes(db, limite=200):
     return [_com_id(d) for d in na_fila] + [_com_id(d) for d in rodando]
 
 
-def reservar_proxima(db, agora, somente_comum=False):
-    """Pega a próxima busca pela regra de prioridade e marca como "rodando" (transação)."""
+def reservar_proxima(db, agora, somente_comum=False, vagas_rn=None):
+    """Pega a próxima busca pela regra de prioridade e marca como "rodando" (transação).
+
+    vagas_rn: quantos lotes do Estado inteiro podem rodar ao mesmo tempo (None = sem limite).
+    """
     from firebase_admin import firestore
 
     consulta = db.collection(COLECAO).where(filter=FieldFilter("status", "==", "na_fila")).limit(200)
+    rodando = db.collection(COLECAO).where(filter=FieldFilter("status", "==", "rodando")).limit(50)
 
     @firestore.transactional
     def reservar(transacao):
@@ -200,7 +235,12 @@ def reservar_proxima(db, agora, somente_comum=False):
         buscas = [_com_id(d) for d in docs]
         ordem = ordenar_fila(buscas, agora)
         if somente_comum:
-            ordem = [b for b in ordem if b.get("tipo", TIPO_COMUM) == TIPO_COMUM]
+            ordem = [b for b in ordem if b.get("tipo", TIPO_COMUM) in (TIPO_COMUM, TIPO_PARTE)]
+        elif vagas_rn is not None:
+            filhas_rodando = sum(1 for d in rodando.stream(transaction=transacao)
+                                 if (d.to_dict() or {}).get("tipo") == TIPO_FILHA)
+            if filhas_rodando >= vagas_rn:
+                ordem = [b for b in ordem if b.get("tipo") != TIPO_FILHA]
         if not ordem:
             return None
         escolhido = next(d for d in docs if d.id == ordem[0]["id"])
@@ -216,12 +256,15 @@ def reservar_proxima(db, agora, somente_comum=False):
 
 
 def existe_comum_na_fila(db, agora):
-    """Preempção: há busca comum esperando? (1 leitura)"""
-    docs = (db.collection(COLECAO)
-            .where(filter=FieldFilter("status", "==", "na_fila"))
-            .where(filter=FieldFilter("tipo", "==", TIPO_COMUM))
-            .limit(1).stream())
-    return any(True for _ in docs)
+    """Preempção: há busca comum (ou parte dela) esperando? (até 2 leituras pequenas)"""
+    for tipo in (TIPO_PARTE, TIPO_COMUM):
+        docs = (db.collection(COLECAO)
+                .where(filter=FieldFilter("status", "==", "na_fila"))
+                .where(filter=FieldFilter("tipo", "==", tipo))
+                .limit(5).stream())
+        if any(elegivel(_com_id(d), agora) for d in docs):
+            return True
+    return False
 
 
 def carregar_metricas(db):
@@ -249,14 +292,17 @@ def publicar_estado_fila(db, metricas, ultimo=None):
     """Grava fila/estado se mudou. Retorna o estado publicado."""
     from firebase_admin import firestore
 
+    import paralelismo
+
     buscas = carregar_pendentes(db)
     estado = montar_estado_fila(buscas, agora_utc(), metricas)
+    estado["vagas"] = paralelismo.efetivas_agora(db)  # máquinas que podem trabalhar ao mesmo tempo (tela: espera)
     ref = db.collection(DOC_ESTADO_FILA[0]).document(DOC_ESTADO_FILA[1])
     if ultimo is None:
         # 1ª publicação da execução: compara com o que já está no banco (1 leitura)
         # para não gravar à toa a cada 15 min com a fila vazia.
         atual = ref.get().to_dict() or {}
-        ultimo = {k: atual.get(k) for k in ("itens", "rodando", "aguardando")}
+        ultimo = {k: atual.get(k) for k in ("itens", "rodando", "aguardando", "vagas")}
     if estado != ultimo:
         ref.set({**estado, "atualizado_em": firestore.SERVER_TIMESTAMP})
     return estado
@@ -268,7 +314,7 @@ def recuperar_orfas(db, paralelo, log):
     - Sem paralelo (padrão): só existe um motor, então toda busca "rodando"
       no início de uma execução é órfã.
     - Com paralelo: órfã só depois de 45 min sem sinal de vida.
-    Lote do RN órfão volta para a fila (1 nova tentativa); busca comum vira erro.
+    Lote do RN ou parte órfã volta para a fila (1 nova tentativa); busca comum vira erro.
     """
     from firebase_admin import firestore
 
@@ -277,12 +323,12 @@ def recuperar_orfas(db, paralelo, log):
     recuperadas = 0
     for doc in docs:
         dados = doc.to_dict() or {}
-        if dados.get("tipo") == TIPO_MAE:
+        if eh_mae(dados):
             continue
-        if paralelo and _segundos(agora) - _segundos(dados.get("batimento_em")) < ORFA_APOS_SEG:
+        if paralelo and _segundos(agora) - _segundos(dados.get("batimento_em")) < orfa_apos_seg(dados):
             continue
         recuperadas += 1
-        if dados.get("tipo") == TIPO_FILHA and int(dados.get("tentativas") or 0) < 1:
+        if dados.get("tipo") in (TIPO_FILHA, TIPO_PARTE) and int(dados.get("tentativas") or 0) < 1:
             doc.reference.update({
                 "status": "na_fila",
                 "tentativas": int(dados.get("tentativas") or 0) + 1,
