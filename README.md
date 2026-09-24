@@ -313,15 +313,17 @@ O log público mostra só números, ex.:
 - Cotas por equipe: Resolve Farma sem limite; equipe nova 10 usuários / 100 buscas por dia / 6.000 consultas por mês.
   A carteira é por equipe (equipes diferentes podem atender o mesmo estabelecimento).
 
-## Configuração do PR 19 (equipes) — na ordem
+## Configuração do PR 19 (equipes) — na ordem (feito em 24/09)
 1. **Antes do merge** — Firebase › Firestore › **Índices** › Composto › **Criar índice** (coleção `buscas`, escopo Coleção), dois índices:
    - `lista` Crescente · `equipe_id` Crescente · `criada_em` Decrescente;
    - `lista` Crescente · `liberada_equipes` **Arrays** · `criada_em` Decrescente.
-2. **Antes do merge** — GitHub › Actions › **Migrar equipes** › Run workflow (branch do PR) com `simular`: o log mostra
-   só contagens do que vai mudar. Depois rode de novo com `aplicar`.
-3. Merge do PR (o Netlify publica sozinho). Rode **Migrar equipes** › `aplicar` **de novo** (pega o que mudou no meio).
-4. Firebase › Firestore › **Regras**: cole o conteúdo novo de [`firestore.rules`](firestore.rules) › **Publicar**.
-5. Todo mundo que estiver com a tela aberta: **recarregar a página** (o papel e a equipe vêm no token novo).
+2. Merge do PR (o Netlify publica sozinho). **Só depois do merge** o workflow **Migrar equipes** aparece em Actions
+   (o GitHub só mostra o botão de um workflow que já está na `main`): rode `simular` (o log mostra só contagens) e
+   depois `aplicar`. Faça logo após o merge: até o `aplicar`, a carteira no formato novo ainda está vazia.
+3. Firebase › Firestore › **Regras**: cole o conteúdo novo de [`firestore.rules`](firestore.rules) › **Publicar**.
+4. Todo mundo que estiver com a tela aberta: **recarregar a página** (o papel e a equipe vêm no token novo).
+5. Conferir: Actions › **Testar tela em produção** › modo `equipes` (contas temporárias de master, gestores e
+   prepostos; confere regras, Functions e tela; tudo apagado no fim).
 6. Depois de conferir (alguns dias): **Migrar equipes** › `limpar_carteira_antiga` (apaga os `carteira/NN` antigos).
 
 ## Configuração depois do merge do PR 16 (liberar busca para vendedor)

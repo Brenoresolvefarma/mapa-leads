@@ -118,7 +118,13 @@ async function esperarTexto(p, sel, re) {
   catch { throw new Error(`${sel} não chegou a ${re}: "${(await p.textContent(sel).catch(() => "?"))?.replace(/\s+/g, " ").slice(0, 300)}" · erros: ${erros.join(" | ")}`); }
 }
 // PASTA_CAPTURAS=/pasta: guarda capturas de alguns momentos (para conferir o visual); sem ela, não faz nada.
-const capturar = (p, nome) => (process.env.PASTA_CAPTURAS ? p.screenshot({ path: join(process.env.PASTA_CAPTURAS, `${nome}.png`) }) : null);
+const capturar = async (p, nome) => {
+  if (!process.env.PASTA_CAPTURAS) return;
+  // Sem os avisos passageiros ("Preposto criado", ...) por cima da tela na captura
+  await p.evaluate(() => { const t = document.querySelector("#toasts"); if (t) t.style.visibility = "hidden"; });
+  await p.screenshot({ path: join(process.env.PASTA_CAPTURAS, `${nome}.png`) });
+  await p.evaluate(() => { const t = document.querySelector("#toasts"); if (t) t.style.visibility = ""; });
+};
 const esperarHash = (p, h) => p.waitForFunction((x) => decodeURIComponent(location.hash) === x, h, { timeout: 15000 });
 
 test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", async () => {
@@ -1219,7 +1225,8 @@ test("mini-CRM e carteira (390 px): status em um toque, 'Como foi?', histórico,
     await p.tap("#barra-inferior a[data-ir=leads]");
     await p.tap("#abrir-buscas");
     await p.waitForSelector(`#caixa-buscas [data-abrir=${id}]`);
-    for (const c of await p.$$("#caixa-buscas [data-abrir]:checked")) await c.uncheck();
+    // Pelo id (localizador), não pelo elemento: a lista pode ser redesenhada enquanto isso (mantendo o que foi marcado).
+    for (const id of await p.$$eval("#caixa-buscas [data-abrir]:checked", (xs) => xs.map((x) => x.dataset.abrir))) await p.uncheck(`#caixa-buscas [data-abrir="${id}"]`);
     await p.check(`#caixa-buscas [data-abrir=${id}]`);
     await p.tap("#aplicar-buscas");
   };
@@ -1273,6 +1280,11 @@ test("mini-CRM e carteira (390 px): status em um toque, 'Como foi?', histórico,
   // Início: "Para hoje: 1 contato" abre a lista
   await a.tap("#barra-inferior a[data-ir=inicio]");
   await esperarTexto(a, "#para-hoje", /1 contato/);
+  // O ícone do relógio fica pequeno (antes, sem tamanho, ocupava o cartão inteiro)
+  const ic = await a.locator("#para-hoje svg").boundingBox();
+  assert.ok(ic && ic.width <= 24 && ic.height <= 24, `ícone do Para hoje com ${ic?.width}×${ic?.height} px`);
+  const cartaoHoje = await a.locator("#para-hoje").boundingBox();
+  assert.ok(cartaoHoje.height < 160, `cartão Para hoje com ${cartaoHoje.height} px de altura`);
   await a.tap("#para-hoje");
   await a.waitForFunction(() => location.hash === "#leads" && /Para hoje/.test(document.querySelector("#chips").textContent));
   // Exportação com as colunas do CRM

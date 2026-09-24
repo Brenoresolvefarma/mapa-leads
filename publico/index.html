@@ -423,6 +423,8 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .historico { margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-2); display:grid; gap:2px; }
 .para-hoje { display:block; margin-bottom:12px; border-left:4px solid var(--brand); position:relative; text-decoration:none; color:inherit; }
 .para-hoje .val { font-size:22px; font-weight:700; }
+.para-hoje .seta { position:absolute; right:12px; top:12px; color:var(--muted); }
+.para-hoje .rot svg { width:16px; height:16px; vertical-align:-3px; flex:none; } /* sem isso o ícone do relógio ocupava o cartão inteiro */
 @media (max-width: 760px) {
   /* celular: 3 por linha (Novo · Contatado · Negociando / Cliente · Descartado), palavra inteira, toque de 44 px */
   .status-lead { grid-template-columns:repeat(3, minmax(0, 1fr)); }
@@ -2612,10 +2614,13 @@ function desenharCaixaBuscas() {
   $("#rot-buscas").textContent = n ? `${n} busca(s) aberta(s)` : "Escolher buscas";
   // Todas as buscas: com leads dá para abrir; terminada dá para apagar; em andamento, cancelar primeiro.
   const lista = buscas;
+  // Caixa aberta (a lista pode chegar de novo enquanto o usuário marca): mantém o que ele já marcou/desmarcou.
+  const aberta = !$("#caixa-buscas").classList.contains("oculto") && $("#caixa-buscas [data-abrir]");
+  const marcadas = aberta ? new Set($$("#caixa-buscas [data-abrir]").filter((i) => i.checked).map((i) => i.dataset.abrir)) : new Set(W.ids);
   $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>${ehAdmin ? "Buscas" : ehGestor ? "Buscas da equipe" : "Suas buscas"}</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
     (lista.map((b) => { const comLeads = temLeads(b);
       const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(totalLeads(b))} leads` : txt((STATUS[b.status] || [b.status])[0]);
-      return `<div class="linha-busca" data-busca="${txt(b.id)}"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b>${etiquetaLiberada(b)}<br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label><div class="acoes-busca">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</div>`; }).join("") ||
+      return `<div class="linha-busca" data-busca="${txt(b.id)}"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${marcadas.has(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b>${etiquetaLiberada(b)}<br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label><div class="acoes-busca">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</div>`; }).join("") ||
       `<p class="small muted" style="padding:8px">Nenhuma busca ainda.</p>`) +
     `<div class="entre" style="padding:8px"><span class="small muted">Cada lote de 300 leads = 1 leitura no banco.</span><button class="btn btn-primario btn-mini" id="aplicar-buscas">Abrir</button></div>`;
 }
@@ -3559,7 +3564,8 @@ async function carregarEquipeDoUsuario() {
   const nome = equipeDoc?.nome || (equipeId === "resolve-farma" ? "Resolve Farma" : equipeId);
   $("#selo-equipe").textContent = `${ehGestor ? "gestor" : "vendedor"} · ${nome}`;
   $("#selo-equipe").classList.remove("oculto");
-  if (buscas.length) { desenharCaixaBuscas(); if (paginaAtual === "leads") abrirLeads(); } // etiqueta "Liberada por representante"
+  // Etiqueta "Liberada por representante": redesenha a lista só se ela estiver fechada (aberta, desfaria o que o usuário marcou).
+  if (buscas.length && $("#caixa-buscas").classList.contains("oculto")) desenharCaixaBuscas();
 }
 const pct = (x) => (x === null || x === undefined ? "–" : `${Math.round(x * 100)}%`);
 const deCota = (usado, cota) => (Number.isInteger(cota) ? `${numero(usado)} de ${numero(cota)}` : `${numero(usado)} · sem limite`);
