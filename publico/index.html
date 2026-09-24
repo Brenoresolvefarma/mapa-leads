@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="only light">
-<title>MapaLeads – Prospecção B2B inteligente no RN</title>
+<title>MapaLeads – Prospecção B2B inteligente no RN e na PB</title>
 <meta name="description" content="Encontre empresas por cidade, microrregião e segmento, com WhatsApp, mapa e dados do IBGE. Desenvolvido por Resolve Farma.">
 <meta name="theme-color" content="#1f5fd6">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -15,15 +15,15 @@
 <meta property="og:site_name" content="MapaLeads">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:url" content="https://mapaleads-rn.netlify.app/">
-<meta property="og:title" content="MapaLeads – Prospecção B2B inteligente no RN">
+<meta property="og:title" content="MapaLeads – Prospecção B2B inteligente no RN e na PB">
 <meta property="og:description" content="Encontre empresas por cidade, microrregião e segmento, com WhatsApp, mapa e dados do IBGE. Desenvolvido por Resolve Farma.">
-<meta property="og:image" content="https://mapaleads-rn.netlify.app/og-image.png">
+<meta property="og:image" content="https://mapaleads-rn.netlify.app/og-image-rn-pb.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="MapaLeads – Prospecção B2B inteligente no RN">
+<meta name="twitter:title" content="MapaLeads – Prospecção B2B inteligente no RN e na PB">
 <meta name="twitter:description" content="Encontre empresas por cidade, microrregião e segmento, com WhatsApp, mapa e dados do IBGE. Desenvolvido por Resolve Farma.">
-<meta name="twitter:image" content="https://mapaleads-rn.netlify.app/og-image.png">
+<meta name="twitter:image" content="https://mapaleads-rn.netlify.app/og-image-rn-pb.png">
 <!--
   MapaLeads — tela (Fase 3a v2). Arquivo único; bibliotecas só por CDN (Leaflet, MarkerCluster, Chart.js e
   SheetJS carregados só quando a tela que usa abre). Nenhuma chave no código: a config pública do Firebase
@@ -138,7 +138,11 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
 .login-marca { background:#0b1b3a; color:#fff; padding:40px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; }
 .login-marca h1 { font-size:34px; max-width:16ch; }
 .login-marca p { color:#c7d4ec; max-width:44ch; font-size:15px; margin-top:12px; }
-.login-marca svg.rn { position:absolute; right:-30px; bottom:36px; width:74%; }
+.login-marca svg.rn { position:absolute; right:-20px; bottom:24px; width:56%; }
+.login-marca .nowrap { white-space:nowrap; }
+.login-marca svg.rn path.divisa { fill:none; stroke:#86b6ef; stroke-width:1.6px; vector-effect:non-scaling-stroke; }
+.ufs-ativas { display:flex; gap:6px; margin-top:14px; }
+.ufs-ativas span { font-size:12px; font-weight:700; letter-spacing:.06em; padding:3px 10px; border-radius:999px; background:rgba(79,143,224,.18); color:#cde2fb; border:1px solid rgba(134,182,239,.45); }
 .login-form { display:flex; flex-direction:column; justify-content:center; padding:40px; max-width:420px; margin:0 auto; width:100%; }
 .credito { font-size:12px; color:var(--muted); }
 .credito b { font-weight:600; color:var(--ink-2); }
@@ -147,7 +151,7 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
   .login { grid-template-columns:1fr; }
   .login-marca { padding:24px 16px; min-height:220px; }
   .login-marca h1 { font-size:24px; }
-  .login-marca svg.rn { width:68%; right:-16px; bottom:8px; opacity:.45; }
+  .login-marca svg.rn { width:52%; right:-12px; bottom:8px; opacity:.45; }
   .login-form { padding:24px 16px 36px; }
 }
 
@@ -552,7 +556,8 @@ select.uf-seletor { min-height:44px; min-width:180px; max-width:100%; font-weigh
   <div class="login-marca">
     <div class="logo" style="color:#fff;padding:0"><span class="logo-marca" data-icone="pin"></span>MapaLeads</div>
     <div style="position:relative;z-index:1">
-      <h1>Prospecção B2B inteligente no RN</h1>
+      <h1>Prospecção B2B inteligente <span class="nowrap">no RN e na PB</span></h1>
+      <div class="ufs-ativas" aria-label="Estados atendidos"><span>RN</span><span>PB</span></div>
       <p>Encontre empresas por cidade, microrregião e segmento — com WhatsApp, mapa e dados oficiais do IBGE.</p>
     </div>
     <div class="credito" style="position:relative;z-index:1" data-credito="login"></div>
@@ -907,7 +912,7 @@ select.uf-seletor { min-height:44px; min-width:180px; max-width:100%; font-weigh
       <section data-pagina="sobre" class="oculto">
         <div class="cab"><div><h1>Sobre o MapaLeads</h1></div></div>
         <div class="cartao" style="max-width:760px">
-          <p>O MapaLeads encontra empresas por cidade, microrregião e segmento no Google Maps, organiza os contatos (com botão de WhatsApp) e cruza com dados oficiais do IBGE para mostrar onde está o mercado.</p>
+          <p>O MapaLeads encontra empresas por cidade, microrregião e segmento no Google Maps — hoje no <b>Rio Grande do Norte (RN)</b> e na <b>Paraíba (PB)</b> —, organiza os contatos (com botão de WhatsApp) e cruza com dados oficiais do IBGE para mostrar onde está o mercado.</p>
           <h3 style="margin-top:14px">Fontes dos dados</h3>
           <ul class="small ink2" style="margin:6px 0 0;padding-left:18px;line-height:1.7">
             <li>Leads: coletados do Google Maps sob demanda (nome, categoria, telefone, site, endereço, nota). Nada é inventado; o que o Google não traz fica em branco.</li>
@@ -1324,9 +1329,22 @@ function desenharSvg(svg, { cor = () => "var(--seq-1)", micro = true, aoClicar =
   if (aoClicar) svg.onclick = (ev) => { const c = ev.target.dataset?.cod; if (c) aoClicar(c); };
 }
 usarEstado("RN", false);
-desenharSvg($("#rn-login"), { cor: () => "#1d3a70" });
-$$("#rn-login path.micro").forEach((p) => (p.style.stroke = "#4b73c4"));
-$$("#rn-login path.mun").forEach((p) => (p.style.stroke = "#0b1b3a"));
+// Login: os estados ativos (RN e PB) juntos, numa projeção só.
+{
+  const P = projecaoDe({ features: UFS_ATIVAS.flatMap((uf) => ESTADOS_UI[uf].malhaMun.features) });
+  const alt = ((P.y0 - P.y1) / ((P.x1 - P.x0) * P.kx)) * 100;
+  const px = ([lon, lat]) => [((lon - P.x0) / (P.x1 - P.x0)) * 100, ((P.y0 - lat) / (P.y0 - P.y1)) * alt];
+  const caminho = (g) => (g.type === "Polygon" ? g.coordinates : g.coordinates.flat())
+    .map((a) => "M" + a.map((p) => px(p).map((v) => v.toFixed(2)).join(",")).join("L") + "Z").join("");
+  const svg = $("#rn-login");
+  svg.setAttribute("viewBox", `0 0 100 ${alt.toFixed(2)}`);
+  svg.innerHTML = UFS_ATIVAS.map((uf) => ESTADOS_UI[uf].malhaMun.features.map((f) => `<path class="mun" data-uf="${uf}" fill="#1d3a70" style="stroke:#0b1b3a" d="${caminho(f.geometry)}"/>`).join("") +
+    ESTADOS_UI[uf].malhaMicro.features.map((f) => `<path class="micro" style="stroke:#4b73c4" d="${caminho(f.geometry)}"/>`).join("")).join("");
+  // Divisa entre os estados: lados de contorno que aparecem nos dois (a malha do IBGE usa os mesmos pontos na divisa).
+  const lados = (uf) => { const m = new Map(); for (const f of ESTADOS_UI[uf].malhaMun.features) for (const a of f.geometry.type === "Polygon" ? f.geometry.coordinates : f.geometry.coordinates.flat()) for (let i = 1; i < a.length; i++) m.set([a[i - 1], a[i]].map(String).sort().join(";"), [a[i - 1], a[i]]); return m; };
+  const [la, lb] = UFS_ATIVAS.slice(0, 2).map(lados);
+  if (lb) svg.insertAdjacentHTML("beforeend", `<path class="divisa" d="${[...la].filter(([k]) => lb.has(k)).map(([, [p, q]]) => `M${px(p).map((v) => v.toFixed(2))}L${px(q).map((v) => v.toFixed(2))}`).join("")}"/>`);
+}
 usarEstado(UFS_ATIVAS.includes((params.get("uf") || "").toUpperCase()) ? params.get("uf").toUpperCase() : ler("mapaleads.uf", "RN"), false);
 
 // ============================================================ FIREBASE E SESSÃO
