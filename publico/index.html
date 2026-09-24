@@ -444,6 +444,14 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   #densidade, #colunas-btn { display:none; } /* no celular a tabela vira cartões */
 }
 
+/* ============================================================ iPHONE: SEM ZOOM AO TOCAR NUM CAMPO
+   O Safari do iPhone amplia a tela quando o campo de digitação tem fonte menor que 16 px.
+   Até 768 px, todo campo usa 16 px (o visual compacto fica por conta do padding/altura).
+   Não usamos maximum-scale nem user-scalable=no: o usuário continua podendo ampliar quando quiser. */
+@media (max-width: 768px) {
+  input, select, textarea { font-size:16px !important; }
+}
+
 /* ============================================================ CELULAR COMO TELA PRINCIPAL */
 @media (max-width: 760px) {
   .so-celular { display:flex !important; }

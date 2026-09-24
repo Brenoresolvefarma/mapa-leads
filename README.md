@@ -103,6 +103,8 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
 - **Busca criada**: logos do MapaLeads (o pino azul) saltam e giram pela tela por ~2 s (canvas próprio, sem
   biblioteca) com a mensagem "Busca criada! Te aviso quando os leads chegarem." Com "reduzir movimento" ligado no
   sistema, só a mensagem.
+- **iPhone sem zoom ao tocar num campo**: até 768 px todo campo de digitação usa fonte de 16 px (o Safari amplia a
+  tela quando a fonte é menor); o zoom do usuário continua liberado (sem `maximum-scale`/`user-scalable=no`).
 - **População na lista de cidades**: dentro da linha, alinhada à direita ("Apodi ······ 35.904 hab."), sem balão solto.
 - Tour de 4 passos no 1º acesso, "Desenvolvido por Resolve Farma" (constante `ASSINATURA`). Datas sempre no horário de Natal.
 

@@ -873,3 +873,70 @@ test("paralelismo: busca rodando mostra 'X de Y cidades prontas' e os leads já 
   await p.context().close();
   for (const id of ["bp_p0/lotes/0", "bp_p0", "bp"]) await db.doc(`buscas/${id}`).delete();
 });
+
+// Campos de digitação visíveis com fonte menor que 16 px (o Safari do iPhone dá zoom ao tocar neles).
+async function camposComFontePequena(p, onde) {
+  return p.evaluate((onde) => {
+    const vistos = [...document.querySelectorAll("input, select, textarea")].filter((e) => {
+      if (["checkbox", "radio", "range", "hidden", "file", "color", "button", "submit"].includes(e.type)) return false;
+      const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+      return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none";
+    });
+    const pequenos = vistos.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 16)
+      .map((e) => `${onde}: ${e.id || e.getAttribute("aria-label") || e.tagName.toLowerCase()} (${getComputedStyle(e).fontSize})`);
+    return { vistos: vistos.length, pequenos };
+  }, onde);
+}
+
+test("iPhone (390 px): todo campo de digitação visível tem fonte de 16 px ou mais (sem zoom ao tocar), e o zoom do usuário continua liberado", async () => {
+  const ctx = await navegador.newContext({ locale: "pt-BR", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await rotearCdn(ctx);
+  await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
+  const p = await ctx.newPage();
+  erros = []; p.on("pageerror", (e) => erros.push(e.message));
+  await p.goto(`${local.url}/?emulador=1`);
+  await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+  // Zoom do usuário liberado: sem maximum-scale nem user-scalable=no
+  const viewport = await p.getAttribute('meta[name="viewport"]', "content");
+  assert.doesNotMatch(viewport, /maximum-scale|user-scalable/);
+  const problemas = [], contagem = {};
+  const conferir = async (onde) => { const r = await camposComFontePequena(p, onde); contagem[onde] = r.vistos; problemas.push(...r.pequenos); };
+  await conferir("login");
+  await p.fill("#le", "ana@x.example"); await p.fill("#ls", "senha-forte-2"); await p.tap("#entrar");
+  await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
+  // Nova busca: termos e sinônimos, depois cidades/outras cidades, depois o passo 3
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
+  await conferir("nova-1");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  await conferir("nova-2");
+  await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+  await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  await conferir("nova-3");
+  // Meus leads: busca, filtros, lista de buscas e gaveta "Mais filtros"
+  await p.tap("#barra-inferior a[data-ir=leads]");
+  await p.waitForSelector("#leads-painel:not(.oculto)");
+  await conferir("leads");
+  await p.tap("#abrir-buscas"); await conferir("leads-buscas"); await p.tap("#titulo-pagina");
+  await p.tap("#abrir-filtros"); await p.waitForSelector("#gaveta-filtros:not(.oculto)"); await conferir("leads-mais-filtros");
+  await p.keyboard.press("Escape");
+  // Mapa (camadas) e Mercado
+  await p.tap("#barra-inferior a[data-ir=mapa]"); await p.waitForSelector("#mapa-painel h2");
+  await p.tap("#mapa-camadas-btn"); await conferir("mapa");
+  await p.evaluate(() => { location.hash = "#mercado"; }); await p.waitForSelector("#kpis-mercado .kpi");
+  await conferir("mercado");
+  await ctx.close();
+  // Admin (e-mail, senha, nome, limite, nomes na tabela de usuários, Estado inteiro)
+  const a = await abrir("breno@x.example", "senha-forte-1", { width: 390, height: 844 });
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await a.waitForSelector("#u-tabela [data-nome]");
+  const r = await camposComFontePequena(a, "admin"); contagem.admin = r.vistos; problemas.push(...r.pequenos);
+  await a.context().close();
+
+  assert.deepEqual(problemas, [], `campos com fonte < 16 px: ${problemas.join(" | ")}`);
+  // Conferiu campos de verdade em cada tela
+  for (const onde of ["login", "nova-1", "nova-2", "leads", "leads-mais-filtros", "mapa", "mercado", "admin"]) assert.ok(contagem[onde] > 0, `${onde}: nenhum campo visível`);
+  assert.deepEqual(erros, []);
+});

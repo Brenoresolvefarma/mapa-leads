@@ -237,6 +237,11 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Comemoração** (`comemorar()`): ao criar busca comum, 16 (celular) / 26 logos (pino azul, desenhado uma vez num
   canvas de 64 px e copiado) saltam, quicam e giram por 2 s num `<canvas id="comemoracao">` com `pointer-events:none`,
   sem biblioteca; `prefers-reduced-motion: reduce` → só a mensagem "Busca criada! Te aviso quando os leads chegarem.".
+- **iPhone sem zoom ao tocar num campo** (bug visto pelo Breno em 24/09, junto com o PR 14): até 768 px, todo `input`,
+  `select` e `textarea` tem fonte de 16 px (`!important`; o Safari amplia a tela em campo com fonte < 16 px). O viewport
+  continua SEM `maximum-scale`/`user-scalable=no` (o usuário pode ampliar). Teste em 390 px confere a fonte calculada de
+  todos os campos visíveis em login, Nova busca (3 passos), Meus leads (lista de buscas e "Mais filtros"), Mapa, Mercado
+  e Admin — sem a correção ele acusa 34 campos com 13,5 px.
 - **Workflow "Capturas da tela"** (manual): capturas do celular em produção (login temporário + busca fictícia) na
   branch `capturas-tela`; a criação da busca nas capturas dos logos é **simulada** (rota interceptada, nada na fila).
 
