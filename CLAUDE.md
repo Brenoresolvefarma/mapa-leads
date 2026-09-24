@@ -221,7 +221,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Tema**: abre **sempre claro** (não segue o sistema). `<meta name="color-scheme" content="only light">` +
   `:root{color-scheme:only light}` impedem o escurecimento forçado do Chrome/Samsung (causa provável do "botão de tema
   não muda nada" no Android). Escuro só pela escolha (`#tema-btn` no topo, lua/sol, ou menu do avatar), salva em
-  `localStorage["mapaleads.tema"]`; `?tema=escuro` aplica sem salvar (capturas). Trocar o tema recria o mapa.
+  `localStorage["mapaleads.tema"]`; `?tema=escuro` aplica sem salvar (capturas). Trocar o tema refaz os contornos do mapa
+  (não destrói mais o mapa: dava erro `_leaflet_pos` no meio de um zoom, visto no CI em 24/09).
   Teste no Chromium e, no CI, no **WebKit** (motor do Safari do iPhone).
 - **Ícones (i)**: um só balão (`#balao`), listener de clique em fase de captura (não marca a caixa do rótulo nem
   abre o cartão), toque abre/fecha, toque fora fecha, mouse abre ao passar e clique fixa; posicionado dentro da tela
@@ -394,6 +395,19 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   com leads da PB), motor (estado no endereço, nomes repetidos, população), tela 390 px (Nova busca PB com "PB", Mapa PB
   até os leads, Mercado PB, Estado inteiro PB).
 
+### Comemoração em todo ponto de criação + mapa no celular (PR 17, pedido do Breno em 24/09)
+- **Bug**: o Admin › Estado inteiro não chamava a comemoração (só a Nova busca chamava).
+- **`comemorar(mensagem, { tipo })`** (uma função só): Nova busca (vendedor e admin) → "Busca criada! Te aviso quando os
+  leads chegarem."; Estado inteiro RN/PB → "Estado inteiro enfileirado! Te aviso quando os leads chegarem." (agendado:
+  "Estado inteiro agendado para <data>! …"); lista liberada → `tipo: "pequena"` (só "Lista liberada para X e Y.").
+  "Reduzir movimento": mensagem + UM logo que pula uma vez (`data-modo="um"`); normal: chuva (`data-modo="chuva"`).
+  Canvas `z-index: 2950` (acima de modais 2500, painéis 1401 e barra de baixo 1200; avisos 3000 por cima), tamanho da
+  área visível (`visualViewport`, por causa da barra do Safari), sem toques, some em ~2 s (+ trava por `setTimeout`).
+- Teste 390 px: Admin confirma Estado inteiro RN → chuva por cima de tudo e some; PB agendado com reduzir movimento → um
+  logo. No CI, os testes de comemoração também rodam no **WebKit** (Safari). Tema: trocar não destrói mais o mapa.
+- **Mapa no celular**: o enquadramento desconta a altura do painel de baixo e dos botões do topo (o estado não fica mais
+  escondido atrás da gaveta). Workflow "Capturas da tela" ganhou o conjunto `crm-pb` (`testes/capturas-crm-pb.mjs`).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -412,8 +426,10 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   Mergeado; Verificar Functions e "Testar tela em produção" passaram.
 - **PR 15 (limites do vendedor)**: 40 cidades / 120 consultas por busca, 300 consultas/dia, 2 máquinas por vendedor.
   Mergeado; Verificar Functions e "Testar tela em produção" passaram.
-- **PR 16**: liberar busca para vendedor + mini-CRM + carteira + PB ativa (um PR só, pedido do Breno). Depende do Breno
-  publicar as regras novas e criar o índice de `liberada_para`.
+- **PR 16**: liberar busca para vendedor + mini-CRM + carteira + PB ativa (um PR só, pedido do Breno). Mergeado; regras e
+  índice publicados pelo Breno; Verificar Functions e "Testar tela em produção" (só tela e criar_e_cancelar) passaram;
+  capturas reais do CRM/PB feitas no site (workflow "Capturas da tela", conjunto crm-pb).
+- **PR 17**: comemoração em todo ponto de criação (Estado inteiro incluído) + mapa no celular.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 

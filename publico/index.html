@@ -393,7 +393,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .progresso-cidades { margin-top:6px; display:grid; gap:4px; }
 .barra-prog { height:6px; border-radius:99px; background:var(--line); overflow:hidden; }
 .barra-prog i { display:block; height:100%; background:var(--brand); border-radius:99px; transition:width .4s; }
-.comemoracao { position:fixed; inset:0; width:100vw; height:100vh; z-index:2900; pointer-events:none; }
+.comemoracao { position:fixed; left:0; top:0; width:100vw; height:100dvh; z-index:2950; pointer-events:none; } /* acima de modais (2500), painéis (1401) e barra de baixo (1200); os avisos (3000) ficam por cima */
 .confirmacao .caixa h2 { font-size:17px; } .confirmacao .caixa p { margin:8px 0 16px; }
 .confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .btn-perigo-forte { background:var(--bad); color:#fff; }
@@ -1821,7 +1821,7 @@ $("#buscar").onclick = async () => {
   $("#buscar").disabled = true;
   try {
     const r = await api("criar-busca", pedidoComum(false));
-    comemorar();
+    comemorar(MSG_CRIADA);
     toast(`Tempo estimado ~${tempo(r.estimativa_seg)} depois de começar. Você ainda pode fazer ${r.restantes_hoje} hoje.`);
     $("#r-resumo").textContent = `Busca criada. Acompanhe no Início. Restam ${r.restantes_hoje} busca(s) hoje.`;
     carregarCota();
@@ -1829,22 +1829,33 @@ $("#buscar").onclick = async () => {
   } catch (e) { toast(e.message, "erro"); $("#r-resumo").textContent = e.message; }
   finally { $("#buscar").disabled = false; }
 };
-// ============================================================ COMEMORAÇÃO (busca criada)
-// Vários logos do MapaLeads (o pino azul) saltam e giram pela tela por ~2 s, num canvas próprio, sem biblioteca.
-// Com "reduzir movimento" ligado no sistema, só a mensagem aparece.
+// ============================================================ COMEMORAÇÃO (busca criada, Estado inteiro, lista liberada)
+// Uma função só, chamada em todo ponto onde algo é criado com sucesso:
+//  - "chuva" (padrão): vários logos do MapaLeads (o pino azul) saltam, quicam e giram por ~2 s, num canvas próprio;
+//  - "reduzir movimento" ligado no aparelho: a mensagem + UM logo que pula uma vez (dá para perceber que funcionou);
+//  - "pequena" (lista liberada): só a mensagem.
+// O canvas fica por cima de tudo (acima de modais e da barra de baixo; só os avisos ficam acima dele), não recebe toques
+// e some sozinho em ~2 s (com uma trava de segurança, caso a aba vá para o fundo e o requestAnimationFrame pare).
 const MSG_CRIADA = "Busca criada! Te aviso quando os leads chegarem.";
+const MSG_ESTADO = "Estado inteiro enfileirado! Te aviso quando os leads chegarem.";
 const PINO = new Path2D("M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"), PINO_MIOLO = new Path2D("M14.5 9a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0z");
-function comemorar() {
-  toast(MSG_CRIADA, "ok");
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+function comemorar(mensagem = MSG_CRIADA, { tipo = "chuva" } = {}) {
+  toast(mensagem, "ok");
+  if (tipo === "pequena") return;
+  const reduzido = matchMedia("(prefers-reduced-motion: reduce)").matches;
   $("#comemoracao")?.remove();
-  const dpr = Math.min(devicePixelRatio || 1, 2), L = innerWidth, A = innerHeight;
+  // Tamanho da janela visível de verdade (no iPhone, 100vh inclui a barra do Safari).
+  const dpr = Math.min(devicePixelRatio || 1, 2), L = innerWidth, A = window.visualViewport?.height || innerHeight;
   const cv = document.createElement("canvas");
   cv.id = "comemoracao"; cv.className = "comemoracao"; cv.setAttribute("aria-hidden", "true");
+  cv.dataset.modo = reduzido ? "um" : "chuva";
+  cv.style.width = `${L}px`; cv.style.height = `${A}px`;
   cv.width = Math.round(L * dpr); cv.height = Math.round(A * dpr);
   document.body.appendChild(cv);
   const ctx = cv.getContext("2d");
   if (!ctx) { cv.remove(); return; }
+  const cheio = reduzido ? 1200 : 2000;
+  setTimeout(() => cv.remove(), cheio + 600); // trava de segurança
   // o logo é desenhado uma vez (64 px) e depois só copiado: leve no celular
   const T = 64 * dpr, logo = document.createElement("canvas"); logo.width = logo.height = T;
   const g = logo.getContext("2d");
@@ -1853,23 +1864,28 @@ function comemorar() {
   g.translate(T * 0.2, T * 0.2); g.scale(T * 0.6 / 24, T * 0.6 / 24);
   g.strokeStyle = "#fff"; g.lineWidth = 2.2; g.lineJoin = g.lineCap = "round";
   g.stroke(PINO); g.stroke(PINO_MIOLO);
-  // logos saem de baixo, em leque, e quicam no chão
-  const n = L < 500 ? 16 : 26, cheio = 2000;
-  const pecas = Array.from({ length: n }, () => ({
-    x: L * (0.2 + Math.random() * 0.6), y: A + 40, t: 18 + Math.random() * 30,
-    vx: (Math.random() - 0.5) * L * 0.9, vy: -(A * (0.9 + Math.random() * 0.7)),
-    r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 10,
-  }));
   const G = A * 2.6; // gravidade em px/s²
+  // Reduzido: um logo grande no meio, um pulo só (sem girar, sem quicar). Chuva: saem de baixo, em leque, e quicam.
+  const pecas = reduzido
+    ? [{ x: L / 2, y: A * 0.62, t: 72, vx: 0, vy: -Math.sqrt(2 * G * A * 0.18), r: 0, vr: 0, uma: true, y0: A * 0.62 }]
+    : Array.from({ length: L < 500 ? 16 : 26 }, () => ({
+      x: L * (0.2 + Math.random() * 0.6), y: A + 40, t: 18 + Math.random() * 30,
+      vx: (Math.random() - 0.5) * L * 0.9, vy: -(A * (0.9 + Math.random() * 0.7)),
+      r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 10,
+    }));
   let antes = performance.now(); const inicio = antes;
   const quadro = (agora) => {
+    if (!cv.isConnected) return;
     const dt = Math.min(0.05, (agora - antes) / 1000), passou = agora - inicio; antes = agora;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, L, A);
     ctx.globalAlpha = passou > cheio - 400 ? Math.max(0, (cheio - passou) / 400) : 1;
     for (const p of pecas) {
       p.vy += G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
-      if (p.y > A - p.t / 2 && p.vy > 0) { p.y = A - p.t / 2; p.vy *= -0.55; p.vx *= 0.8; } // quica
-      if (p.x < p.t / 2 || p.x > L - p.t / 2) { p.vx *= -1; p.x = Math.max(p.t / 2, Math.min(L - p.t / 2, p.x)); }
+      if (p.uma) { if (p.y > p.y0) { p.y = p.y0; p.vy = 0; } } // um pulo e pousa
+      else {
+        if (p.y > A - p.t / 2 && p.vy > 0) { p.y = A - p.t / 2; p.vy *= -0.55; p.vx *= 0.8; } // quica
+        if (p.x < p.t / 2 || p.x > L - p.t / 2) { p.vx *= -1; p.x = Math.max(p.t / 2, Math.min(L - p.t / 2, p.x)); }
+      }
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.drawImage(logo, -p.t / 2, -p.t / 2, p.t, p.t); ctx.restore();
     }
     if (passou < cheio) requestAnimationFrame(quadro); else cv.remove();
@@ -2390,7 +2406,8 @@ $("#painel-liberar").addEventListener("click", async (ev) => {
   botao.disabled = true; botao.textContent = "Liberando…";
   try {
     const r = await api("liberar-busca", corpoLiberar("liberar"));
-    toast(`Lista liberada para ${r.por_vendedor.length} vendedor(es).`, "ok");
+    const nomes = r.por_vendedor.map((p) => LB.vendedores.find((v) => v.uid === p.uid)?.rotulo || "vendedor");
+    comemorar(`Lista liberada para ${nomes.length > 1 ? `${nomes.slice(0, -1).join(", ")} e ${nomes.at(-1)}` : nomes[0]}.`, { tipo: "pequena" });
     fecharPaineis();
   } catch (e) { toast(e.message, "erro"); botao.disabled = false; botao.textContent = "Liberar"; }
 });
@@ -3005,12 +3022,16 @@ function redesenharMapa(enquadrar) {
       M.pontos.addLayer(p);
     }
   }
+  desenharTrilha(); desenharLegenda(cl, vals); desenharPainelMapa(); // antes de enquadrar: o painel já tem a altura certa
   if (enquadrar) {
     const alvo = cod ? M.porCod.get(cod) : null;
     const b = alvo ? alvo.getBounds() : micro ? L.featureGroup(escopo.map((c) => M.porCod.get(c)).filter(Boolean)).getBounds() : M.mun.getBounds();
-    M.mapa.fitBounds(b, { padding: [30, 30], maxZoom: 11 }); // contorno simplificado do IBGE: mais perto que isso fica "quadrado"
+    // No celular o painel (gaveta de baixo) e os botões do topo cobrem parte do mapa: o enquadramento desconta os dois.
+    const area = $("#mapa-leaflet").getBoundingClientRect(), painel = $("#mapa-painel")?.getBoundingClientRect();
+    const cobreEmbaixo = innerWidth <= 760 && painel && !$("#mapa-area").classList.contains("recolhido") ? Math.max(0, area.bottom - painel.top) : 0;
+    const topo = innerWidth <= 760 ? 100 : 30;
+    M.mapa.fitBounds(b, { paddingTopLeft: [30, topo], paddingBottomRight: [30, 30 + cobreEmbaixo], maxZoom: 11 }); // contorno simplificado do IBGE: mais perto que isso fica "quadrado"
   }
-  desenharTrilha(); desenharLegenda(cl, vals); desenharPainelMapa();
 }
 function desenharTrilha() {
   const { micro, cod } = M.nivel, partes = [`<a href="${prefixoMapa()}">${UF_ATUAL}</a>`];
@@ -3320,8 +3341,11 @@ for (const id of ["#rn-termos", "#rn-email", "#rn-noite", "#rn-uf"]) $(id).oninp
 $("#rn-uf").onchange = () => { $("#rn-confirmar").disabled = true; $("#rn-uf-rot").textContent = $("#rn-uf").value; $("#msg-rn").textContent = ""; };
 $("#rn-confirmar").onclick = async () => {
   $("#rn-confirmar").disabled = true;
-  try { const r = await api("criar-busca", pedidoRn(false)); toast(r.agendada_para ? `Estado inteiro agendado para ${dataHora(new Date(r.agendada_para))}.` : "Estado inteiro enfileirado.", "ok"); }
-  catch (e) { toast(e.message, "erro"); }
+  try {
+    const r = await api("criar-busca", pedidoRn(false));
+    comemorar(r.agendada_para ? `Estado inteiro agendado para ${dataHora(new Date(r.agendada_para))}! Te aviso quando os leads chegarem.` : MSG_ESTADO);
+    $("#msg-rn").textContent = r.agendada_para ? `Agendado para ${dataHora(new Date(r.agendada_para))} (${r.consultas} consultas).` : `Enfileirado: ${r.consultas} consultas em ${r.lotes} lotes. Acompanhe na Fila ao vivo.`;
+  } catch (e) { toast(e.message, "erro"); $("#rn-confirmar").disabled = false; }
 };
 function desenharEstados() {
   const UFS = [["AL", "Alagoas"], ["BA", "Bahia"], ["CE", "Ceará"], ["MA", "Maranhão"], ["PB", "Paraíba"], ["PE", "Pernambuco"], ["PI", "Piauí"], ["RN", "Rio Grande do Norte"], ["SE", "Sergipe"]];
