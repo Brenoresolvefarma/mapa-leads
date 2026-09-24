@@ -53,6 +53,8 @@ jobs:
         run: npm run test:empacotadas
       - name: Motor contra o emulador (scraper falso)
         run: npm run test:motor
+      - name: Migração para equipes (emulador, dados fictícios no formato antigo)
+        run: npm run test:migracao
       - name: Tela no Chrome contra os emuladores (inclui a planilha .xlsx gerada e lida de volta com o ExcelJS)
         env:
           NAVEGADOR: /usr/bin/google-chrome

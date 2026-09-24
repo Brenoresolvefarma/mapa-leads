@@ -5,6 +5,7 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { createPrivateKey } from "node:crypto";
+import { equipeDe, papelDe } from "./logica.mjs";
 
 let firestoreConfigurado = false;
 
@@ -165,10 +166,18 @@ export async function usuarioDoToken(req) {
   try {
     // checkRevoked: usuário removido/desativado perde o acesso na hora.
     const decodificado = await auth.verifyIdToken(token, true);
-    return { uid: decodificado.uid, email: decodificado.email || "", admin: decodificado.admin === true };
+    // Papel e equipe (custom claims, gravadas só pelo servidor). admin = master (compatível com a claim antiga).
+    const papel = papelDe(decodificado);
+    return { uid: decodificado.uid, email: decodificado.email || "", papel, equipe_id: equipeDe(decodificado),
+      admin: papel === "master", gestor: papel === "gestor" };
   } catch {
     throw new ErroHttp(401, "Sessão inválida ou expirada. Entre novamente.");
   }
+}
+
+/** Claims de um usuário novo/alterado: papel e equipe (o master mantém também admin=true). */
+export function claimsDe(papel, equipe) {
+  return papel === "master" ? { admin: true, papel: "master", equipe_id: equipe } : { papel, equipe_id: equipe };
 }
 
 export async function lerCorpo(req) {

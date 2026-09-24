@@ -16,7 +16,7 @@ dela precisa de aprovação antes.
 Navegador (publico/index.html) ──login──> Firebase Auth
       │  (ID token)
       ▼
-Netlify Functions (/api/...) ──valida token, limite, admin──> Firestore (buscas na fila)
+Netlify Functions (/api/...) ──valida token, papel/equipe, limites──> Firestore (buscas na fila)
       │  dispara
       ▼
 GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) ──> Firestore (leads em lotes)
@@ -302,6 +302,27 @@ O log público mostra só números, ex.:
 
 3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
+
+## Equipes: master › gestor › vendedor (PR 19)
+- **Master** (Breno): vê e controla tudo; aba **Equipes** (criar equipe + representante, cotas, uso do mês, desativar).
+  As buscas do master ficam numa área só dele (ninguém vê sem ele liberar).
+- **Gestor** (representante): menu **Minha equipe** — prepostos (criar, limites, desativar), resultados por preposto
+  (buscas, leads, contatados, negociando, clientes, conversão), buscas da equipe (liberar/apagar), carteiras e
+  representadas. Vê só a equipe dele.
+- **Vendedor** (preposto): só as buscas dele e as listas liberadas para ele.
+- Cotas por equipe: Resolve Farma sem limite; equipe nova 10 usuários / 100 buscas por dia / 6.000 consultas por mês.
+  A carteira é por equipe (equipes diferentes podem atender o mesmo estabelecimento).
+
+## Configuração do PR 19 (equipes) — na ordem
+1. **Antes do merge** — Firebase › Firestore › **Índices** › Composto › **Criar índice** (coleção `buscas`, escopo Coleção), dois índices:
+   - `lista` Crescente · `equipe_id` Crescente · `criada_em` Decrescente;
+   - `lista` Crescente · `liberada_equipes` **Arrays** · `criada_em` Decrescente.
+2. **Antes do merge** — GitHub › Actions › **Migrar equipes** › Run workflow (branch do PR) com `simular`: o log mostra
+   só contagens do que vai mudar. Depois rode de novo com `aplicar`.
+3. Merge do PR (o Netlify publica sozinho). Rode **Migrar equipes** › `aplicar` **de novo** (pega o que mudou no meio).
+4. Firebase › Firestore › **Regras**: cole o conteúdo novo de [`firestore.rules`](firestore.rules) › **Publicar**.
+5. Todo mundo que estiver com a tela aberta: **recarregar a página** (o papel e a equipe vêm no token novo).
+6. Depois de conferir (alguns dias): **Migrar equipes** › `limpar_carteira_antiga` (apaga os `carteira/NN` antigos).
 
 ## Configuração depois do merge do PR 16 (liberar busca para vendedor)
 **Obrigatório** (sem isso o vendedor não vê as listas liberadas nem os status/carteira; o resto continua funcionando):

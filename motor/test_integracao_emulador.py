@@ -369,3 +369,26 @@ def test_vendedor_com_2_maquinas_cede_a_vez_para_outro_vendedor(db, monkeypatch)
     motor.Motor(db, paralelo=True, vaga=3).rodar()
     # A Bia (esperando) passa na frente da 3ª parte da Ana; depois, sem ninguém esperando, a Ana segue
     assert chamadas == ["y Caicó RN", "x Extremoz RN"]
+
+
+def test_equipe_id_vai_para_os_lotes_parciais_finais_e_estatisticas(db, monkeypatch):
+    """Equipes (24/09): a equipe da busca vai para cada lote (as regras filtram por ela) e para a estatística do dono."""
+    criar(db, "E1", comum("paula", ["farmácia"], ["Natal RN"], equipe_id="eqa"))
+    busca_em_partes(db, "gil", ["drogaria"], [["Natal RN"], ["Parnamirim RN"]], id_="E2", minuto=1)
+    for id_ in ("E2", "E2p0", "E2p1"):
+        db.collection("buscas").document(id_).update({"equipe_id": "eqa"})
+    parciais = []
+
+    def ao_rodar(consulta):
+        for d in db.collection("buscas").document("E2p0").collection("lotes").stream():
+            parciais.append(d.to_dict().get("equipe_id"))
+
+    instalar_scraper_falso(monkeypatch, lambda consulta: [lugar(len(consulta["texto"]), consulta["cidade"].replace(" RN", ""))], ao_rodar)
+    motor.Motor(db, paralelo=True, vaga=1).rodar()
+    for id_ in ("E1", "E2"):
+        assert ler(db, id_)["status"] == "concluida"
+        lotes = [d.to_dict() for d in db.collection("buscas").document(id_).collection("lotes").stream()]
+        assert lotes and all(l["equipe_id"] == "eqa" for l in lotes)
+    assert parciais and all(e == "eqa" for e in parciais)  # lotes parciais das partes também
+    stats = [d.to_dict() for d in db.collection("estatisticas").stream() if d.id.endswith("__paula")]
+    assert stats and stats[0]["equipe_id"] == "eqa"

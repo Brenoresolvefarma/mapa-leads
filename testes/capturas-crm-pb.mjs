@@ -56,7 +56,7 @@ async function limpar() {
     await auth.deleteUser(uid).catch(() => {});
   }
   // Só as entradas de EXEMPLO (as chaves que este script criou); o resto da carteira não é tocado.
-  for (const k of chavesCarteira) await db.doc(`carteira/${fatiaDe(k)}`).update(new FieldPath("leads", k), FieldValue.delete()).catch(() => {});
+  for (const k of chavesCarteira) await db.doc(`carteira/resolve-farma__${fatiaDe(k)}`).update(new FieldPath("leads", k), FieldValue.delete()).catch(() => {});
   console.log("logins temporários e dados de exemplo apagados.");
 }
 const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -85,7 +85,7 @@ const marcar = async (l, r) => {
   const k = chaveLead(l), f = fatiaDe(k);
   await db.doc(`crm/${a.uid}__${f}`).set({ dono_uid: a.uid, leads: { [k]: r } }, { merge: true });
   if (["contatado", "negociando", "cliente"].includes(r.s)) chavesCarteira.push(k);
-  if (["contatado", "negociando", "cliente"].includes(r.s)) await db.doc(`carteira/${f}`).set({ leads: { [k]: { uid: a.uid, nome: "Flávio", s: r.s, desde: agora, ultimo: agora } } }, { merge: true });
+  if (["contatado", "negociando", "cliente"].includes(r.s)) await db.doc(`carteira/resolve-farma__${f}`).set({ leads: { [k]: { uid: a.uid, nome: "Flávio", s: r.s, desde: agora, ultimo: agora } } }, { merge: true });
 };
 await marcar(rn[0], reg("contatado", "ligar sexta", hoje, [{ d: agora, u: "Flávio", s: "contatado", m: "", n: "ligar sexta", p: hoje }]));
 await marcar(rn[1], reg("negociando", "mandou proposta", ontem, [{ d: agora, u: "Flávio", s: "negociando", m: "", n: "mandou proposta", p: ontem },

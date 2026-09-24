@@ -537,3 +537,106 @@ export function diasCarteira(geral = {}) {
   const v = geral?.carteira_dias;
   return Number.isInteger(v) && v >= 1 && v <= 3650 ? v : CARTEIRA_DIAS_PADRAO;
 }
+
+// ------------------------------------------------------------ EQUIPES (master › gestor › vendedor), decisões do Breno em 24/09
+// - master (Breno): vê e controla tudo; as buscas dele ficam numa área só dele (EQUIPE_MASTER) e ninguém vê sem ele liberar;
+// - gestor (representante): dono da equipe; vê tudo da equipe dele e só dela;
+// - vendedor (preposto): só as buscas dele e as listas liberadas para ele.
+// Papel e equipe vêm das custom claims do token (gravadas só pelo servidor). A claim antiga admin=true vale como master.
+export const PAPEIS = ["master", "gestor", "vendedor"];
+export const EQUIPE_PADRAO = "resolve-farma"; // equipe dos usuários de antes das equipes (migração)
+export const NOME_EQUIPE_PADRAO = "Resolve Farma";
+export const EQUIPE_MASTER = "_master";
+// Cotas padrão de uma equipe nova (valores do Breno; editáveis por equipe na aba Equipes). null = sem limite.
+export const COTAS_EQUIPE_PADRAO = { max_usuarios: 10, buscas_dia: 100, consultas_mes: 6000 };
+export const CAMPOS_COTA = Object.keys(COTAS_EQUIPE_PADRAO);
+export const MAX_REPRESENTADAS = 20;
+
+/** Papel pelas claims: admin=true (antigo) ou papel=master → master; gestor; o resto é vendedor. */
+export function papelDe(claims = {}) {
+  if (claims.admin === true || claims.papel === "master") return "master";
+  return claims.papel === "gestor" ? "gestor" : "vendedor";
+}
+/** Equipe pelas claims (sem claim = a equipe de antes das equipes). */
+export const equipeDe = (claims = {}) => (typeof claims.equipe_id === "string" && claims.equipe_id ? claims.equipe_id : EQUIPE_PADRAO);
+/** Equipe gravada na busca: master → área só dele; os outros → a equipe deles. */
+export const equipeDaNovaBusca = (usuario) => (usuario.papel === "master" ? EQUIPE_MASTER : usuario.equipe_id);
+/** Equipe de uma busca já gravada (as de antes da migração contam como da equipe padrão). */
+export const equipeDaBusca = (b) => b?.equipe_id || EQUIPE_PADRAO;
+
+/** Mês do calendário em Fortaleza ("2026-09"): a cota de consultas da equipe vira no dia 1. */
+export function mesFortaleza(data = new Date()) {
+  return diaFortaleza(data).slice(0, 7);
+}
+
+/** Id do documento da carteira: cada equipe tem a sua (equipes diferentes não se enxergam). */
+export const idCarteira = (equipe, fatia) => `${equipe}__${fatia}`;
+
+/** Id de equipe a partir do nome ("Farma Nordeste" → "farma-nordeste"); só letras, números e hífen. */
+export function idDaEquipe(nome) {
+  return slugCrm(nome).slice(0, 40) || "equipe";
+}
+
+/** Cotas válidas: inteiros de 1 a 1.000.000 ou null (sem limite). Campos ausentes ficam como estão. */
+export function validarCotas(cotas = {}) {
+  const novas = {};
+  for (const k of CAMPOS_COTA) {
+    if (cotas?.[k] === undefined) continue;
+    const v = cotas[k];
+    if (v !== null && !(Number.isInteger(v) && v >= 1 && v <= 1000000)) throw new Error("Cada cota precisa ser um número inteiro de 1 a 1.000.000, ou vazia (sem limite).");
+    novas[k] = v;
+  }
+  return novas;
+}
+
+/**
+ * Cota da equipe para uma busca nova: buscas por dia e consultas por mês da equipe inteira.
+ * equipe: documento equipes/{id}; devolve { permitido, erro, uso } (uso = contadores novos para gravar).
+ * Cota null = sem limite (os contadores continuam sendo somados, para o painel).
+ */
+export function conferirCotaEquipe(equipe = {}, consultas = 0, agora = new Date()) {
+  const dia = diaFortaleza(agora), mes = mesFortaleza(agora), uso = equipe.uso || {};
+  const buscasDia = uso.dia === dia ? Number(uso.buscas_dia || 0) : 0;
+  const consultasMes = uso.mes === mes ? Number(uso.consultas_mes || 0) : 0;
+  const cotas = equipe.cotas || {};
+  const novo = { dia, mes, buscas_dia: buscasDia + 1, consultas_mes: consultasMes + consultas };
+  if (Number.isInteger(cotas.buscas_dia) && buscasDia + 1 > cotas.buscas_dia) {
+    return { permitido: false, erro: `A equipe já fez ${buscasDia} de ${cotas.buscas_dia} buscas hoje (cota da equipe). Tente amanhã ou fale com o administrador.`, uso: novo };
+  }
+  if (Number.isInteger(cotas.consultas_mes) && consultasMes + consultas > cotas.consultas_mes) {
+    return { permitido: false, erro: `Cota de consultas da equipe no mês: ${consultasMes} de ${cotas.consultas_mes} usadas e esta busca tem ${consultas}. Diminua a busca ou fale com o administrador.`, uso: novo };
+  }
+  return { permitido: true, erro: null, uso: novo };
+}
+
+/** Uso da equipe valendo hoje/este mês (zera na virada do dia/mês). */
+export function usoDaEquipe(equipe = {}, agora = new Date()) {
+  const uso = equipe.uso || {};
+  return { buscas_dia: uso.dia === diaFortaleza(agora) ? Number(uso.buscas_dia || 0) : 0,
+    consultas_mes: uso.mes === mesFortaleza(agora) ? Number(uso.consultas_mes || 0) : 0 };
+}
+
+/**
+ * Limites que o gestor pode dar a um preposto: nunca acima dos da equipe (nem dos de vendedor do sistema).
+ * Devolve { limite_diario, limite_consultas_dia } máximos.
+ */
+export function tetoDoPreposto(geral = {}, equipe = {}) {
+  const padraoBuscas = Number.isInteger(geral.limite_padrao) ? geral.limite_padrao : LIMITE_DIARIO_PADRAO;
+  const cotas = equipe.cotas || {};
+  const teto = (base, cota) => (Number.isInteger(cota) ? Math.min(base, cota) : base);
+  return { limite_diario: teto(padraoBuscas, cotas.buscas_dia), limite_consultas_dia: teto(limitesVendedor(geral).max_consultas_dia, cotas.consultas_mes) };
+}
+
+/** Lista de representadas (nomes das empresas/marcas): até 20, cada uma com até 80 caracteres, sem repetir. */
+export function limparRepresentadas(lista) {
+  if (!Array.isArray(lista)) throw new Error("Envie a lista de representadas.");
+  const vistas = new Set(), saida = [];
+  for (const x of lista) {
+    const nome = String(x ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const k = nome.toLowerCase();
+    if (!nome || vistas.has(k)) continue;
+    vistas.add(k); saida.push(nome);
+  }
+  if (saida.length > MAX_REPRESENTADAS) throw new Error(`No máximo ${MAX_REPRESENTADAS} representadas.`);
+  return saida;
+}

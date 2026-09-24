@@ -6,9 +6,12 @@ rules_version = '2';
 //  - O navegador NUNCA grava nada. Buscas, leads, usuários e fila são gravados
 //    só pelo servidor (Netlify Functions e motor no GitHub Actions, via Admin SDK,
 //    que ignora estas regras).
-//  - Usuário comum lê SOMENTE as próprias buscas e os próprios leads, mais as que o admin liberou para ele.
-//  - Admin (custom claim admin=true, gravada só pelo servidor) lê tudo.
-//  - O papel vem do token assinado pelo Firebase: o usuário não consegue alterá-lo.
+//  - Três papéis (equipes, 24/09), no token assinado pelo Firebase (custom claims gravadas só pelo servidor;
+//    o usuário não consegue alterá-las):
+//      master   (papel=master ou a antiga admin=true): lê tudo, de todas as equipes;
+//      gestor   (papel=gestor, equipe_id): lê tudo o que tem equipe_id igual ao dele (e o que o master liberou p/ a equipe);
+//      vendedor (papel=vendedor, equipe_id): lê só o que é dele ou foi liberado para ele.
+//  - As buscas do master ficam com equipe_id "_master": nenhum gestor enxerga sem o master liberar.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -17,7 +20,22 @@ service cloud.firestore {
     }
 
     function admin() {
-      return logado() && request.auth.token.admin == true;
+      return logado() && (request.auth.token.admin == true || request.auth.token.get('papel', '') == 'master');
+    }
+
+    // Representante (gestor) de uma equipe.
+    function gestor() {
+      return logado() && request.auth.token.get('papel', '') == 'gestor' && request.auth.token.get('equipe_id', '') != '';
+    }
+
+    // Equipe do token. Sem a claim (contas de antes das equipes) = a equipe padrão, a mesma regra do servidor.
+    function minhaEquipe() {
+      return request.auth.token.get('equipe_id', 'resolve-farma');
+    }
+
+    // Documento da equipe do gestor: equipe_id igual, ou lista liberada pelo master para a equipe.
+    function daMinhaEquipe(dados) {
+      return gestor() && (dados.get('equipe_id', '') == minhaEquipe() || minhaEquipe() in dados.get('liberada_equipes', []));
     }
 
     function dono(dados) {
@@ -30,26 +48,33 @@ service cloud.firestore {
     }
 
     match /buscas/{buscaId} {
-      allow read: if admin() || dono(resource.data) || liberada(resource.data);
+      allow read: if admin() || dono(resource.data) || liberada(resource.data) || daMinhaEquipe(resource.data);
       allow write: if false;
 
-      // Leads em lotes de até 300 por documento. "Lista inteira" liberada: o lote traz liberada_para.
+      // Leads em lotes de até 300 por documento (cada lote leva equipe_id). "Lista inteira" liberada: o lote traz
+      // liberada_para (vendedores) e/ou liberada_equipes (equipe inteira, para o gestor).
       match /lotes/{lote} {
-        allow read: if admin() || dono(resource.data) || liberada(resource.data);
+        allow read: if admin() || dono(resource.data) || liberada(resource.data) || daMinhaEquipe(resource.data);
         allow write: if false;
       }
 
       // Recorte liberado (só algumas cidades e/ou dividido entre vendedores): cópia SÓ com os leads
-      // das cidades daquele vendedor, num caminho com o uid dele — cada um lê só o seu.
+      // das cidades daquele vendedor, num caminho com o uid dele — cada um lê só o seu (o gestor da equipe também).
       match /liberacoes/{uid}/lotes/{lote} {
-        allow read: if admin() || (logado() && request.auth.uid == uid);
+        allow read: if admin() || (logado() && request.auth.uid == uid) || daMinhaEquipe(resource.data);
         allow write: if false;
       }
     }
 
-    // Perfil e contador do limite diário: o próprio usuário lê, só o servidor grava.
+    // Perfil e contador do limite diário: o próprio usuário e o gestor da equipe leem; só o servidor grava.
     match /usuarios/{uid} {
-      allow read: if admin() || (logado() && request.auth.uid == uid);
+      allow read: if admin() || (logado() && request.auth.uid == uid) || (gestor() && resource.data.get('equipe_id', '') == minhaEquipe());
+      allow write: if false;
+    }
+
+    // Equipe: nome, cotas, uso e representadas. O master e os membros da equipe leem; só o servidor grava.
+    match /equipes/{equipeId} {
+      allow read: if admin() || (logado() && minhaEquipe() == equipeId);
       allow write: if false;
     }
 
@@ -65,25 +90,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Números do dia (painel "Hoje"): {dia}__{uid} o próprio usuário lê; {dia}__geral só o admin.
+    // Números do dia (painel "Hoje"): {dia}__{uid} o próprio usuário lê (e o gestor da equipe); {dia}__geral só o master.
     // Só contagens (buscas, leads, com WhatsApp, com telefone), nunca dados de leads.
     match /estatisticas/{id} {
       allow read: if admin()
-        || (logado() && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__' + request.auth.uid + '$'));
+        || (logado() && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}__' + request.auth.uid + '$'))
+        || (gestor() && resource.data.get('equipe_id', '') == minhaEquipe());
       allow write: if false;
     }
 
-    // Mini-CRM: status/anotações de cada vendedor em crm/{uid}__{fatia} (16 fatias por vendedor).
-    // Só o próprio vendedor (pelo id do documento, mesmo que ainda não exista) e o admin leem. Grava só a Function.
+    // Mini-CRM: status/anotações de cada vendedor em crm/{uid}__{fatia} (16 fatias por vendedor, com equipe_id).
+    // O próprio vendedor (pelo id do documento, mesmo que ainda não exista), o gestor da equipe e o master leem.
     match /crm/{id} {
-      allow read: if admin() || (logado() && id.matches('^' + request.auth.uid + '__[0-9]{2}$'));
+      allow read: if admin() || (logado() && id.matches('^' + request.auth.uid + '__[0-9]{2}$'))
+        || (gestor() && resource.data.get('equipe_id', '') == minhaEquipe());
       allow write: if false;
     }
 
-    // Carteira: de quem é cada estabelecimento (chave do lugar → uid, nome do vendedor, status, datas).
-    // Todo logado lê (para mostrar "Na carteira de <nome>"); sem dados do lead. Grava só a Function.
-    match /carteira/{fatia} {
-      allow read: if logado();
+    // Carteira por equipe: carteira/{equipe}__{fatia} (de quem é cada estabelecimento: uid, nome, status, datas).
+    // Só quem é da equipe lê (para mostrar "Na carteira de <nome>"); outra equipe não enxerga. Grava só a Function.
+    match /carteira/{id} {
+      allow read: if admin() || (logado() && id.matches('^' + minhaEquipe() + '__[0-9]{2}$'));
       allow write: if false;
     }
 

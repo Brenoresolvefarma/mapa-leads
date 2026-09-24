@@ -1,0 +1,40 @@
+# Migração para EQUIPES (manual). Rodar primeiro "simular" (só contagens), depois "aplicar".
+# Idempotente: pode rodar de novo (completa o que faltar; nada é apagado nem muda de dono).
+# "limpar_carteira_antiga" apaga carteira/NN (formato antigo) só quando carteira/resolve-farma__NN já tem tudo.
+# Log público: só contagens (nada de uid, e-mail, nome ou lead).
+name: Migrar equipes
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "simular (só conta), aplicar (grava) ou limpar_carteira_antiga"
+        required: true
+        default: "simular"
+        type: choice
+        options:
+          - simular
+          - aplicar
+          - limpar_carteira_antiga
+
+permissions:
+  contents: read
+
+concurrency: { group: migrar-equipes, cancel-in-progress: false }
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Migrar
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          MODO: ${{ github.event.inputs.modo }}
+        run: node ferramentas/migrar_equipes.mjs

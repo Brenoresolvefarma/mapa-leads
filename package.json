@@ -12,7 +12,8 @@
     "test:funcoes": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/funcoes.test.mjs\"",
     "test:motor": "firebase emulators:exec --only firestore --project demo-mapaleads \"cd motor && python -m pytest -q test_integracao_emulador.py\"",
     "test:empacotadas": "node testes/empacotar.mjs && FUNCOES_EMPACOTADAS=.netlify/teste-empacotamento firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --no-experimental-require-module --test --test-concurrency=1 testes/funcoes.test.mjs\"",
-    "test:tela": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/tela.test.mjs\""
+    "test:tela": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test --test-concurrency=1 testes/tela.test.mjs\"",
+    "test:migracao": "firebase emulators:exec --only firestore,auth --project demo-mapaleads \"node --test testes/migracao.test.mjs\""
   },
   "dependencies": {
     "firebase-admin": "13.10.0"

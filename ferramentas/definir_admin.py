@@ -33,6 +33,8 @@ def main():
 
     claims = dict(usuario.custom_claims or {})
     claims["admin"] = True
+    claims["papel"] = "master"  # equipes (24/09): o admin é o master
+    claims.setdefault("equipe_id", "resolve-farma")
     auth.set_custom_user_claims(uid, claims)
 
     db = firestore.client()
