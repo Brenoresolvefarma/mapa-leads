@@ -21,6 +21,7 @@ const funcao = (nome) => EMPACOTADAS
   : `../netlify/functions/${nome}.mjs`;
 const { default: criarBusca } = await import(funcao("criar-busca"));
 const { default: cancelarBusca } = await import(funcao("cancelar-busca"));
+const { default: apagarBusca } = await import(funcao("apagar-busca"));
 const { default: adminUsuarios } = await import(funcao("admin-usuarios"));
 const { default: configPublica } = await import(funcao("config-publica"));
 const { default: perfis } = await import(funcao("perfis"));
@@ -319,4 +320,64 @@ test("busca comum guarda sinônimos e categorias aceitas (só marcam leads; não
   assert.equal(r.status, 201, JSON.stringify(r.corpo));
   const p = (await db.doc(`buscas/${r.corpo.id}`).get()).data().parametros;
   assert.deepEqual([p.termos, p.sinonimos, p.categorias_aceitas], [["home care"], ["casa de repouso"], ["Residência geriátrica"]]);
+});
+
+test("apagar: vendedor apaga a própria (com os leads), recebe 403 na de outro; admin apaga a de qualquer um", async () => {
+  const { auth, db } = firebase();
+  const ana = await auth.getUserByEmail("ana@x.example"), breno = await auth.getUserByEmail("breno@x.example");
+  const criar = async (id, dono, extra = {}) => {
+    await db.doc(`buscas/${id}`).set({ tipo: "comum", lista: true, dono_uid: dono, status: "concluida", qtd_lotes: 2, ...extra });
+    await db.doc(`buscas/${id}/lotes/0`).set({ dono_uid: dono, leads: [{ nome: "Lead Fictício" }] });
+    await db.doc(`buscas/${id}/lotes/1`).set({ dono_uid: dono, leads: [{ nome: "Lead Fictício 2" }] });
+  };
+  await criar("ap-ana", ana.uid); await criar("ap-ana2", ana.uid); await criar("ap-breno", breno.uid);
+  await db.doc(`usuarios/${ana.uid}`).set({ contagem_dia: 7 }, { merge: true });
+
+  // sem login e sem id
+  assert.equal((await pedido(apagarBusca, { id: "ap-ana" })).status, 401);
+  assert.equal((await pedido(apagarBusca, {}, tokens.ana)).status, 400);
+  // vendedor apaga a própria: documento e lotes somem; a cota do dia NÃO volta
+  const propria = await pedido(apagarBusca, { id: "ap-ana" }, tokens.ana);
+  assert.deepEqual(propria, { status: 200, corpo: { resultado: "apagada", lotes: 2, buscas: 1 } });
+  assert.equal((await db.doc("buscas/ap-ana").get()).exists, false);
+  assert.equal((await db.collection("buscas/ap-ana/lotes").get()).size, 0);
+  assert.equal((await db.doc(`usuarios/${ana.uid}`).get()).data().contagem_dia, 7);
+  // vendedor tentando apagar a de outro: 403 e nada muda
+  const deOutro = await pedido(apagarBusca, { id: "ap-breno" }, tokens.ana);
+  assert.equal(deOutro.status, 403);
+  assert.equal((await db.doc("buscas/ap-breno").get()).exists, true);
+  assert.equal((await db.collection("buscas/ap-breno/lotes").get()).size, 2);
+  // já apagada / inexistente: 404
+  assert.equal((await pedido(apagarBusca, { id: "ap-ana" }, tokens.ana)).status, 404);
+  // admin apaga a de qualquer vendedor
+  const admin = await pedido(apagarBusca, { id: "ap-ana2" }, tokens.breno);
+  assert.equal(admin.status, 200);
+  assert.equal((await db.doc("buscas/ap-ana2").get()).exists, false);
+  assert.equal((await db.collection("buscas/ap-ana2/lotes").get()).size, 0);
+  assert.equal((await pedido(apagarBusca, { id: "ap-breno" }, tokens.breno)).status, 200);
+});
+
+test("apagar: busca em andamento precisa ser cancelada antes; mãe do Estado inteiro leva as filhas e os leads", async () => {
+  const { auth, db } = firebase();
+  const ana = await auth.getUserByEmail("ana@x.example"), breno = await auth.getUserByEmail("breno@x.example");
+  for (const status of ["na_fila", "rodando"]) {
+    await db.doc("buscas/ap-andamento").set({ tipo: "comum", lista: true, dono_uid: ana.uid, status });
+    const r = await pedido(apagarBusca, { id: "ap-andamento" }, tokens.ana);
+    assert.equal(r.status, 409);
+    assert.match(r.corpo.erro, /cancele primeiro/);
+  }
+  // cancelou (o motor marcou "cancelada") → pode apagar
+  await db.doc("buscas/ap-andamento").update({ status: "cancelada" });
+  assert.equal((await pedido(apagarBusca, { id: "ap-andamento" }, tokens.ana)).status, 200);
+
+  await db.doc("buscas/ap-mae").set({ tipo: "rn_mae", lista: true, dono_uid: breno.uid, status: "concluida" });
+  await db.doc("buscas/ap-mae/lotes/0").set({ dono_uid: breno.uid, leads: [] });
+  for (const f of ["ap-f1", "ap-f2"]) {
+    await db.doc(`buscas/${f}`).set({ tipo: "rn_filha", mae_id: "ap-mae", dono_uid: breno.uid, status: "concluida" });
+    await db.doc(`buscas/${f}/lotes/0`).set({ dono_uid: breno.uid, leads: [] });
+  }
+  assert.equal((await pedido(apagarBusca, { id: "ap-f1" }, tokens.breno)).status, 400); // só pela principal
+  const r = await pedido(apagarBusca, { id: "ap-mae" }, tokens.breno);
+  assert.deepEqual(r.corpo, { resultado: "apagada", lotes: 3, buscas: 3 });
+  for (const id of ["ap-mae", "ap-f1", "ap-f2"]) assert.equal((await db.doc(`buscas/${id}`).get()).exists, false);
 });

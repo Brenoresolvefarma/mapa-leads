@@ -1,0 +1,55 @@
+# Capturas da tela no site publicado (manual): login TEMPORÁRIO + busca com leads FICTÍCIOS (tudo apagado no fim).
+# As imagens vão para a branch "capturas-tela" (sobrescrita a cada rodada), nunca para a main.
+# Nenhum dado real de lead aparece: é um usuário comum novo, só com a busca de exemplo.
+# Uso: Actions > Capturas da tela > Run workflow (conjunto "celular" = 390/360 px, claro e escuro).
+name: Capturas da tela
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL do site"
+        required: true
+        default: "https://mapaleads-rn.netlify.app"
+      conjunto:
+        description: "celular (390/360, claro e escuro) ou completo (computador + celular)"
+        required: true
+        default: "celular"
+        type: choice
+        options:
+          - celular
+          - completo
+
+permissions:
+  contents: write
+
+concurrency: { group: capturas, cancel-in-progress: true }
+
+jobs:
+  capturas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Capturas (login temporário + busca fictícia)
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          NAVEGADOR: /usr/bin/google-chrome
+          SEMEAR: "1"
+          CONJUNTO: ${{ github.event.inputs.conjunto == 'celular' && 'celular' || '' }}
+          PASTA_CAPTURAS: ${{ runner.temp }}/capturas
+        run: node ferramentas/capturar_telas.mjs "${{ github.event.inputs.url }}"
+      - name: Publicar na branch capturas-tela
+        if: always()
+        run: |
+          cd "$RUNNER_TEMP/capturas" || exit 0
+          git init -q -b capturas-tela
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add . && git commit -qm "Capturas da tela (dados fictícios)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" capturas-tela
+          echo "capturas publicadas na branch capturas-tela"

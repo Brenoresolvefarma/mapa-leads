@@ -5,9 +5,9 @@ Prospecção B2B multiusuário via Google Maps, 100% na nuvem, feito para caber 
 (com alerta de orçamento de R$ 20/mês): o código continua dentro da cota grátis, e qualquer custo acima
 dela precisa de aprovação antes.
 
-> **Estado atual: Fase 3a v2** (PR 12, aguardando aprovação) — tela nova: Início, Nova busca em 3 passos,
-> Meus leads, Mapa com aprofundamento (RN › microrregião › município), Mercado (IBGE × buscas), Admin e Sobre;
-> tudo clicável leva ao detalhe filtrado; celular sem rolagem lateral. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
+> **Estado atual: Fase 3a v2 no ar** (PR 12) + **celular primeiro** (PR 13): tela clara por padrão, menu fixo embaixo,
+> cartões com WhatsApp/Ligar, ícones (i) que funcionam no toque, **apagar busca** (dono ou admin) e comemoração ao
+> criar uma busca. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
 
 ## Como funciona
 
@@ -31,6 +31,10 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
   por dono. A tela mostra a posição na fila e o tempo estimado de espera.
 - **Cancelar**: na fila, cancela na hora; rodando, para antes da próxima consulta e guarda os
   leads já coletados. No RN inteiro, cancela os lotes que faltam e fecha com o que já veio.
+- **Apagar busca** (`/api/apagar-busca`): o vendedor apaga só as dele; o admin, qualquer uma. Confirmação em dois
+  passos ("Apagar busca" → "Sim, apagar"). Apaga o documento da busca e os leads (lotes); no Estado inteiro, também os
+  lotes de consultas. Em andamento: cancelar primeiro, depois apagar. **Não devolve a cota do dia.** O log da Function
+  guarda só o id da busca e o uid de quem apagou.
 
 ### A tela (Fase 3a v2)
 Arquivo único [`publico/index.html`](publico/index.html) (Leaflet, MarkerCluster, Chart.js e SheetJS por CDN, carregados só
@@ -67,10 +71,23 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
   "Atualizar indicadores do IBGE"): população, área e densidade (Censo 2022, SIDRA 4714); PIB 2022 (SIDRA 5938);
   **PIB per capita 2022 = PIB 2022 ÷ população do Censo 2022 (calculado; opção "b" aprovada pelo Breno)**; empresas,
   unidades locais, pessoal ocupado e salário médio (CEMPRE 2024, SIDRA 9509).
-- **Admin**: usuários (criar com nome, editar nome, limite, remover) com buscas/leads/% WhatsApp da semana, fila ao vivo, saúde do motor,
-  Estado inteiro (RN) e estados ativos (só RN).
-- Tema claro/escuro (automático ou escolhido), tour de 4 passos no 1º acesso, "Desenvolvido por Resolve Farma"
-  (constante `ASSINATURA`). Datas sempre no horário de Natal.
+- **Admin**: usuários (criar com nome, editar nome, limite, remover) com buscas/leads/% WhatsApp da semana, **buscas de
+  todos os vendedores** (apagar qualquer uma), fila ao vivo, saúde do motor, Estado inteiro (RN) e estados ativos (só RN).
+- **Celular primeiro** (o vendedor usa principalmente o celular): menu fixo embaixo (Início, Nova busca, Leads, Mapa;
+  Mercado/Sobre/tema no avatar), na Nova busca o botão Próximo/Buscar fica sempre visível embaixo, lead em cartão com
+  nome, cidade e botões grandes **WhatsApp** e **Ligar** (abrem o app e o discador), ficha em tela cheia com "Fechar"
+  embaixo, mapa com gaveta de baixo, toques ≥ 44 px e nada passa da largura da tela em 360/390/414 px.
+- **Tema**: abre **sempre claro**, mesmo com o aparelho em modo escuro (`color-scheme: only light`, que também impede o
+  "escurecimento forçado" do Chrome/Samsung). Escuro só pelo botão de tema (lua/sol no topo ou no menu do avatar); a
+  escolha fica salva naquele aparelho.
+- **Ícones (i)**: no celular abrem com um toque e fecham tocando de novo ou fora; no computador abrem ao passar o
+  mouse e também ao clicar. Balão curto sempre dentro da tela, um aberto por vez. Há (i) no Início, Nova busca, Meus
+  leads, Mapa, Mercado e Admin.
+- **Busca criada**: logos do MapaLeads (o pino azul) saltam e giram pela tela por ~2 s (canvas próprio, sem
+  biblioteca) com a mensagem "Busca criada! Te aviso quando os leads chegarem." Com "reduzir movimento" ligado no
+  sistema, só a mensagem.
+- **População na lista de cidades**: dentro da linha, alinhada à direita ("Apodi ······ 35.904 hab."), sem balão solto.
+- Tour de 4 passos no 1º acesso, "Desenvolvido por Resolve Farma" (constante `ASSINATURA`). Datas sempre no horário de Natal.
 
 ### Agendamento do motor (rede de segurança)
 - O GitHub **atrasa ou pula** agendamentos (o `*/15` nunca disparou). Agora são dois relógios:
@@ -150,6 +167,7 @@ O log público mostra só números, ex.:
   buscas e leads; admin lê tudo; **ninguém grava pelo navegador** (nem o admin).
 - **Netlify Functions** validam o ID token em toda chamada (token revogado/usuário removido perde
   acesso na hora). RN inteiro e gestão de usuários exigem a claim `admin` **no servidor**.
+  Apagar busca: sem a claim `admin`, só apaga se `dono_uid` for o próprio uid (senão **403**).
 - Usuário removido: a conta é apagada, as buscas dele ficam visíveis para o admin (marcado "removido").
 - Não há cadastro público nem "promover a admin" pela tela.
 
@@ -208,8 +226,16 @@ O log público mostra só números, ex.:
 3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
 
+## Configuração depois do merge do PR 13 (celular primeiro)
+Nada a cadastrar: a Function `apagar-busca` usa as mesmas variáveis do Netlify e as regras do Firestore não mudam
+(o navegador continua sem gravar nada). Depois do deploy, o teste real roda sozinho pelos workflows abaixo.
+
 ## Verificação em produção (GitHub Actions, manual)
 - **Verificar Functions**: chama as Functions no ar sem login (espera 200/401/405). Só status no log.
+- **Testar tela em produção**: logins temporários (comum + admin) e buscas fictícias; confere todas as telas,
+  (i) no toque, tema, apagar (própria, 403 na de outro, admin apaga de vendedor). Tudo apagado no fim.
+- **Capturas da tela**: capturas do celular (390/360, claro e escuro) com login temporário e busca fictícia, na
+  branch `capturas-tela`. A criação da busca nas capturas dos logos é simulada (nada vai para a fila).
 - **Diagnosticar Functions**: cria um login de teste temporário (apagado no fim) e faz uma busca
   **simulada** (não grava nada) em produção, além de testar o Firestore direto. Mostra status e códigos de erro.
 
@@ -226,7 +252,10 @@ npm run test:empacotadas    # Functions empacotadas como no Netlify
 npm run test:tela           # tela no Chromium (Playwright) contra os emuladores
 ```
 `test:tela` clica em cada cartão, barra, categoria e item do ranking e confere o detalhe que abre, e mede em
-360/390/414 px que a página tem a largura da tela (nada passa para o lado) e que os toques têm ≥ 44 px.
+360/390/414 px que a página tem a largura da tela (nada passa para o lado) e que os toques têm ≥ 44 px. Também:
+etiquetas de população (passar o mouse em 5 cidades e rolar), tema (aparelho escuro → abre claro; em 390 px o botão
+troca e fica salvo depois de recarregar; no CI também no **WebKit**, o motor do Safari), cada (i) em 390 px, apagar
+busca (dois passos, em andamento só cancela, admin) e comemoração (com e sem "reduzir movimento").
 Leaflet, MarkerCluster e Chart.js vêm do `node_modules` nos testes (mesmas versões do CDN).
 Tudo com dados fictícios; roda automaticamente no workflow **Testes** a cada push/PR.
 
@@ -240,7 +269,7 @@ motor/fila.py         # prioridade, rodízio por dono, estado público da fila, 
 motor/rn_inteiro.py   # busca-mãe/filhas, consolidação sem duplicados, pausa
 motor/vigia.py        # vigia de tempo do scraper + diagnóstico só com números
 motor/tratamento.py   # limpeza dos dados, cidade conferida, estimativas
-netlify/functions/    # criar-busca, cancelar-busca, admin-usuarios, config-publica,
+netlify/functions/    # criar-busca, cancelar-busca, apagar-busca, admin-usuarios, config-publica,
                       # perfis, saude-motor, despertador (agendada, 15 min)
 netlify/lib/          # lógica pura (testável) + utilidades de servidor
 dados/                # municípios (Censo 2022), bairros e micro/regiões imediatas (IBGE)

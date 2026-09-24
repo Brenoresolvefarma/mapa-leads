@@ -2,7 +2,8 @@
 // Dados 100% fictícios. Rodar: npm run test:tela   (precisa de Java e de um Chromium)
 //  - NAVEGADOR: caminho do Chromium/Chrome (padrão: /opt/pw-browsers/chromium; no CI, o Chrome do runner);
 //  - bibliotecas do CDN servidas do node_modules (testes/rotas-cdn.mjs), sem depender da rede;
-//  - TESTAR_XLSX=1 testa o .xlsx de verdade com o SheetJS do CDN oficial (o CI tem internet).
+//  - TESTAR_XLSX=1 testa o .xlsx de verdade com o SheetJS do CDN oficial (o CI tem internet);
+//  - MOTOR=webkit roda no motor do Safari (no CI, só o teste de tema).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
@@ -10,7 +11,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { chromium } from "playwright-core";
+import { chromium, webkit } from "playwright-core";
 import { medirLargura, rotearCdn } from "./rotas-cdn.mjs";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -80,7 +81,8 @@ before(async () => {
   await db.doc(`usuarios/${ana.uid}`).set({ email: "ana@x.example", nome: "Ana Souza", dia: hoje, contagem_dia: 2, limite_diario: 5 });
 
   local = await iniciarServidor();
-  navegador = await chromium.launch({ executablePath: process.env.NAVEGADOR || "/opt/pw-browsers/chromium" });
+  // MOTOR=webkit: mesmo teste no motor do Safari (iPhone), instalado no CI.
+  navegador = process.env.MOTOR === "webkit" ? await webkit.launch() : await chromium.launch({ executablePath: process.env.NAVEGADOR || "/opt/pw-browsers/chromium" });
 });
 
 after(async () => {
@@ -309,6 +311,27 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await p.uncheck("#lista-cidades input[data-cidade='Extremoz']");
   assert.match(await texto(p, "#qtd-cidades"), /^2 cidades/);
   assert.equal(await p.locator(`#mapa-escolha path.mun[data-cod="${NATAL}"]`).getAttribute("fill"), "var(--brand)");
+  // Etiquetas de população: dentro da linha, nada flutua nem sai da caixa (bug visto pelo Breno)
+  const linhasCidades = p.locator("#lista-cidades label");
+  for (let i = 0; i < 5; i++) await linhasCidades.nth(i * 7).hover();
+  await p.$eval("#lista-cidades", (e) => { e.scrollTop = 400; });
+  await p.mouse.move(5, 5);
+  const etiquetas = await p.evaluate(() => {
+    const caixa = document.querySelector("#lista-cidades").getBoundingClientRect();
+    const fora = [];
+    for (const h of document.querySelectorAll("#lista-cidades .hab")) {
+      if (getComputedStyle(h).position !== "static") fora.push("flutuando");
+      const r = h.getBoundingClientRect();
+      const visivel = r.bottom > caixa.top && r.top < caixa.bottom;
+      if (visivel && (r.right > caixa.right + 1 || r.left < caixa.left - 1)) fora.push(h.textContent);
+    }
+    const balao = document.querySelector("#balao");
+    return { fora, balaoVisivel: !!balao.offsetParent, total: document.querySelectorAll("#lista-cidades .hab").length };
+  });
+  assert.equal(etiquetas.total, 167);
+  assert.deepEqual(etiquetas.fora, []);
+  assert.equal(etiquetas.balaoVisivel, false);
+  assert.match(await p.locator("#lista-cidades label", { hasText: "Natal" }).first().textContent(), /Natal.*751\.300 hab\./);
   await p.click("#tipo-regiao [data-tipo=imediata]");
   assert.equal(await p.locator("#regioes input").count(), 11);
   await p.click("#tipo-regiao [data-tipo=micro]");
@@ -333,7 +356,7 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await p.click("[data-passo-conteudo='2'] [data-ir-passo='3']");
   await p.click("#buscar");
   await esperarHash(p, "#inicio");
-  await esperarTexto(p, "#toasts", /ainda pode fazer 2 hoje/);
+  await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem.[\s\S]*ainda pode fazer 2 hoje/);
   const { db } = firebase();
   const criadas = await db.collection("buscas").where("dono_uid", "==", uids.ana).where("status", "==", "na_fila").get();
   assert.equal(criadas.size, 1);
@@ -537,4 +560,257 @@ test("config-publica instável: tenta de novo; se não voltar, mostra 'Tentar de
     }
     await ctx.close();
   }
+});
+
+test("tema: abre claro mesmo com o aparelho em modo escuro; no celular o botão troca e fica salvo", async () => {
+  // Aparelho em modo escuro → a tela continua clara
+  const ctx = await navegador.newContext({ locale: "pt-BR", colorScheme: "dark", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await rotearCdn(ctx);
+  await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
+  const p = await ctx.newPage();
+  erros = [];
+  p.on("pageerror", (e) => erros.push(e.message));
+  await p.goto(`${local.url}/?emulador=1`);
+  await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+  const fundo = () => p.evaluate(() => getComputedStyle(document.body).backgroundColor.match(/\d+/g).slice(0, 3).reduce((t, v) => t + Number(v), 0));
+  assert.equal(await p.evaluate(() => document.documentElement.dataset.tema), "claro");
+  assert.ok(await fundo() > 600, "fundo claro com o sistema em modo escuro");
+  assert.equal(await p.getAttribute('meta[name="color-scheme"]', "content"), "only light");
+  await p.fill("#le", "ana@x.example"); await p.fill("#ls", "senha-forte-2"); await p.tap("#entrar");
+  await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
+  // Menu fixo embaixo: Início, Nova busca, Leads e Mapa
+  assert.deepEqual((await p.locator("#barra-inferior a").allTextContents()).map((t) => t.trim()), ["Início", "Nova busca", "Leads", "Mapa"]);
+  // Botão do topo troca o tema no celular (toque)
+  await p.tap("#tema-btn");
+  assert.equal(await p.evaluate(() => document.documentElement.dataset.tema), "escuro");
+  await p.waitForTimeout(400); // transições de cor dos cartões
+  assert.ok(await fundo() < 200, "fundo escuro depois do toque");
+  const cartao = await p.$eval("#kpis .kpi", (e) => getComputedStyle(e).backgroundColor.match(/\d+/g).slice(0, 3).reduce((t, v) => t + Number(v), 0));
+  assert.ok(cartao < 200, "cartões também escurecem");
+  // Mapa e barra de baixo também mudam
+  await p.tap("#barra-inferior a[data-ir=mapa]");
+  await p.waitForSelector("#mapa-painel h2");
+  assert.ok(await p.$eval(".leaflet-tile-pane", (e) => getComputedStyle(e).filter.includes("invert")), "mapa escurecido");
+  assert.ok(await p.$eval("#barra-inferior", (e) => getComputedStyle(e).backgroundColor.match(/\d+/g).slice(0, 3).reduce((t, v) => t + Number(v), 0)) < 200);
+  // Fica salvo depois de recarregar
+  await p.reload();
+  await p.waitForSelector("#tela-app:not(.oculto)");
+  assert.equal(await p.evaluate(() => document.documentElement.dataset.tema), "escuro");
+  assert.ok(await fundo() < 200);
+  // E volta ao claro pelo mesmo botão
+  await p.tap("#tema-btn");
+  assert.equal(await p.evaluate(() => document.documentElement.dataset.tema), "claro");
+  assert.ok(await fundo() > 600);
+  assert.deepEqual(erros, []);
+  await ctx.close();
+});
+
+test("celular 360/390 (vendedor): Buscar sempre visível, cartões com WhatsApp/Ligar, ficha em tela cheia com Fechar embaixo", async () => {
+  for (const largura of [390, 360]) {
+    const p = await abrir("ana@x.example", "senha-forte-2", { width: largura, height: 780 });
+    // Nova busca: as 3 etapas sem rolagem lateral e a ação do passo sempre visível embaixo
+    await p.tap("#barra-inferior a[data-ir=nova]");
+    await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
+    const visivelEmbaixo = (sel) => p.$eval(sel, (e) => { const r = e.getBoundingClientRect(); const barra = document.querySelector("#barra-inferior").getBoundingClientRect(); return r.top >= 0 && r.bottom <= barra.top + 1 && r.height >= 44; });
+    assert.ok(await visivelEmbaixo("[data-passo-conteudo='1'] [data-ir-passo='2']"), "Próximo visível no passo 1");
+    await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+    await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+    await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
+    let m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `passo 2: ${m.fora.join(", ")}`);
+    assert.ok(await visivelEmbaixo("[data-passo-conteudo='2'] [data-ir-passo='3']"), "Próximo visível no passo 2 (sem rolar)");
+    await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+    m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `passo 3: ${m.fora.join(", ")}`);
+    assert.ok(await visivelEmbaixo("#buscar"), "Buscar visível embaixo no passo 3");
+    await p.evaluate(() => scrollTo(0, 0));
+    assert.ok(await visivelEmbaixo("#buscar"), "Buscar continua visível com a página no topo");
+    // Meus leads: cartões com nome, cidade e botões grandes
+    await p.tap("#barra-inferior a[data-ir=leads]");
+    // (abre a busca mais recente: Extremoz)
+    const cartao = p.locator("#cartoes .cartao-lead", { hasText: "Clínica Delta" }).first();
+    await cartao.waitFor();
+    assert.match(await cartao.locator(".cidade-lead").textContent(), /Extremoz/);
+    assert.equal(await cartao.locator("a.btn-whats").getAttribute("href"), "https://wa.me/5584999990004");
+    assert.equal(await cartao.locator("a[href^='tel:']").getAttribute("href"), "tel:84999990004");
+    assert.ok((await cartao.locator("a.btn-whats").boundingBox()).height >= 48);
+    // Ficha em tela cheia, "Fechar" embaixo ao alcance do polegar
+    await cartao.locator(".nome-lead").tap();
+    await p.waitForSelector("#ficha:not(.oculto)");
+    const f = await p.$eval("#ficha", (e) => { const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, W: innerWidth, H: innerHeight }; });
+    assert.equal(Math.round(f.w), f.W); assert.equal(Math.round(f.h), f.H);
+    const fechar = await p.locator("#ficha .fechar-baixo").boundingBox();
+    assert.ok(fechar.y > f.H / 2 && fechar.height >= 44, "Fechar na metade de baixo, com 44 px ou mais");
+    await p.tap("#ficha .fechar-baixo");
+    await p.waitForSelector("#ficha", { state: "hidden" });
+    assert.deepEqual(erros, []);
+    await p.context().close();
+  }
+});
+
+// Toca em cada (i) visível da página: o texto aparece dentro da tela e some ao tocar de novo; um só aberto por vez.
+async function conferirAjudas(p, onde) {
+  await p.waitForTimeout(1000); // dados chegando redesenham os cartões
+  const icones = p.locator("[data-ajuda]:visible");
+  const n = await icones.count();
+  let conferidos = 0;
+  for (let i = 0; i < n; i++) {
+    const b = icones.nth(i);
+    if (!(await b.isVisible())) continue;
+    await b.scrollIntoViewIfNeeded();
+    const esperado = await b.getAttribute("data-ajuda");
+    await b.tap();
+    await p.waitForSelector("#balao:not(.oculto)", { timeout: 3000 }).catch(() => { throw new Error(`${onde}: (i) nº ${i} não abriu`); });
+    assert.equal(await p.textContent("#balao"), esperado, `${onde}: texto do (i) nº ${i}`);
+    const r = await p.$eval("#balao", (e) => { const q = e.getBoundingClientRect(); return { l: q.left, r: q.right, t: q.top, b: q.bottom, W: innerWidth, H: innerHeight }; });
+    assert.ok(r.l >= 0 && r.r <= r.W && r.t >= 0 && r.b <= r.H, `${onde}: balão do (i) nº ${i} saiu da tela ${JSON.stringify(r)}`);
+    assert.equal(await p.locator('[data-ajuda][aria-expanded="true"]').count(), 1, `${onde}: um só aberto`);
+    await b.tap();
+    await p.waitForSelector("#balao.oculto", { state: "attached", timeout: 3000 }).catch(() => { throw new Error(`${onde}: (i) nº ${i} não fechou no 2º toque`); });
+    conferidos++;
+  }
+  // tocar fora também fecha
+  if (conferidos) {
+    await icones.first().scrollIntoViewIfNeeded(); await icones.first().tap();
+    await p.waitForSelector("#balao:not(.oculto)");
+    await p.tap("#titulo-pagina");
+    await p.waitForSelector("#balao.oculto", { state: "attached", timeout: 3000 });
+  }
+  return conferidos;
+}
+
+test("ícones (i) em 390 px: cada um abre com um toque, mostra o texto dentro da tela e some ao tocar de novo", async () => {
+  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
+  const total = {};
+  await p.waitForSelector("#kpis .kpi");
+  total.inicio = await conferirAjudas(p, "Início");
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
+  total.nova1 = await conferirAjudas(p, "Nova busca 1");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  total.nova2 = await conferirAjudas(p, "Nova busca 2");
+  await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+  await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  total.nova3 = await conferirAjudas(p, "Nova busca 3");
+  // o (i) dentro de "Extrair e-mail" não marca a caixa
+  assert.equal(await p.isChecked("#email-sn"), false);
+  await p.tap("#barra-inferior a[data-ir=mapa]");
+  await p.waitForSelector("#mapa-painel h2");
+  total.mapa = await conferirAjudas(p, "Mapa");
+  await p.evaluate(() => { location.hash = "#mercado"; });
+  await p.waitForSelector("#kpis-mercado .kpi");
+  total.mercado = await conferirAjudas(p, "Mercado");
+  // o (i) do cartão não abre o cartão
+  assert.equal(decodeURIComponent(await p.evaluate(() => location.hash)), "#mercado");
+  for (const [k, v] of Object.entries(total)) assert.ok(v > 0, `${k}: nenhum (i) conferido`);
+  assert.deepEqual(erros, []);
+  await p.context().close();
+  // Admin
+  const a = await abrir("breno@x.example", "senha-forte-1", { width: 390, height: 844 });
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await esperarTexto(a, "#saude", /Últimas execuções|Token do GitHub/);
+  assert.ok(await conferirAjudas(a, "Admin") >= 5);
+  assert.deepEqual(erros, []);
+  await a.context().close();
+  // Computador: abre ao passar o mouse (e fecha ao sair); clicado fica aberto até clicar de novo
+  const d = await abrir("ana@x.example", "senha-forte-2");
+  await d.waitForSelector("#kpis .kpi [data-ajuda]"); await d.waitForTimeout(1000);
+  const ic = d.locator("#kpis .kpi [data-ajuda]").first();
+  await ic.hover();
+  await d.waitForSelector("#balao:not(.oculto)");
+  await d.mouse.move(5, 400);
+  await d.waitForSelector("#balao.oculto", { state: "attached" });
+  await ic.click();
+  await d.mouse.move(5, 400);
+  await d.waitForTimeout(200);
+  assert.ok(await d.isVisible("#balao"), "clicado continua aberto");
+  assert.equal(await d.evaluate(() => location.hash), "", "o (i) não abre o cartão");
+  await ic.click();
+  await d.waitForSelector("#balao.oculto", { state: "attached" });
+  assert.deepEqual(erros, []);
+  await d.context().close();
+});
+
+test("apagar busca: vendedor apaga a própria em dois passos (celular); em andamento só cancela; admin apaga a de qualquer um", async () => {
+  const { db } = firebase();
+  await db.doc("buscas/b-fila").set({ tipo: "comum", lista: true, dono_uid: uids.ana, dono_email: "ana@x.example", status: "na_fila", criada_em: new Date(),
+    parametros: { termos: ["clínica"], cidades: ["Macau RN"] } });
+  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
+  await p.tap("#barra-inferior a[data-ir=leads]");
+  await p.tap("#abrir-buscas");
+  await p.waitForSelector("#caixa-buscas:not(.oculto) [data-apagar=b3]");
+  // em andamento: não tem "Apagar", só "Cancelar"
+  assert.equal(await p.locator("#caixa-buscas [data-apagar=b-fila]").count(), 0);
+  assert.equal(await p.locator("#caixa-buscas [data-cancelar=b-fila]").count(), 1);
+  const botao = p.locator("#caixa-buscas [data-apagar=b3]");
+  assert.ok((await botao.boundingBox()).height >= 44, "Apagar com 44 px ou mais");
+  // 1º toque: só pergunta; "Voltar" não apaga
+  await botao.tap();
+  await p.waitForSelector("#confirmacao:not(.oculto)");
+  assert.match(await p.textContent("#conf-texto"), /^Apagar a busca .+ com 1 lead\? Isso não pode ser desfeito\.$/);
+  assert.equal(await p.textContent("#conf-sim"), "Sim, apagar");
+  assert.ok((await p.locator("#conf-sim").boundingBox()).height >= 44);
+  await p.tap("#conf-nao");
+  await p.waitForSelector("#confirmacao", { state: "hidden" });
+  assert.equal((await db.doc("buscas/b3").get()).exists, true);
+  // 2º passo: "Sim, apagar" apaga a busca e os leads (a lista continua aberta depois do "Voltar")
+  await p.locator("#caixa-buscas [data-apagar=b3]").tap();
+  await p.tap("#conf-sim");
+  await esperarTexto(p, "#toasts", /Busca apagada/);
+  assert.equal((await db.doc("buscas/b3").get()).exists, false);
+  assert.equal((await db.collection("buscas/b3/lotes").get()).size, 0);
+  await p.waitForFunction(() => !document.querySelector("#caixa-buscas [data-abrir=b3]"));
+  assert.deepEqual(erros, []);
+  await p.context().close();
+
+  // Admin: lista de buscas de todos, apaga a da Ana
+  const a = await abrir("breno@x.example", "senha-forte-1");
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.click("#menu [data-ir=admin]");
+  await a.waitForSelector("#buscas-admin [data-apagar=b1]");
+  assert.equal(await a.locator("#buscas-admin [data-cancelar=b-fila]").count(), 1);
+  await a.click("#buscas-admin [data-apagar=b1]");
+  await a.click("#conf-sim");
+  await a.waitForFunction(() => !document.querySelector("#buscas-admin [data-apagar=b1]"));
+  assert.equal((await db.doc("buscas/b1").get()).exists, false);
+  assert.deepEqual(erros, []);
+  await a.context().close();
+  await db.doc("buscas/b-fila").delete();
+});
+
+test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mensagem; com 'reduzir movimento' só a mensagem", async () => {
+  const criar = async (p) => {
+    await p.tap("#barra-inferior a[data-ir=nova]");
+    await p.fill("#termo-input", "pet shop"); await p.press("#termo-input", "Enter");
+    await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+    await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+    await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
+    await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+    await p.tap("#buscar");
+  };
+  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
+  await criar(p);
+  await p.waitForSelector("#comemoracao", { state: "attached", timeout: 10000 });
+  await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
+  const c = await p.$eval("#comemoracao", (e) => ({ pe: getComputedStyle(e).pointerEvents, w: e.getBoundingClientRect().width }));
+  assert.deepEqual(c, { pe: "none", w: 390 }); // não bloqueia os toques
+  await p.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 }); // some sozinho (~2 s)
+  assert.deepEqual(erros, []);
+  await p.context().close();
+
+  // Reduzir movimento: só a mensagem
+  const ctx = await navegador.newContext({ locale: "pt-BR", viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: "reduce" });
+  await rotearCdn(ctx);
+  await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
+  const r = await ctx.newPage();
+  erros = []; r.on("pageerror", (e) => erros.push(e.message));
+  await r.goto(`${local.url}/?emulador=1`);
+  await r.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+  await r.fill("#le", "ana@x.example"); await r.fill("#ls", "senha-forte-2"); await r.tap("#entrar");
+  await r.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
+  await criar(r);
+  await esperarTexto(r, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
+  assert.equal(await r.locator("#comemoracao").count(), 0, "sem animação com reduzir movimento");
+  assert.deepEqual(erros, []);
+  await ctx.close();
 });

@@ -87,7 +87,16 @@ const erros = [];
 const avisos = [];
 try {
   const admin = process.env.PAPEL === "admin";
-  const telas = [
+  // CONJUNTO=celular: só o celular (390 e 360), cada tela nos dois temas, com o APARELHO em modo escuro
+  // (prova que o tema claro é o padrão e que o escuro só entra pela escolha do usuário).
+  const celular = [["login", null], ["inicio", "inicio"], ["nova-busca-o-que", "nova"], ["nova-busca-onde", "nova", "onde"], ["nova-busca-como", "nova", "como"],
+    ["leads", "leads"], ["ficha", "leads", "ficha"], ["mapa-rn", "mapa"], ["mapa-municipio", "mapa/natal/natal"], ["mercado", "mercado"], ["menu", "inicio", "menu"],
+    ["ajuda-aberta", "inicio", "ajuda"], ["apagar-confirmacao", "leads", "apagar"], ["logos-saltando", "nova", "comemorar"]];
+  const telasCelular = ["claro", "escuro"].flatMap((tema, t) => [
+    ...celular.map(([nome, hash, acao], i) => [`${t + 1}${String(i + 1).padStart(2, "0")}-${nome}-390-${tema}`, 390, 844, tema, hash, acao]),
+    [`${t + 1}90-inicio-360-${tema}`, 360, 780, tema, "inicio"], [`${t + 1}91-leads-360-${tema}`, 360, 780, tema, "leads"],
+  ]);
+  const telas = process.env.CONJUNTO === "celular" ? telasCelular : [
     // [arquivo, largura, altura, tema, hash, acao]
     ["01-login-1366", 1366, 768, "claro", null],
     ["02-inicio-1366", 1366, 768, "claro", "inicio"],
@@ -114,19 +123,27 @@ try {
     ...(admin ? [["29-admin-390", 390, 844, "claro", "admin"]] : []),
   ];
   for (const [arquivo, largura, altura, tema, hash, acao] of telas) {
-    const ctx = await navegador.newContext({ viewport: { width: largura, height: altura }, deviceScaleFactor: 1, locale: "pt-BR",
-      colorScheme: tema === "escuro" ? "dark" : "light", hasTouch: largura < 500 });
+    const ctx = await navegador.newContext({ viewport: { width: largura, height: altura }, deviceScaleFactor: largura < 500 ? 2 : 1, locale: "pt-BR",
+      colorScheme: largura < 500 ? "dark" : "light", hasTouch: largura < 500, isMobile: largura < 500 });
     if (local) await rotearCdn(ctx);
     if (funcoesLocais) await rotearApiLocal(ctx, site, funcoesLocais);
     // Sem o tour do primeiro acesso.
     await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
     // Bloqueia a barra de colaboração que o Netlify injeta só nos deploy previews.
     await ctx.route(/netlify-cdp|netlify\.js|app\.netlify\.com\/.*drawer/i, (r) => r.abort());
+    // "Logos saltando": a criação da busca é SIMULADA aqui (nenhuma busca real vai para a fila nem roda o motor).
+    if (acao === "comemorar") {
+      await ctx.route(/\/api\/criar-busca$/, async (r) => {
+        if (JSON.parse(r.request().postData() || "{}").simular) return r.fallback();
+        r.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "captura-simulada", estimativa_seg: 840, restantes_hoje: 19, disparado: false }) });
+      });
+    }
     const p = await ctx.newPage();
     p.on("pageerror", (e) => erros.push(`${arquivo}: ${e.message}`));
     p.on("dialog", (d) => d.dismiss());
     const mascara = process.env.SEM_TARJA === "1" ? "" : "captura=1";
-    await p.goto(`${site}/?${mascara}${local ? "&emulador=1" : ""}`);
+    // O tema escuro entra pela escolha do usuário (aqui, pelo parâmetro ?tema=escuro, que não fica salvo).
+    await p.goto(`${site}/?${mascara}${tema === "escuro" ? "&tema=escuro" : ""}${local ? "&emulador=1" : ""}`);
     await p.addStyleTag({ content: "netlify-drawer, #netlify-drawer, iframe[id*='netlify'], div[id*='netlify-drawer'] { display:none !important; }" }).catch(() => {});
     await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
     if (hash) {
@@ -145,6 +162,34 @@ try {
         await p.locator("#regioes input").nth(9).check().catch(() => {});
         await p.waitForTimeout(500);
       }
+      if (acao === "como") {
+        await p.fill("#termo-input", "home care"); await p.press("#termo-input", "Enter");
+        await p.click("[data-passo-conteudo='1'] [data-ir-passo='2']");
+        await p.locator("#regioes input").nth(9).check().catch(() => {});
+        await p.waitForTimeout(300);
+        await p.click("[data-passo-conteudo='2'] [data-ir-passo='3']");
+        await p.waitForTimeout(1500);
+      }
+      if (acao === "ajuda") { await p.locator("#kpis .kpi [data-ajuda]").first().tap(); await p.waitForTimeout(300); }
+      if (acao === "apagar") { // só a confirmação: "Voltar" (nada é apagado)
+        await p.tap("#abrir-buscas"); await p.locator("#caixa-buscas [data-apagar]").first().tap(); await p.waitForTimeout(400);
+      }
+      if (acao === "comemorar") {
+        await p.fill("#termo-input", "home care"); await p.press("#termo-input", "Enter");
+        await p.click("[data-passo-conteudo='1'] [data-ir-passo='2']");
+        await p.locator("#regioes input").nth(9).check().catch(() => {});
+        await p.waitForTimeout(300);
+        await p.click("[data-passo-conteudo='2'] [data-ir-passo='3']");
+        await p.waitForTimeout(800);
+        await p.tap("#buscar");
+        await p.waitForSelector("#comemoracao", { state: "attached", timeout: 10000 });
+        await p.waitForTimeout(450); // meio do salto
+        await p.screenshot({ path: `${PASTA}/${arquivo}.png` });
+        console.log(`${arquivo}.png`);
+        await ctx.close();
+        continue;
+      }
+      if (acao === "menu") { await p.click("#avatar"); await p.waitForTimeout(400); }
       if (acao === "cheia") { await p.click("#mapa-cheio-btn"); await p.waitForTimeout(1500); }
     } else {
       await p.waitForTimeout(1500);

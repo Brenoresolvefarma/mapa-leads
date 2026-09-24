@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="only light">
 <title>MapaLeads – Prospecção B2B inteligente no RN</title>
 <meta name="description" content="Encontre empresas por cidade, microrregião e segmento, com WhatsApp, mapa e dados do IBGE. Desenvolvido por Resolve Farma.">
 <meta name="theme-color" content="#1f5fd6">
@@ -54,18 +54,10 @@
   --lateral:220px; --topo:56px;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) {
-    --bg:#0a0f1c; --surface:#111827; --surface-2:#172033; --surface-3:#1e293f;
-    --ink:#f2f4f7; --ink-2:#c3cad6; --muted:#98a2b3; --line:#232e45; --line-2:#2f3b55;
-    --brand:#3b7be3; --brand-ink:#8ab4f8; --brand-soft:#16264a; --on-brand:#ffffff;
-    --ok:#47cd89; --ok-soft:#0d2a1c; --warn:#fdb022; --warn-soft:#2e2208; --bad:#f97066; --bad-soft:#35110e;
-    --whats:#16a34a; --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lg:0 16px 40px rgba(0,0,0,.55);
-    --seq-1:#16305a; --seq-2:#1c4580; --seq-3:#2459a6; --seq-4:#3272cc; --seq-5:#5598e7; --seq-6:#86b6ef; --seq-7:#cde2fb;
-    --sem-busca:#2a3346; --map-stroke:#0a0f1c; --map-region:#f2f4f7;
-  }
-}
+:root { color-scheme:only light; } /* sempre claro: o Chrome/Samsung do Android não escurecem a página por conta própria */
+/* Escuro só quando o usuário escolhe (botão do topo); a escolha fica salva no aparelho. */
 :root[data-tema="escuro"] {
+  color-scheme:dark;
   --bg:#0a0f1c; --surface:#111827; --surface-2:#172033; --surface-3:#1e293f;
   --ink:#f2f4f7; --ink-2:#c3cad6; --muted:#98a2b3; --line:#232e45; --line-2:#2f3b55;
   --brand:#3b7be3; --brand-ink:#8ab4f8; --brand-soft:#16264a; --on-brand:#ffffff;
@@ -119,6 +111,7 @@ label.campo { display:block; font-size:12px; font-weight:600; color:var(--ink-2)
 .ajuda { font-size:12px; color:var(--muted); margin-top:3px; }
 .alternar { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:0 10px; border:1px solid var(--line-2); border-radius:var(--r-sm);
   background:var(--surface); font-size:13px; font-weight:500; cursor:pointer; white-space:nowrap; }
+.alternar.compacto { min-height:28px; }
 .alternar input { width:15px; height:15px; accent-color:var(--brand); margin:0; }
 .alternar:has(input:checked) { border-color:var(--brand); background:var(--brand-soft); color:var(--brand-ink); }
 .info { width:16px; height:16px; border-radius:50%; border:1px solid var(--line-2); color:var(--muted); font-size:10px; font-weight:700;
@@ -190,6 +183,7 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
 .menu-usuario button, .menu-usuario a { display:flex; width:100%; align-items:center; gap:8px; padding:8px 10px; border:0; background:transparent; border-radius:var(--r-sm);
   text-align:left; cursor:pointer; color:var(--ink); text-decoration:none; font-size:13.5px; }
 .menu-usuario button:hover, .menu-usuario a:hover { background:var(--surface-2); }
+.menu-usuario .segmentado button { width:auto; flex:1 1 0; justify-content:center; border-radius:0; }
 .menu-usuario .sep { height:1px; background:var(--line); margin:4px 0; }
 .conteudo { padding:20px 24px 28px; max-width:1360px; width:100%; margin:0 auto; flex:1; min-width:0; }
 .cab { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
@@ -204,7 +198,7 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
   .topo .cota { display:none; }
   .conteudo { padding:14px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
   .rodape { display:none; }
-  .barra-inferior { display:grid; grid-template-columns:repeat(5, 1fr); position:fixed; left:0; right:0; bottom:0; z-index:1200;
+  .barra-inferior { display:grid; grid-template-columns:repeat(4, 1fr); position:fixed; left:0; right:0; bottom:0; z-index:1200;
     background:var(--surface); border-top:1px solid var(--line); padding:4px 2px calc(4px + env(safe-area-inset-bottom)); }
   .barra-inferior a { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-height:50px;
     color:var(--muted); text-decoration:none; font-size:10.5px; font-weight:600; }
@@ -265,7 +259,12 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
 .estrela { color:#f5a524; }
 .cartoes-leads { display:none; }
 .cartao-lead { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:12px; display:grid; gap:6px; cursor:pointer; }
-.cartao-lead .acoes { display:flex; gap:6px; } .cartao-lead .acoes .btn { flex:1; }
+.cartao-lead .acoes { display:flex; gap:8px; } .cartao-lead .acoes .btn { flex:1; }
+.cidade-lead { display:flex; align-items:center; gap:4px; font-size:13px; font-weight:600; color:var(--ink-2); margin-top:2px; min-width:0; }
+.cidade-lead svg { width:14px; height:14px; flex:none; color:var(--brand); }
+.cidade-lead span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.btn-grande { min-height:48px; font-size:15px; }
+.so-celular { display:none !important; }
 @media (max-width: 760px) { #leads-painel .caixa-tabela { display:none; } .cartoes-leads { display:grid; gap:8px; } }
 .painel-fundo { position:fixed; inset:0; background:rgba(8,12,24,.45); z-index:1400; }
 .painel { position:fixed; top:0; right:0; bottom:0; width:min(440px,100%); background:var(--surface); z-index:1401; box-shadow:var(--shadow-lg); display:flex; flex-direction:column; }
@@ -279,7 +278,7 @@ dl.dados dt { color:var(--muted); } dl.dados dd { margin:0; overflow-wrap:anywhe
 .toast { background:var(--ink); color:var(--bg); padding:10px 14px; border-radius:var(--r); box-shadow:var(--shadow-lg); font-size:13px; max-width:360px; }
 .toast.erro { background:var(--bad); color:#fff; } .toast.ok { background:var(--ok); color:#fff; }
 @media (max-width: 900px) { .toasts { left:16px; right:16px; bottom:calc(76px + env(safe-area-inset-bottom)); } .toast { max-width:none; } }
-.pop { position:fixed; z-index:3100; background:var(--ink); color:var(--bg); padding:8px 10px; border-radius:8px; font-size:12.5px; max-width:min(300px, calc(100vw - 32px)); box-shadow:var(--shadow-lg); }
+.balao { position:fixed; z-index:3100; line-height:1.45; font-weight:500; text-align:left; white-space:normal; overflow-wrap:anywhere; background:var(--ink); color:var(--bg); padding:8px 10px; border-radius:8px; font-size:12.5px; max-width:min(300px, calc(100vw - 32px)); box-shadow:var(--shadow-lg); }
 .fonte { font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.5; }
 .captura .pii { color:transparent !important; background:var(--line-2); border-radius:4px; user-select:none; }
 
@@ -289,12 +288,17 @@ dl.dados dt { color:var(--muted); } dl.dados dd { margin:0; overflow-wrap:anywhe
 .passo b { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:var(--surface-3); font-size:12px; }
 .passo[aria-current="step"] { color:var(--brand-ink); border-color:var(--brand); } .passo[aria-current="step"] b { background:var(--brand); color:#fff; }
 .passo.feito b { background:var(--ok-soft); color:var(--ok); }
-.onde { display:grid; grid-template-columns:1.15fr 1fr; gap:14px; align-items:start; }
-@media (max-width: 1000px) { .onde { grid-template-columns:1fr; } }
+.onde { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:14px; align-items:start; }
+.onde > * { min-width:0; } /* a faixa de regiões rola por dentro em vez de alargar a coluna */
+@media (max-width: 1000px) { .onde { grid-template-columns:minmax(0,1fr); } }
 .lista-cidades { max-height:300px; overflow:auto; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface); }
 .lista-cidades label { display:flex; align-items:center; gap:8px; padding:5px 10px; border-bottom:1px solid var(--line); font-size:13px; cursor:pointer; }
 .lista-cidades label:last-child { border-bottom:0; }
-.lista-cidades label span.pop { margin-left:auto; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+/* População dentro da linha, à direita, com pontilhado (nada flutua nem sai da caixa) */
+.lista-cidades label .nome-cid { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lista-cidades label .guia { flex:1 1 12px; min-width:12px; border-bottom:1px dotted var(--line-2); align-self:end; margin-bottom:5px; }
+.lista-cidades label .hab { flex:none; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.lista-cidades { overflow-x:hidden; }
 .opcoes-prof { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
 @media (max-width: 700px) { .opcoes-prof { grid-template-columns:1fr; } }
 .opcao { border:1px solid var(--line-2); border-radius:var(--r); padding:12px; cursor:pointer; background:var(--surface); }
@@ -358,7 +362,6 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .leaflet-container { font:inherit; }
 /* Tema escuro: mosaicos do OpenStreetMap escurecidos (o OSM não tem versão escura) */
 :root[data-tema="escuro"] .leaflet-tile-pane { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
-@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .leaflet-tile-pane { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); } }
 .leaflet-tooltip { font-size:12px; }
 @media (max-width: 900px) {
   /* mapa ocupa a tela entre o título e a barra inferior; o painel vira gaveta de baixo */
@@ -380,6 +383,14 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 
 /* ============================================================ TOUR */
 .tour { position:fixed; inset:0; z-index:2500; background:rgba(8,12,24,.55); display:grid; place-items:center; padding:16px; }
+.comemoracao { position:fixed; inset:0; width:100vw; height:100vh; z-index:2900; pointer-events:none; }
+.confirmacao .caixa h2 { font-size:17px; } .confirmacao .caixa p { margin:8px 0 16px; }
+.confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+.btn-perigo-forte { background:var(--bad); color:#fff; }
+.caixa-buscas .linha-busca { display:flex; align-items:center; gap:6px; border-radius:var(--r-sm); }
+.caixa-buscas .linha-busca label { flex:1; min-width:0; }
+.caixa-buscas .linha-busca label.sem-leads { cursor:default; opacity:.85; }
+#caixa-buscas .linha-busca .btn { flex:none; width:auto; }
 .tour .caixa { background:var(--surface); border-radius:var(--r-lg); max-width:440px; width:100%; padding:20px; box-shadow:var(--shadow-lg); }
 .tour .pontos { display:flex; gap:6px; margin-top:12px; } .tour .pontos i { width:8px; height:8px; border-radius:50%; background:var(--line-2); } .tour .pontos i.a { background:var(--brand); }
 
@@ -426,6 +437,36 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   .form-usuario { grid-template-columns:1fr !important; gap:0 !important; }
   #densidade, #colunas-btn { display:none; } /* no celular a tabela vira cartões */
 }
+
+/* ============================================================ CELULAR COMO TELA PRINCIPAL */
+@media (max-width: 760px) {
+  .so-celular { display:flex !important; }
+  .btn.btn-grande { min-height:48px; }
+  .alternar.compacto { min-height:44px; }
+  #tema-btn { min-width:44px; min-height:44px; }
+  /* Nova busca: a ação do passo (Próximo / Buscar) fica sempre visível embaixo, acima da barra de menu */
+  .barra-passo { position:sticky; bottom:calc(60px + env(safe-area-inset-bottom)); z-index:20; background:var(--surface);
+    margin:14px -16px -16px !important; padding:10px 16px; border-top:1px solid var(--line); border-radius:0 0 var(--r-lg) var(--r-lg); flex-wrap:nowrap; }
+  .barra-passo .btn { flex:1 1 auto; min-height:48px; }
+  /* Ficha em tela cheia, com "Fechar" embaixo (polegar) */
+  .painel { width:100%; left:0; border-radius:0; }
+  .painel-acoes { grid-template-columns:1fr 1fr; padding-bottom:calc(12px + env(safe-area-inset-bottom)); }
+  .painel-acoes .fechar-baixo { grid-column:1 / -1; min-height:48px; }
+  .painel-cab [data-fechar] { min-width:44px; min-height:44px; }
+  /* opções longas quebram a linha em vez de passar do cartão */
+  .alternar { white-space:normal; max-width:100%; line-height:1.25; padding-top:6px; padding-bottom:6px; }
+  .segmentado { display:flex; width:100%; overflow:visible; }
+  .segmentado button { flex:1 1 0; white-space:normal; line-height:1.2; padding:4px 8px; }
+  .menu-usuario .linha { flex-wrap:nowrap; }
+  .menu-usuario .segmentado { flex:1 1 auto; width:auto; }
+  /* Apagar/Cancelar busca e confirmação: botões para o dedo */
+  .caixa-buscas .linha-busca .btn, #buscas-admin .btn { min-height:44px; min-width:88px; }
+  .confirmacao { place-items:end center; padding:0; }
+  .confirmacao .caixa { border-radius:var(--r-lg) var(--r-lg) 0 0; max-width:none; padding:20px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .confirmacao .acoes .btn { flex:1 1 0; min-height:48px; }
+  /* Barra de menu de baixo: 4 atalhos */
+  .barra-inferior a { min-height:52px !important; font-size:11.5px !important; }
+}
 </style>
 </head>
 <body>
@@ -471,16 +512,18 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
         </div>
         <span class="status-motor" id="status-motor" title="Situação do motor de buscas"><i class="bolinha"></i><span class="txt">Verificando…</span></span>
         <span class="pilula azul oculto" id="selo">admin</span>
+        <button class="btn btn-fantasma btn-icone" id="tema-btn" aria-label="Trocar para o tema escuro" title="Tema claro/escuro"></button>
         <button class="avatar" id="avatar" aria-label="Menu do usuário" aria-haspopup="true" aria-expanded="false"></button>
       </div>
       <div class="menu-usuario oculto" id="menu-usuario" role="menu">
         <div class="small muted" id="menu-email" style="padding:6px 10px"></div>
         <div class="sep"></div>
+        <a href="#mercado" role="menuitem" class="so-celular">Mercado (IBGE)</a>
         <a href="#sobre" role="menuitem">Sobre o MapaLeads</a>
         <a href="#admin" role="menuitem" class="oculto" id="menu-admin-celular">Admin</a>
         <button role="menuitem" id="rever-tour">Rever o tour</button>
         <div class="linha" style="padding:6px 10px"><span class="small ink2">Tema</span>
-          <div class="segmentado" id="tema"><button data-tema="auto">Auto</button><button data-tema="claro">Claro</button><button data-tema="escuro">Escuro</button></div></div>
+          <div class="segmentado" id="tema"><button data-tema="claro">Claro</button><button data-tema="escuro">Escuro</button></div></div>
         <div class="sep"></div>
         <button role="menuitem" id="sair">Sair</button>
       </div>
@@ -495,7 +538,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
         </div>
         <div class="entre" style="margin:-4px 0 10px"><span class="small ink2">Os números contam os mesmos leads que aparecem ao clicar.</span>
           <div class="linha"><div class="segmentado" id="inicio-modo" aria-label="O que contar"><button data-modo="segmento" aria-pressed="true">No segmento</button><button data-modo="total">Ver total</button></div>
-          <button class="info" data-ajuda="“No segmento” conta só os leads do segmento buscado e da cidade pedida (os filtros padrão de Meus leads). “Ver total” conta todos os leads coletados, sem repetidos.">i</button></div></div>
+          <button type="button" class="info" aria-label="O que é isso?" data-ajuda="“No segmento” conta só os leads do segmento buscado e da cidade pedida (os filtros padrão de Meus leads). “Ver total” conta todos os leads coletados, sem repetidos.">i</button></div></div>
         <div class="grade-kpi" id="kpis"></div>
         <div class="duas">
           <div class="cartao"><div class="entre"><h2>Leads por dia</h2><span class="small muted" id="grafico-dias-nota">últimos 30 dias · horário de Natal</span></div>
@@ -519,24 +562,24 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
               <select id="perfil-sel" style="width:auto;min-width:180px"><option value="">— escolher —</option></select>
               <button class="btn btn-sec btn-mini" id="perfil-salvar">Salvar perfil</button>
               <button class="btn btn-perigo btn-mini" id="perfil-apagar" disabled>Apagar</button></div></div>
-          <label class="campo" for="termo-input">Segmento / termos <button class="info" data-ajuda="Digite o que o cliente procuraria no Google Maps (ex.: home care, dentista). Aperte Enter ou vírgula para adicionar. Cada termo vira uma consulta por cidade.">i</button></label>
+          <label class="campo" for="termo-input">Segmento / termos <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Digite o que o cliente procuraria no Google Maps (ex.: home care, dentista). Aperte Enter ou vírgula para adicionar. Cada termo vira uma consulta por cidade.">i</button></label>
           <div class="chips" id="termos-chips" style="margin-bottom:6px"></div>
           <input id="termo-input" type="text" placeholder="ex.: home care — Enter para adicionar" autocomplete="off">
           <div id="caixa-sinonimos" class="oculto" style="margin-top:12px">
-            <label class="campo">Sinônimos sugeridos <button class="info" data-ajuda="Servem para marcar quais leads são do segmento: um lead é do segmento se o termo, um sinônimo ou uma categoria aceita aparece no nome ou na categoria do Google. Tire os que não servem e adicione outros.">i</button></label>
+            <label class="campo">Sinônimos sugeridos <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Servem para marcar quais leads são do segmento: um lead é do segmento se o termo, um sinônimo ou uma categoria aceita aparece no nome ou na categoria do Google. Tire os que não servem e adicione outros.">i</button></label>
             <div class="chips" id="sinonimos"></div>
             <div class="linha" style="margin-top:6px"><input id="sin-novo" type="text" placeholder="adicionar sinônimo" style="flex:1;min-width:160px">
               <button class="btn btn-sec btn-mini" id="sin-add">Adicionar</button><button class="btn btn-fantasma btn-mini" id="sin-restaurar">Restaurar sugestões</button></div>
             <p class="ajuda" id="cat-aceitas-info"></p>
           </div>
-          <div class="entre" style="margin-top:14px"><span></span><button class="btn btn-primario" data-ir-passo="2">Próximo: onde →</button></div>
+          <div class="entre barra-passo" style="margin-top:14px"><span></span><button class="btn btn-primario" data-ir-passo="2">Próximo: onde →</button></div>
         </div>
         <div class="cartao oculto" data-passo-conteudo="2">
           <div class="entre"><h2>Onde?</h2>
             <div class="linha">
               <select id="uf" style="width:auto" aria-label="Estado"><option value="RN">Rio Grande do Norte</option></select>
               <div class="segmentado" id="tipo-regiao" aria-label="Tipo de região"><button data-tipo="micro" aria-pressed="true">Microrregiões</button><button data-tipo="imediata">Regiões imediatas</button></div>
-              <button class="info" data-ajuda="Microrregião e região imediata são agrupamentos oficiais de municípios vizinhos do IBGE. Marcar uma região marca todas as cidades dela; depois você pode desmarcar cidade por cidade.">i</button>
+              <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Microrregião e região imediata são agrupamentos oficiais de municípios vizinhos do IBGE. Marcar uma região marca todas as cidades dela; depois você pode desmarcar cidade por cidade.">i</button>
             </div></div>
           <div class="onde" style="margin-top:10px">
             <div>
@@ -554,27 +597,27 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
               <input id="outras" type="text" placeholder="ex.: João Pessoa PB">
             </div>
           </div>
-          <div class="entre" style="margin-top:14px"><button class="btn btn-sec" data-ir-passo="1">← Voltar</button><button class="btn btn-primario" data-ir-passo="3">Próximo: como →</button></div>
+          <div class="entre barra-passo" style="margin-top:14px"><button class="btn btn-sec" data-ir-passo="1">← Voltar</button><button class="btn btn-primario" data-ir-passo="3">Próximo: como →</button></div>
         </div>
         <div class="cartao oculto" data-passo-conteudo="3">
           <h2>Como buscar?</h2>
-          <label class="campo">Profundidade <button class="info" data-ajuda="Quantos lugares o Google Maps devolve em cada consulta (termo × cidade). Mais fundo = mais leads e mais tempo.">i</button></label>
+          <label class="campo">Profundidade <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Quantos lugares o Google Maps devolve em cada consulta (termo × cidade). Mais fundo = mais leads e mais tempo.">i</button></label>
           <div class="opcoes-prof">
             <label class="opcao"><input type="radio" name="prof" value="rapida"><b>Rápida</b><span class="small ink2">~20 lugares por consulta · ~40 s cada. Boa para cidades pequenas.</span></label>
             <label class="opcao"><input type="radio" name="prof" value="normal" checked><b>Normal</b><span class="small ink2">~60 lugares por consulta · ~2 min cada. Equilíbrio (padrão).</span></label>
             <label class="opcao"><input type="radio" name="prof" value="completa"><b>Completa</b><span class="small ink2">até ~120 por consulta (teto do Google) · ~3 min. Cidades grandes.</span></label>
           </div>
           <div class="linha" style="margin-top:12px">
-            <label class="alternar"><input type="checkbox" id="email-sn"> Extrair e-mail dos sites <button class="info" data-ajuda="Visita o site de cada lugar para achar e-mail. Fica ~60% mais lento.">i</button></label>
+            <label class="alternar"><input type="checkbox" id="email-sn"> Extrair e-mail dos sites <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Visita o site de cada lugar para achar e-mail. Fica ~60% mais lento.">i</button></label>
             <label class="alternar"><input type="checkbox" id="sin-buscar"> Buscar também pelos sinônimos <span class="small muted" id="sin-custo"></span></label>
           </div>
           <div class="resumo-busca">
             <div class="cartao kpi"><div class="rot">Consultas</div><div class="val num" id="r-consultas">–</div><div class="ctx">termos × cidades</div></div>
-            <div class="cartao kpi"><div class="rot">Tempo estimado <button class="info" data-ajuda="Estimativa pela média real das últimas buscas, depois que o motor começa. Pode haver fila antes.">i</button></div><div class="val num" id="r-tempo">–</div><div class="ctx" id="r-tempo-ctx">depois de começar</div></div>
-            <div class="cartao kpi"><div class="rot">Cota de hoje <button class="info" data-ajuda="Cada busca usa 1 da sua cota diária, não importa o tamanho. Zera à meia-noite (horário de Natal).">i</button></div><div class="val num" id="r-cota">–</div><div class="ctx" id="r-cota-ctx"></div></div>
+            <div class="cartao kpi"><div class="rot">Tempo estimado <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Estimativa pela média real das últimas buscas, depois que o motor começa. Pode haver fila antes.">i</button></div><div class="val num" id="r-tempo">–</div><div class="ctx" id="r-tempo-ctx">depois de começar</div></div>
+            <div class="cartao kpi"><div class="rot">Cota de hoje <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Cada busca usa 1 da sua cota diária, não importa o tamanho. Zera à meia-noite (horário de Natal).">i</button></div><div class="val num" id="r-cota">–</div><div class="ctx" id="r-cota-ctx"></div></div>
           </div>
           <p class="small ink2" id="r-resumo"></p>
-          <div class="entre" style="margin-top:12px"><button class="btn btn-sec" data-ir-passo="2">← Voltar</button><button class="btn btn-primario" id="buscar">Buscar</button></div>
+          <div class="entre barra-passo" style="margin-top:12px"><button class="btn btn-sec" data-ir-passo="2">← Voltar</button><button class="btn btn-primario" id="buscar">Buscar</button></div>
         </div>
       </section>
 
@@ -640,7 +683,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
               <button class="btn btn-sec btn-mini" id="mapa-cheio-btn" title="Tela cheia" aria-label="Tela cheia"><span data-icone="expandir"></span><span class="rot-longo">Tela cheia</span></button>
             </div>
             <div class="mapa-sobre controles-mapa" id="mapa-controles">
-              <label class="small ink2" for="mapa-metrica">Colorir municípios por</label>
+              <div class="linha" style="gap:4px"><label class="small ink2" for="mapa-metrica">Colorir municípios por</label><button type="button" class="info" data-ajuda="Escolha o número que pinta o mapa. Cor mais forte = valor maior. Cinza = cidade ainda sem busca (não quer dizer zero)." aria-label="O que é isso?">i</button></div>
               <select id="mapa-metrica"></select>
               <label class="alternar"><input type="checkbox" id="camada-cores" checked> Cores por município</label>
               <label class="alternar"><input type="checkbox" id="camada-pontos" checked> Pontos dos leads</label>
@@ -661,7 +704,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
         <div class="grade-kpi" id="kpis-mercado"></div>
         <div class="mercado">
           <div class="cartao">
-            <div class="entre"><h2>Mapa por município</h2><select id="mercado-metrica" style="width:auto" aria-label="Indicador do mapa"></select></div>
+            <div class="entre"><h2>Mapa por município <button type="button" class="info" data-ajuda="Cada município pintado pelo indicador escolhido ao lado. Toque num município para ver os números dele." aria-label="O que é isso?">i</button></h2><select id="mercado-metrica" style="width:auto" aria-label="Indicador do mapa"></select></div>
             <svg class="mapa-rn" id="mapa-mercado" viewBox="0 0 100 60" role="img" aria-label="Mapa do RN por município"></svg>
             <div class="legenda" id="legenda-mercado"></div>
             <p class="fonte" id="fontes-mercado"></p>
@@ -669,7 +712,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
           <div class="cartao" id="mercado-detalhe"></div>
         </div>
         <div class="cartao" style="margin-top:12px">
-          <div class="entre"><h2>Ranking de municípios</h2>
+          <div class="entre"><h2>Ranking de municípios <button type="button" class="info" data-ajuda="Municípios com os indicadores lado a lado, sem nota inventada. Use os botões ao lado (Mais população, Maior PIB per capita…) para mudar a ordem." aria-label="O que é isso?">i</button></h2>
             <div class="linha"><div class="segmentado" id="mercado-nivel"><button data-nivel="mun" aria-pressed="true">Municípios</button><button data-nivel="micro">Microrregiões</button></div>
               <div class="segmentado" id="mercado-atalho"><button data-atalho="pop">Mais população</button><button data-atalho="pibpc">Maior PIB per capita</button><button data-atalho="concorrencia">Menos concorrentes/hab.</button></div></div></div>
           <p class="small ink2" style="margin:6px 0">Indicadores lado a lado — sem nota inventada. “Menos concorrentes/hab.” ordena só as cidades já pesquisadas.</p>
@@ -686,25 +729,27 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
       <section data-pagina="admin" class="oculto">
         <div class="cab"><div><h1>Admin</h1><p>Usuários, uso por vendedor, fila ao vivo, saúde do motor e Estado inteiro.</p></div></div>
         <div class="pilha">
-          <div class="cartao"><div class="entre"><h2>Usuários e uso</h2><button class="btn btn-sec btn-mini" id="u-atualizar">Atualizar</button></div>
+          <div class="cartao"><div class="entre"><h2>Usuários e uso <button type="button" class="info" data-ajuda="Vendedores com acesso ao sistema. Mostra quantas buscas cada um fez hoje e nos últimos 7 dias, os leads e o limite de buscas por dia." aria-label="O que é isso?">i</button></h2><button class="btn btn-sec btn-mini" id="u-atualizar">Atualizar</button></div>
             <div class="grade-kpi form-usuario" style="grid-template-columns:repeat(4,minmax(0,1fr));margin:10px 0">
               <div><label class="campo" for="u-email">E-mail</label><input id="u-email" type="email"></div>
               <div><label class="campo" for="u-senha">Senha inicial (mín. 8)</label><input id="u-senha" type="text"></div>
               <div><label class="campo" for="u-nome">Nome (aparece em “Olá, …”)</label><input id="u-nome" type="text" maxlength="60"></div>
-              <div><label class="campo" for="u-limite">Limite diário (vazio = padrão)</label><input id="u-limite" type="number" min="0"></div>
+              <div><label class="campo" for="u-limite">Limite diário (vazio = padrão) <button type="button" class="info" data-ajuda="Quantas buscas o vendedor pode criar por dia. Em branco usa o padrão do sistema. Zera à meia-noite (horário de Natal)." aria-label="O que é isso?">i</button></label><input id="u-limite" type="number" min="0"></div>
             </div>
             <button class="btn btn-primario" id="u-criar">Criar usuário</button>
             <div class="caixa-tabela" style="margin-top:12px;max-height:none"><table class="tabela vira-cartao" id="u-tabela"></table></div></div>
+          <div class="cartao"><div class="entre"><h2>Buscas de todos os vendedores <button type="button" class="info" aria-label="O que é isso?" data-ajuda="As 50 buscas mais recentes de todos os vendedores. O admin pode apagar qualquer uma (com os leads). Busca em andamento: cancele primeiro. Apagar não devolve a cota do dia.">i</button></h2></div>
+            <div class="caixa-tabela" style="margin-top:8px;max-height:420px"><table class="tabela vira-cartao" id="buscas-admin"></table></div></div>
           <div class="duas">
-            <div class="cartao"><div class="entre"><h2>Saúde do motor</h2><div class="linha"><span class="small muted" id="saude-quando"></span><button class="btn btn-sec btn-mini" id="saude-atualizar">Atualizar</button></div></div><div id="saude"></div></div>
+            <div class="cartao"><div class="entre"><h2>Saúde do motor <button type="button" class="info" data-ajuda="O motor é o robô que faz as buscas no Google Maps. Aqui você vê se ele está rodando, a fila e as últimas execuções." aria-label="O que é isso?">i</button></h2><div class="linha"><span class="small muted" id="saude-quando"></span><button class="btn btn-sec btn-mini" id="saude-atualizar">Atualizar</button></div></div><div id="saude"></div></div>
             <div class="pilha">
-              <div class="cartao"><h2>Fila ao vivo</h2><div id="fila-viva" class="small"></div></div>
-              <div class="cartao"><h2>Estado inteiro</h2>
+              <div class="cartao"><h2>Fila ao vivo <button type="button" class="info" data-ajuda="Buscas rodando agora e as que estão esperando a vez. As buscas comuns passam na frente das do Estado inteiro." aria-label="O que é isso?">i</button></h2><div id="fila-viva" class="small"></div></div>
+              <div class="cartao"><h2>Estado inteiro <button type="button" class="info" data-ajuda="Busca o segmento em todos os municípios do RN (cidades grandes por bairro). Só o admin pode usar; leva horas e não conta no limite diário." aria-label="O que é isso?">i</button></h2>
                 <label class="campo" for="rn-termos">Segmento / termos (separados por vírgula)</label><input id="rn-termos" type="text" placeholder="ex.: dentista, odontologia">
                 <div class="linha" style="margin-top:8px"><label class="alternar"><input type="checkbox" id="rn-email"> Extrair e-mail</label><label class="alternar"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label></div>
                 <div class="linha" style="margin-top:8px"><button class="btn btn-sec" id="rn-estimar">Estimar</button><button class="btn btn-primario" id="rn-confirmar" disabled>Confirmar Estado inteiro (RN)</button></div>
                 <p class="small" id="msg-rn" role="status" style="margin-top:6px"></p></div>
-              <div class="cartao"><h2>Estados ativos</h2><p class="small ink2" style="margin:6px 0">Por enquanto só o RN tem dados carregados (decisão do Breno). Os outros estados do Nordeste ficam prontos para ativar depois.</p><div id="estados" class="chips"></div></div>
+              <div class="cartao"><h2>Estados ativos <button type="button" class="info" data-ajuda="Estados que aparecem para os vendedores. Por enquanto só o RN." aria-label="O que é isso?">i</button></h2><p class="small ink2" style="margin:6px 0">Por enquanto só o RN tem dados carregados (decisão do Breno). Os outros estados do Nordeste ficam prontos para ativar depois.</p><div id="estados" class="chips"></div></div>
             </div>
           </div>
         </div>
@@ -738,8 +783,12 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 <aside id="gaveta-filtros" class="gaveta oculto" role="dialog" aria-modal="true" aria-label="Mais filtros"></aside>
 <aside id="gaveta-colunas" class="gaveta oculto" role="dialog" aria-modal="true" aria-label="Colunas visíveis"></aside>
 <div id="tour" class="tour oculto" role="dialog" aria-modal="true" aria-labelledby="tour-titulo"></div>
+<div id="confirmacao" class="tour confirmacao oculto" role="alertdialog" aria-modal="true" aria-labelledby="conf-titulo" aria-describedby="conf-texto">
+  <div class="caixa"><h2 id="conf-titulo"></h2><p id="conf-texto" class="ink2"></p>
+    <div class="acoes"><button class="btn btn-sec" id="conf-nao">Voltar</button><button class="btn btn-perigo-forte" id="conf-sim"></button></div></div>
+</div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
-<div id="pop" class="pop oculto" role="tooltip"></div>
+<div id="balao" class="balao oculto" role="tooltip"></div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut }
@@ -863,6 +912,8 @@ const ICONES = {
   baixar: '<path d="M12 4v11m0 0-4-4m4 4 4-4M4 20h16"/>',
   filtro: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
   expandir: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  lua: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
 };
 const icone = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[n] || ""}</svg>`;
 for (const el of $$("[data-icone]")) el.innerHTML = icone(el.dataset.icone);
@@ -879,17 +930,58 @@ function toast(msg, tipo = "") {
   $("#toasts").appendChild(el);
   setTimeout(() => el.remove(), tipo === "erro" ? 7000 : 4000);
 }
-// Ícone (i): explicação curta ao clicar/tocar.
+// ============================================================ ÍCONES (i): explicação curta num balão
+// Celular: abre com um toque; fecha tocando de novo ou fora. Computador: abre ao passar o mouse e também ao clicar
+// (clicado = fica aberto até clicar de novo/fora). Um só aberto por vez, sempre dentro da tela.
+const aj = (t) => ` <button type="button" class="info" data-ajuda="${txt(t)}" aria-label="O que é isso?" aria-expanded="false">i</button>`;
+const AJ = { alvo: null, fixo: false };
+function abrirAjuda(b, fixo) {
+  const balao = $("#balao");
+  if (AJ.alvo && AJ.alvo !== b) AJ.alvo.setAttribute("aria-expanded", "false");
+  AJ.alvo = b; AJ.fixo = fixo; AJ.desde = Date.now();
+  b.setAttribute("aria-expanded", "true"); b.setAttribute("aria-describedby", "balao");
+  balao.textContent = b.dataset.ajuda;
+  balao.style.left = "0px"; balao.style.top = "0px";
+  balao.classList.remove("oculto");
+  // posição: centrado no ícone, embaixo; se não couber embaixo (barra de menu do celular), em cima
+  const r = b.getBoundingClientRect(), w = balao.offsetWidth, h = balao.offsetHeight, m = 8;
+  const barra = $("#barra-inferior"), limiteBaixo = barra && barra.offsetHeight && getComputedStyle(barra).display !== "none" ? barra.getBoundingClientRect().top : innerHeight;
+  const esq = Math.max(m, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - m));
+  let topo = r.bottom + 6;
+  if (topo + h > limiteBaixo - m) topo = Math.max(m, r.top - h - 6);
+  balao.style.left = `${esq}px`; balao.style.top = `${topo}px`;
+}
+function fecharAjuda() {
+  if (!AJ.alvo) return;
+  AJ.alvo.setAttribute("aria-expanded", "false");
+  AJ.alvo = null; AJ.fixo = false;
+  $("#balao").classList.add("oculto");
+}
+// fase de captura: o toque no (i) não marca a caixa do rótulo nem abre o cartão em volta
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-ajuda]");
-  const pop = $("#pop");
-  if (!b) { pop.classList.add("oculto"); return; }
+  if (!b) {
+    if (AJ.alvo) { if (ev.target.closest("#balao")) { ev.preventDefault(); ev.stopPropagation(); } fecharAjuda(); }
+    return;
+  }
   ev.preventDefault(); ev.stopPropagation();
-  const r = b.getBoundingClientRect();
-  pop.textContent = b.dataset.ajuda;
-  pop.style.left = `${Math.min(r.left, innerWidth - 310)}px`; pop.style.top = `${r.bottom + 6}px`;
-  pop.classList.remove("oculto");
+  if (AJ.alvo === b && AJ.fixo) fecharAjuda(); else abrirAjuda(b, true);
+}, true);
+const temMouse = matchMedia("(hover: hover) and (pointer: fine)");
+document.addEventListener("pointerover", (ev) => {
+  if (ev.pointerType !== "mouse" || !temMouse.matches) return;
+  const b = ev.target.closest("[data-ajuda]");
+  if (b && AJ.alvo !== b && !AJ.fixo) abrirAjuda(b, false);
 });
+document.addEventListener("pointerout", (ev) => {
+  if (ev.pointerType !== "mouse" || AJ.fixo || !AJ.alvo) return;
+  if (ev.target.closest("[data-ajuda]") === AJ.alvo && !AJ.alvo.contains(ev.relatedTarget)) fecharAjuda();
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && AJ.alvo) { ev.stopPropagation(); fecharAjuda(); } }, true);
+// rolar fecha o balão (menos a rolagem que o próprio toque causa para mostrar o ícone)
+addEventListener("scroll", () => { if (AJ.alvo && Date.now() - AJ.desde > 400) fecharAjuda(); }, { capture: true, passive: true });
+addEventListener("resize", fecharAjuda);
+addEventListener("hashchange", fecharAjuda);
 const scripts = {};
 function carregarScript(url) {
   if (!scripts[url]) scripts[url] = new Promise((ok, erro) => {
@@ -900,13 +992,28 @@ function carregarScript(url) {
 }
 const carregarLeaflet = async () => { await carregarScript(CDN.leaflet); await carregarScript(CDN.cluster); };
 
-// Tema: automático (segue o aparelho), claro ou escuro — escolha guardada no navegador.
+// Tema: SEMPRE claro por padrão (não segue o modo escuro do aparelho). Escuro só quando o usuário escolhe,
+// e a escolha fica salva neste aparelho. "color-scheme: only light" impede o Chrome/Samsung do Android de
+// escurecer a página por conta própria (era isso que fazia o botão parecer não funcionar no celular).
 function aplicarTema(t) {
-  if (t === "claro" || t === "escuro") document.documentElement.dataset.tema = t; else delete document.documentElement.dataset.tema;
-  for (const b of $$("#tema button")) b.setAttribute("aria-pressed", String(b.dataset.tema === (t || "auto")));
+  const tema = t === "escuro" ? "escuro" : "claro";
+  document.documentElement.dataset.tema = tema;
+  $('meta[name="color-scheme"]').setAttribute("content", tema === "escuro" ? "dark" : "only light");
+  $('meta[name="theme-color"]').setAttribute("content", tema === "escuro" ? "#111827" : "#1f5fd6");
+  for (const b of $$("#tema button")) b.setAttribute("aria-pressed", String(b.dataset.tema === tema));
+  $("#tema-btn").innerHTML = icone(tema === "escuro" ? "sol" : "lua");
+  $("#tema-btn").setAttribute("aria-label", tema === "escuro" ? "Trocar para o tema claro" : "Trocar para o tema escuro");
+  return tema;
 }
-aplicarTema(params.get("tema") || ler("mapaleads.tema", "auto"));
-$("#tema").onclick = (ev) => { const t = ev.target.dataset.tema; if (!t) return; guardar("mapaleads.tema", t); aplicarTema(t); if (M.mapa) M.mapa.remove(), (M.mapa = null), irPara(); };
+function escolherTema(t) {
+  guardar("mapaleads.tema", aplicarTema(t));
+  // Mapa e gráficos guardam cores ao desenhar: redesenha a tela atual com as cores novas.
+  if (M.mapa) { M.mapa.remove(); M.mapa = null; }
+  if (usuario) irPara();
+}
+aplicarTema(params.get("tema") || ler("mapaleads.tema", "claro"));
+$("#tema").onclick = (ev) => { const t = ev.target.closest("[data-tema]")?.dataset.tema; if (t) escolherTema(t); };
+$("#tema-btn").onclick = () => escolherTema(document.documentElement.dataset.tema === "escuro" ? "claro" : "escuro");
 
 // ============================================================ DADOS FIXOS DO IBGE (cacheados pelo navegador)
 // Até 3 tentativas (1 s e 2 s de espera): o servidor às vezes falha na primeira chamada (Function "fria").
@@ -1019,10 +1126,10 @@ onAuthStateChanged(auth, async (u) => {
 
 // ============================================================ NAVEGAÇÃO (estado na URL)
 const PAGINAS = [
-  { id: "inicio", nome: "Início", icone: "inicio" },
-  { id: "nova", nome: "Nova busca", curto: "Buscar", icone: "busca" },
-  { id: "leads", nome: "Meus leads", curto: "Leads", icone: "leads" },
-  { id: "mapa", nome: "Mapa", icone: "mapa" },
+  { id: "inicio", nome: "Início", icone: "inicio", barra: true },
+  { id: "nova", nome: "Nova busca", icone: "busca", barra: true },
+  { id: "leads", nome: "Meus leads", curto: "Leads", icone: "leads", barra: true },
+  { id: "mapa", nome: "Mapa", icone: "mapa", barra: true },
   { id: "mercado", nome: "Mercado (IBGE)", curto: "Mercado", icone: "mercado" },
   { id: "admin", nome: "Admin", icone: "admin", soAdmin: true },
   { id: "sobre", nome: "Sobre", escondido: true },
@@ -1030,7 +1137,8 @@ const PAGINAS = [
 function montarMenus() {
   const vis = PAGINAS.filter((p) => !p.escondido && (!p.soAdmin || ehAdmin));
   $("#menu").innerHTML = `<div class="grupo">Prospecção</div>` + vis.map((p) => `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.nome}</span></a>`).join("");
-  $("#barra-inferior").innerHTML = vis.filter((p) => !p.soAdmin).map((p) => `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.curto || p.nome}</span></a>`).join("");
+  // Celular: barra fixa embaixo só com Início, Nova busca, Leads e Mapa (Mercado e Admin ficam no menu do avatar).
+  $("#barra-inferior").innerHTML = vis.filter((p) => p.barra).map((p) => `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.curto || p.nome}</span></a>`).join("");
 }
 const rota = () => { const [pag, ...resto] = location.hash.slice(1).split("/"); return { pag: pag || "inicio", resto: resto.map((x) => decodeURIComponent(x)) }; };
 addEventListener("hashchange", () => irPara());
@@ -1073,6 +1181,7 @@ function ouvirDados() {
     const chave = buscas.filter((b) => (b.qtd_lotes || 0) > 0).map((b) => `${b.id}:${b.qtd_lotes}`).join(",");
     if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
     desenharCaixaBuscas();
+    if (paginaAtual === "admin") desenharBuscasAdmin();
   }, (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
   pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...(d.data() || {}), lidoEm: Date.now() }; desenharStatus(); if (paginaAtual === "admin") desenharFilaViva(); });
   carregarCota();
@@ -1159,7 +1268,7 @@ async function desenharInicio() {
     [tudo, sem, dias] = await Promise.all([contarRecorte(comLeads), contarRecorte(semana), Promise.all([...porDia].map(async ([d, l]) => [d, (await contarRecorte(l)).n]))]);
   } catch (e) { toast(`Não foi possível ler os leads (${e.code || e.message}).`, "erro"); return; }
   if (vez !== vezInicio) return; // chegou outra atualização no meio
-  const kpi = (rot, val, ctx, ajuda, detalhe) => `<a class="cartao kpi clicavel" href="#" data-detalhe="${detalhe}"><span class="seta" aria-hidden="true">›</span><div class="rot">${rot}${ajuda ? ` <button class="info" data-ajuda="${txt(ajuda)}">i</button>` : ""}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></a>`;
+  const kpi = (rot, val, ctx, ajuda, detalhe) => `<a class="cartao kpi clicavel" href="#" data-detalhe="${detalhe}"><span class="seta" aria-hidden="true">›</span><div class="rot">${rot}${ajuda ? aj(ajuda) : ""}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></a>`;
   const qual = INICIO.total ? "todos os leads, sem repetidos" : "só do segmento e da cidade pedida";
   $("#kpis").innerHTML =
     kpi(INICIO.total ? "Leads coletados" : "Leads no segmento", numero(tudo.n), INICIO.total ? `em ${comLeads.length} busca(s)` : `de ${numero(tudo.todos)} coletados · ${comLeads.length} busca(s)`,
@@ -1228,7 +1337,7 @@ document.addEventListener("click", async (ev) => {
   if (ev.target.closest("[data-ajuda]")) return;
   const cancelar = ev.target.closest("[data-cancelar]")?.dataset.cancelar;
   if (cancelar) {
-    if (!confirm("Cancelar esta busca? Os leads já coletados ficam guardados.")) return;
+    if (!(await confirmar({ titulo: "Cancelar busca", texto: "Cancelar esta busca? Os leads já coletados ficam guardados. Depois de cancelada, você pode apagá-la.", sim: "Sim, cancelar" }))) return;
     try { await api("cancelar-busca", { id: cancelar }); toast("Cancelamento pedido.", "ok"); } catch (e) { toast(e.message, "erro"); }
     return;
   }
@@ -1303,13 +1412,13 @@ function desenharRegioes() {
   for (const b of $$("#clique-mapa button")) b.setAttribute("aria-pressed", String(b.dataset.clique === NB.clique));
   $("#regioes").innerHTML = REGIOES[NB.tipoRegiao].map((r) => {
     const marc = r.municipios.every((c) => NB.cidades.get(porCodigo.get(c).nome));
-    return `<label class="alternar" style="min-height:28px"><input type="checkbox" data-regiao="${txt(r.id)}" ${marc ? "checked" : ""}> ${txt(r.nome)} <span class="muted">(${r.municipios.length})</span></label>`;
+    return `<label class="alternar compacto"><input type="checkbox" data-regiao="${txt(r.id)}" ${marc ? "checked" : ""}> ${txt(r.nome)} <span class="muted">(${r.municipios.length})</span></label>`;
   }).join("");
 }
 function desenharCidades() {
   const procura = normalizar($("#busca-cidade").value);
   $("#lista-cidades").innerHTML = MUNS.filter((m) => !procura || normalizar(m.nome).includes(procura)).map((m) =>
-    `<label><input type="checkbox" data-cidade="${txt(m.nome)}" ${NB.cidades.get(m.nome) ? "checked" : ""}> ${txt(m.nome)} <span class="pop">${numero(m.ind.populacao)} hab.</span></label>`).join("");
+    `<label><input type="checkbox" data-cidade="${txt(m.nome)}" ${NB.cidades.get(m.nome) ? "checked" : ""}><span class="nome-cid">${txt(m.nome)}</span><span class="guia" aria-hidden="true"></span><span class="hab">${numero(m.ind.populacao)} hab.</span></label>`).join("");
   const n = [...NB.cidades.values()].filter(Boolean).length;
   $("#qtd-cidades").textContent = `${n} ${n === 1 ? "cidade" : "cidades"} marcada(s)`;
   desenharSvg($("#mapa-escolha"), {
@@ -1378,13 +1487,61 @@ $("#buscar").onclick = async () => {
   $("#buscar").disabled = true;
   try {
     const r = await api("criar-busca", pedidoComum(false));
-    toast(`Busca criada (~${tempo(r.estimativa_seg)}). Você ainda pode fazer ${r.restantes_hoje} hoje.`, "ok");
+    comemorar();
+    toast(`Tempo estimado ~${tempo(r.estimativa_seg)} depois de começar. Você ainda pode fazer ${r.restantes_hoje} hoje.`);
     $("#r-resumo").textContent = `Busca criada. Acompanhe no Início. Restam ${r.restantes_hoje} busca(s) hoje.`;
     carregarCota();
     location.hash = "#inicio";
   } catch (e) { toast(e.message, "erro"); $("#r-resumo").textContent = e.message; }
   finally { $("#buscar").disabled = false; }
 };
+// ============================================================ COMEMORAÇÃO (busca criada)
+// Vários logos do MapaLeads (o pino azul) saltam e giram pela tela por ~2 s, num canvas próprio, sem biblioteca.
+// Com "reduzir movimento" ligado no sistema, só a mensagem aparece.
+const MSG_CRIADA = "Busca criada! Te aviso quando os leads chegarem.";
+const PINO = new Path2D("M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"), PINO_MIOLO = new Path2D("M14.5 9a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0z");
+function comemorar() {
+  toast(MSG_CRIADA, "ok");
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  $("#comemoracao")?.remove();
+  const dpr = Math.min(devicePixelRatio || 1, 2), L = innerWidth, A = innerHeight;
+  const cv = document.createElement("canvas");
+  cv.id = "comemoracao"; cv.className = "comemoracao"; cv.setAttribute("aria-hidden", "true");
+  cv.width = Math.round(L * dpr); cv.height = Math.round(A * dpr);
+  document.body.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  if (!ctx) { cv.remove(); return; }
+  // o logo é desenhado uma vez (64 px) e depois só copiado: leve no celular
+  const T = 64 * dpr, logo = document.createElement("canvas"); logo.width = logo.height = T;
+  const g = logo.getContext("2d");
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--brand").trim() || "#1f5fd6";
+  g.beginPath(); g.roundRect ? g.roundRect(0, 0, T, T, T * 0.28) : g.rect(0, 0, T, T); g.fill();
+  g.translate(T * 0.2, T * 0.2); g.scale(T * 0.6 / 24, T * 0.6 / 24);
+  g.strokeStyle = "#fff"; g.lineWidth = 2.2; g.lineJoin = g.lineCap = "round";
+  g.stroke(PINO); g.stroke(PINO_MIOLO);
+  // logos saem de baixo, em leque, e quicam no chão
+  const n = L < 500 ? 16 : 26, cheio = 2000;
+  const pecas = Array.from({ length: n }, () => ({
+    x: L * (0.2 + Math.random() * 0.6), y: A + 40, t: 18 + Math.random() * 30,
+    vx: (Math.random() - 0.5) * L * 0.9, vy: -(A * (0.9 + Math.random() * 0.7)),
+    r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 10,
+  }));
+  const G = A * 2.6; // gravidade em px/s²
+  let antes = performance.now(); const inicio = antes;
+  const quadro = (agora) => {
+    const dt = Math.min(0.05, (agora - antes) / 1000), passou = agora - inicio; antes = agora;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, L, A);
+    ctx.globalAlpha = passou > cheio - 400 ? Math.max(0, (cheio - passou) / 400) : 1;
+    for (const p of pecas) {
+      p.vy += G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+      if (p.y > A - p.t / 2 && p.vy > 0) { p.y = A - p.t / 2; p.vy *= -0.55; p.vx *= 0.8; } // quica
+      if (p.x < p.t / 2 || p.x > L - p.t / 2) { p.vx *= -1; p.x = Math.max(p.t / 2, Math.min(L - p.t / 2, p.x)); }
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.drawImage(logo, -p.t / 2, -p.t / 2, p.t, p.t); ctx.restore();
+    }
+    if (passou < cheio) requestAnimationFrame(quadro); else cv.remove();
+  };
+  requestAnimationFrame(quadro);
+}
 // Perfis salvos (no servidor, por usuário)
 async function carregarPerfis() {
   try {
@@ -1631,7 +1788,7 @@ function desenharSegmentoInfo() {
   const fora = F.segmento ? filtrar({ segmento: true }).filter((l) => l.no_segmento !== "sim").length : 0;
   const { termos, sinonimos, categorias } = W.segmento;
   $("#segmento-info").innerHTML = `· Segmento: <b>${txt(termos.join(", ") || "—")}</b>` +
-    (sinonimos.length ? ` <button class="info" data-ajuda="${txt(`Sinônimos usados: ${sinonimos.join(", ")}${categorias.length ? `. Categorias aceitas: ${categorias.join(", ")}` : ""}`)}">i</button>` : "") +
+    (sinonimos.length ? ` <button type="button" class="info" aria-label="O que é isso?" data-ajuda="${txt(`Sinônimos usados: ${sinonimos.join(", ")}${categorias.length ? `. Categorias aceitas: ${categorias.join(", ")}` : ""}`)}">i</button>` : "") +
     (fora ? ` · <a href="#" id="ver-fora">${numero(fora)} lead(s) fora do segmento escondido(s) – ver</a>` : "");
   $("#ver-fora")?.addEventListener("click", (ev) => { ev.preventDefault(); F.segmento = false; desenharFiltrosLeads(); });
 }
@@ -1659,7 +1816,7 @@ function desenharGavetaFiltros() {
       ${bairros.length ? `<div><label class="campo" for="f-bairro">Bairro (${txt(F.cidade)})</label><select id="f-bairro"><option value="">Todos</option>${bairros.map(([b, n]) => `<option value="${txt(b)}" ${F.bairro === b ? "selected" : ""}>${txt(b)} (${n})</option>`).join("")}</select></div>` : `<p class="small muted">Escolha uma cidade para filtrar por bairro.</p>`}
       ${termos.length > 1 ? `<div><label class="campo" for="f-termo">Termo / segmento que encontrou</label><select id="f-termo"><option value="">Todos</option>${termos.map((t) => `<option ${F.termo === t ? "selected" : ""}>${txt(t)}</option>`).join("")}</select></div>` : ""}
       ${abertas.length > 1 ? `<div><label class="campo" for="f-origem">Busca de origem</label><select id="f-origem"><option value="">Todas as abertas</option>${abertas.map((b) => `<option value="${txt(b.id)}" ${F.origem === b.id ? "selected" : ""}>${txt(rotuloBusca(b))}</option>`).join("")}</select></div>` : ""}
-      <div><div class="entre"><label class="campo" style="margin:0">Categorias do Google <button class="info" data-ajuda="✓ = categoria com leads do segmento. Desmarque para esconder. A lista vem dos leads carregados — nada inventado.">i</button></label>
+      <div><div class="entre"><label class="campo" style="margin:0">Categorias do Google <button type="button" class="info" aria-label="O que é isso?" data-ajuda="✓ = categoria com leads do segmento. Desmarque para esconder. A lista vem dos leads carregados — nada inventado.">i</button></label>
         <span class="small muted">${cats.length - [...F.cats].filter((c) => cats.some(([x]) => x === c)).length} de ${cats.length} marcadas</span></div>
         <div class="linha" style="margin:6px 0"><input id="f-cat-busca" type="search" placeholder="Procurar categoria" value="${txt($("#f-cat-busca")?.value || "")}" style="flex:1">
           <button class="btn btn-fantasma btn-mini" data-cats="todas">Todas</button><button class="btn btn-fantasma btn-mini" data-cats="nenhuma">Nenhuma</button><button class="btn btn-fantasma btn-mini" data-cats="seg">Só as ✓</button></div>
@@ -1708,14 +1865,64 @@ async function salvarCategoriasPerfil() {
     desenharFiltrosLeads();
   } catch (e) { toast(e.message, "erro"); }
 }
+// ============================================================ APAGAR BUSCA (dono ou admin; pela Function, nunca pelo navegador)
+const FINAIS = ["concluida", "erro", "cancelada"];
+// Terminada → "Apagar"; em andamento → "Cancelar" (apagar só depois); já pediu o cancelamento → aviso.
+function botaoApagar(b, classe = "btn-mini") {
+  if (b.tipo === "rn_filha") return "";
+  if (FINAIS.includes(b.status)) return `<button class="btn btn-perigo ${classe}" data-apagar="${txt(b.id)}">Apagar busca</button>`;
+  if (b.cancelar_solicitado) return `<span class="small muted" style="flex:none">cancelando…</span>`;
+  return `<button class="btn btn-sec ${classe}" data-cancelar="${txt(b.id)}" title="Busca em andamento: cancele primeiro e depois apague">Cancelar</button>`;
+}
+// Confirmação em dois passos (tocar em Apagar → "Sim, apagar"). Devolve true/false.
+function confirmar({ titulo, texto, sim }) {
+  return new Promise((ok) => {
+    const caixa = $("#confirmacao");
+    $("#conf-titulo").textContent = titulo; $("#conf-texto").textContent = texto; $("#conf-sim").textContent = sim;
+    caixa.classList.remove("oculto");
+    $("#conf-nao").focus();
+    const fim = (v) => { caixa.classList.add("oculto"); caixa.onclick = null; document.removeEventListener("keydown", esc, true); ok(v); };
+    const esc = (ev) => { if (ev.key === "Escape") { ev.stopPropagation(); fim(false); } };
+    document.addEventListener("keydown", esc, true);
+    caixa.onclick = (ev) => { ev.stopPropagation(); if (ev.target.closest("#conf-sim")) fim(true); else if (ev.target.closest("#conf-nao") || ev.target === caixa) fim(false); };
+  });
+}
+async function apagarBusca(id) {
+  const b = buscas.find((x) => x.id === id);
+  const nome = b ? rotuloBusca(b) : "selecionada", n = b?.resumo?.total || 0;
+  if (!(await confirmar({ titulo: "Apagar busca", texto: `Apagar a busca ${nome} com ${numero(n)} ${n === 1 ? "lead" : "leads"}? Isso não pode ser desfeito.`, sim: "Sim, apagar" }))) return;
+  try {
+    await api("apagar-busca", { id });
+    toast("Busca apagada.", "ok");
+    for (const k of [...lotesLidos.keys()]) if (k.startsWith(`${id}:`)) lotesLidos.delete(k);
+    if (W.ids.includes(id)) { W.ids = W.ids.filter((x) => x !== id); salvarIds(); if (paginaAtual === "leads") abrirLeads(); }
+    // o ouvinte das buscas (onSnapshot) tira a busca da lista sozinho
+  } catch (e) { toast(e.message, "erro"); }
+}
+document.addEventListener("click", (ev) => {
+  const id = ev.target.closest("[data-apagar]")?.dataset.apagar;
+  if (!id) return;
+  ev.preventDefault(); ev.stopPropagation();
+  apagarBusca(id);
+}, true);
+function desenharBuscasAdmin() {
+  if (!ehAdmin) return;
+  $("#buscas-admin").innerHTML = buscas.length ? `<thead><tr><th>Busca</th><th>Vendedor</th><th>Criada</th><th>Status</th><th>Leads</th><th></th></tr></thead><tbody>` +
+    buscas.map((b) => { const [rot, cls] = STATUS[b.status] || [b.status, ""];
+      return `<tr><td class="principal-td" data-rot=""><b>${txt(rotuloBusca(b))}</b></td><td data-rot="Vendedor">${txt(b.dono_email || "–")}</td><td data-rot="Criada">${b.criada_em ? dataHora(b.criada_em.toDate()) : "–"}</td>
+        <td data-rot="Status"><span class="pilula ${cls}">${txt(rot)}</span></td><td data-rot="Leads" class="num">${numero(b.resumo?.total || 0)}</td><td data-rot="">${botaoApagar(b)}</td></tr>`; }).join("") + "</tbody>"
+    : `<tbody><tr><td class="muted">Nenhuma busca ainda.</td></tr></tbody>`;
+}
 // Seletor de buscas abertas (uma ou várias, juntas sem repetidos)
 function desenharCaixaBuscas() {
   const n = W.ids.length;
   $("#rot-buscas").textContent = n ? `${n} busca(s) aberta(s)` : "Escolher buscas";
-  const lista = buscas.filter((b) => (b.qtd_lotes || 0) > 0);
-  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>Buscas com leads</b><span class="small muted">marque uma ou várias</span></div>` +
-    (lista.map((b) => `<label><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""}><span><b>${txt(rotuloBusca(b))}</b><br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${numero(b.resumo?.total)} leads${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label>`).join("") ||
-      `<p class="small muted" style="padding:8px">Nenhuma busca concluída ainda.</p>`) +
+  // Todas as buscas: com leads dá para abrir; terminada dá para apagar; em andamento, cancelar primeiro.
+  const lista = buscas;
+  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>Suas buscas</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
+    (lista.map((b) => { const temLeads = (b.qtd_lotes || 0) > 0;
+      return `<div class="linha-busca"><label class="${temLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${temLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b><br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${temLeads ? `${numero(b.resumo?.total)} leads` : txt((STATUS[b.status] || [b.status])[0])}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label>${botaoApagar(b)}</div>`; }).join("") ||
+      `<p class="small muted" style="padding:8px">Nenhuma busca ainda.</p>`) +
     `<div class="entre" style="padding:8px"><span class="small muted">Cada lote de 300 leads = 1 leitura no banco.</span><button class="btn btn-primario btn-mini" id="aplicar-buscas">Abrir</button></div>`;
 }
 $("#abrir-buscas").onclick = (ev) => { ev.stopPropagation(); desenharCaixaBuscas(); $("#caixa-buscas").classList.toggle("oculto"); };
@@ -1760,11 +1967,14 @@ function desenharTabela() {
     cols.map((c) => `<th ${c.ordem ? `data-ordem="${c.ordem}"` : ""}>${c.rot}${F.ordem.campo === c.ordem ? (sobe ? " ↑" : " ↓") : ""}</th>`).join("") + "</tr>";
   $("#tabela-leads tbody").innerHTML = pagina.map((l, i) => `<tr data-i="${F.pagina * POR_PAGINA + i}" tabindex="0" class="${F.sel.has(chaveLead(l)) ? "sel" : ""}"><td><input type="checkbox" data-sel="${txt(chaveLead(l))}" aria-label="Selecionar" ${F.sel.has(chaveLead(l)) ? "checked" : ""}></td>${cols.map((c) => `<td>${c.html(l)}</td>`).join("")}</tr>`).join("") ||
     `<tr><td colspan="${cols.length + 1}"><div class="vazio"><h3>Nenhum lead com esses filtros</h3><p>Tire algum filtro — por exemplo, “Só da cidade pedida”.</p></div></td></tr>`;
+  // Celular: cartão com nome, cidade e botões grandes (WhatsApp abre o app; Ligar abre o discador).
   $("#cartoes").innerHTML = pagina.map((l, i) => `<div class="cartao-lead" data-i="${F.pagina * POR_PAGINA + i}" tabindex="0">
-    <div class="entre" style="align-items:flex-start"><div style="min-width:0"><div class="nome-lead">${pii(l.nome)}</div><div class="cat-lead">${txt(l.categoria)} · ${txt([l.bairro, l.cidade].filter(Boolean).join(", "))}</div></div>
-    ${l.nota ? `<div class="num small"><span class="estrela">★</span> ${String(l.nota).replace(".", ",")}</div>` : ""}</div>
-    <div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : ""}
-    ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : ""}</div></div>`).join("");
+    <div class="entre" style="align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><div class="nome-lead">${pii(l.nome)}</div>
+      <div class="cidade-lead">${icone("pin")}<span>${txt([l.cidade || "sem cidade", l.bairro].filter(Boolean).join(" · "))}</span></div>
+      <div class="cat-lead">${txt(l.categoria)}</div></div>
+    ${l.nota ? `<div class="num small" style="flex:none"><span class="estrela">★</span> ${String(l.nota).replace(".", ",")}</div>` : ""}</div>
+    ${link(l.whatsapp_link) || l.telefone ? `<div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats btn-grande" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : ""}
+    ${l.telefone ? `<a class="btn btn-sec btn-grande" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : ""}</div>` : ""}</div>`).join("");
   $("#paginas").innerHTML = paginas > 1 ? `<button class="btn btn-sec btn-mini" data-pag="-1" ${F.pagina ? "" : "disabled"}>← Anterior</button><span class="small muted">página ${F.pagina + 1} de ${paginas}</span><button class="btn btn-sec btn-mini" data-pag="1" ${F.pagina < paginas - 1 ? "" : "disabled"}>Próxima →</button>` : "";
   $("#n-sel").textContent = F.sel.size ? `${F.sel.size} selecionado(s)` : "";
   $("#exportar-sel").classList.toggle("oculto", !F.sel.size);
@@ -1837,7 +2047,8 @@ async function abrirFicha(l) {
     <div class="painel-acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : `<span></span>`}
     ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : `<span></span>`}
     ${link(l.link_maps) ? `<a class="btn btn-sec" href="${link(l.link_maps)}" target="_blank" rel="noopener">${icone("mapa")} Google Maps</a>` : `<span></span>`}
-    <button class="btn btn-sec" id="copiar-dados">${icone("copiar")} Copiar dados</button></div>`;
+    <button class="btn btn-sec" id="copiar-dados">${icone("copiar")} Copiar dados</button>
+    <button class="btn btn-primario so-celular fechar-baixo" data-fechar>Fechar</button></div>`;
   $("#ficha").classList.remove("oculto"); $("#painel-fundo").classList.remove("oculto");
   $("#ficha [data-fechar]").focus();
   $("#copiar-dados").onclick = () => {
@@ -2124,19 +2335,19 @@ function desenharPainelMapa() {
     <div><div class="small muted">${cod ? "Município" : micro ? "Microrregião" : "Estado"}</div><h2 style="font-size:17px">${txt(titulo)}</h2>
       ${semBusca ? `<p class="pilula" style="margin-top:6px">Sem busca aqui ainda</p>` : `<p class="small muted">${r.pesquisados} de ${r.total} município(s) pesquisado(s)</p>`}</div>
     <dl class="ind">
-      <dt>População (2022)</dt><dd>${numero(r.pop)}</dd>
-      <dt>PIB per capita 2022</dt><dd>${reais(r.pibpc)}</dd>
-      <dt>Empresas (CEMPRE 2024)</dt><dd>${numero(r.empresas)}</dd>
-      <dt>Leads do segmento</dt><dd>${semBusca ? "–" : numero(r.seg)}</dd>
-      <dt>Leads por 10 mil hab.</dt><dd>${semBusca ? "–" : num1(r.seg10k)}</dd>
-      ${pw !== null ? `<dt>Com WhatsApp</dt><dd>${pw}%</dd>` : ""}
+      <dt>População (2022)${aj(AJ_TXT.pop)}</dt><dd>${numero(r.pop)}</dd>
+      <dt>PIB per capita 2022${aj(AJ_TXT.pibpc)}</dt><dd>${reais(r.pibpc)}</dd>
+      <dt>Empresas (CEMPRE 2024)${aj(AJ_TXT.empresas)}</dt><dd>${numero(r.empresas)}</dd>
+      <dt>Leads do segmento${aj(AJ_TXT.seg)}</dt><dd>${semBusca ? "–" : numero(r.seg)}</dd>
+      <dt>Leads por 10 mil hab.${aj(AJ_TXT.seg10k)}</dt><dd>${semBusca ? "–" : num1(r.seg10k)}</dd>
+      ${pw !== null ? `<dt>Com WhatsApp${aj(AJ_TXT.whats)}</dt><dd>${pw}%</dd>` : ""}
     </dl>
     ${!semBusca && (micro || cod) ? `<p class="small ink2">${vezes(r.seg10k, rn.seg10k)} a média do RN em leads por habitante${rm && cod ? ` · ${vezes(r.seg10k, rm.seg10k)} a média da microrregião` : ""}.</p>` : ""}
     <p class="fonte" style="margin-top:0">IBGE: Censo 2022 (SIDRA 4714), PIB dos Municípios 2022 ÷ Censo 2022 (calculado), CEMPRE 2024 (SIDRA 9509). Leads: coletados (só do segmento e da cidade pedida).</p>
     ${cats.length ? `<div><h3>Top categorias do Google <span class="muted small">(clique para ver os leads)</span></h3><div class="barras-mini" style="margin-top:6px">${cats.map(([c, n]) => barra(`data-categoria="${txt(c)}"`, c, n, cats[0][1], numero)).join("")}</div></div>` : ""}
     ${micros.length ? `<div><h3>${METRICAS[M.metrica].rot} — microrregiões</h3><div class="barras-mini" style="margin-top:6px">${micros.map(([r, v]) => barra(`data-ir-micro="${txt(r.id)}"`, r.nome, v, maxM, METRICAS[M.metrica].fmt)).join("")}</div></div>` : ""}
     ${irmaos.length ? `<div><h3>${METRICAS[M.metrica].rot} — ${cod || micro ? "municípios da microrregião" : "10 maiores municípios"}</h3><div class="barras-mini" style="margin-top:6px">${irmaos.map(([m, v]) => barra(`data-ir-mun="${m.codigo}"`, m.nome, v, maxB, METRICAS[M.metrica].fmt, m.codigo === cod)).join("")}</div></div>` : ""}
-    ${bairros.length ? `<div><h3>Bairros (leads)</h3><div class="chips" style="margin-top:6px">${bairros.map(([b, n]) => `<button class="alternar" data-bairro="${txt(b)}" style="min-height:26px${F.bairro === b ? ";border-color:var(--brand)" : ""}">${txt(b)} <span class="muted">${n}</span></button>`).join("")}</div></div>` : ""}
+    ${bairros.length ? `<div><h3>Bairros (leads)</h3><div class="chips" style="margin-top:6px">${bairros.map(([b, n]) => `<button class="alternar compacto" data-bairro="${txt(b)}" ${F.bairro === b ? 'style="border-color:var(--brand)"' : ""}>${txt(b)} <span class="muted">${n}</span></button>`).join("")}</div></div>` : ""}
     <div class="pilha" style="gap:6px">
       <button class="btn btn-primario" id="mapa-ver-tabela">Ver estes leads na tabela</button>
       <button class="btn btn-sec" id="mapa-exportar">Exportar este recorte (.xlsx)</button>
@@ -2156,6 +2367,8 @@ function desenharPainelMapa() {
 }
 
 // ============================================================ MERCADO (IBGE × leads do segmento)
+// Textos dos ícones (i) dos indicadores (Mapa e Mercado).
+const AJ_TXT = {"pop": "Quantas pessoas moram ali, segundo o Censo 2022 do IBGE.", "pibpc": "Riqueza média por morador: PIB do município em 2022 dividido pela população do Censo 2022 (conta feita por nós com dados do IBGE).", "empresas": "Quantidade de empresas com CNPJ ativas no município, pelo cadastro do IBGE (CEMPRE 2024). Mostra o tamanho do comércio local.", "seg": "Leads encontrados nas suas buscas que são do segmento buscado e ficam na cidade pedida.", "seg10k": "Leads do segmento para cada 10 mil moradores. Número baixo pode indicar mercado pouco atendido. Só conta cidades já pesquisadas.", "whats": "Parte dos leads do segmento que tem celular com WhatsApp."};
 const MK = { metrica: "seg10k", nivel: "mun", ordem: { campo: "pop", sobe: false }, cod: "", mostrar: 20 };
 $("#mercado-metrica").innerHTML = Object.entries(METRICAS).map(([k, v]) => `<option value="${k}">${v.rot}</option>`).join("");
 $("#mercado-metrica").value = MK.metrica;
@@ -2168,7 +2381,7 @@ async function abrirMercado() {
 function desenharMercado() {
   const base = filtrar({ geo: true }), agg = agregar(base), pesq = municipiosPesquisados();
   const rn = indicadoresRecorte(MUNS.map((m) => m.codigo), agg, pesq);
-  const kpi = (rot, val, ctx, alvo) => `<a class="cartao kpi clicavel" href="#" data-mk-kpi="${alvo}"><span class="seta" aria-hidden="true">›</span><div class="rot">${rot}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></a>`;
+  const kpi = (rot, val, ctx, alvo) => `<a class="cartao kpi clicavel" href="#" data-mk-kpi="${alvo}"><span class="seta" aria-hidden="true">›</span><div class="rot">${rot}${aj(AJ_TXT[alvo])}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></a>`;
   $("#kpis-mercado").innerHTML = kpi("População do RN", numero(rn.pop), "IBGE · Censo 2022", "pop") + kpi("PIB per capita (RN)", reais(rn.pibpc), "PIB 2022 ÷ Censo 2022 · calculado", "pibpc") +
     kpi("Empresas (CEMPRE)", numero(rn.empresas), "IBGE · 2024", "empresas") + kpi("Leads do segmento", numero(rn.seg), `${rn.pesquisados} de 167 municípios pesquisados`, "seg") +
     kpi("Leads por 10 mil hab.", num1(rn.seg10k), "nas cidades pesquisadas", "seg10k");
@@ -2209,11 +2422,11 @@ function desenharDetalheMercado(agg, pesq) {
   $("#mercado-detalhe").innerHTML = `<div class="entre"><div><div class="small muted">${txt(m.micro.nome)}</div><h2 style="font-size:17px">${txt(m.nome)}</h2></div><button class="btn btn-fantasma btn-mini" id="mk-fechar">Fechar</button></div>
     ${p ? "" : `<p class="pilula" style="margin-top:6px">Sem busca aqui ainda — não quer dizer “zero concorrentes”</p>`}
     <dl class="ind" style="margin-top:10px">
-      <dt>População (2022)</dt><dd>${numero(ind.populacao)}</dd><dt>Área</dt><dd>${num1(ind.area_km2)} km²</dd><dt>Densidade</dt><dd>${num1(ind.densidade)} hab/km²</dd>
-      <dt>PIB 2022</dt><dd>${reais((ind.pib_mil_reais || 0) * 1000)}</dd><dt>PIB per capita 2022</dt><dd>${reais(ind.pib_per_capita)}</dd>
+      <dt>População (2022)${aj(AJ_TXT.pop)}</dt><dd>${numero(ind.populacao)}</dd><dt>Área</dt><dd>${num1(ind.area_km2)} km²</dd><dt>Densidade</dt><dd>${num1(ind.densidade)} hab/km²</dd>
+      <dt>PIB 2022</dt><dd>${reais((ind.pib_mil_reais || 0) * 1000)}</dd><dt>PIB per capita 2022${aj(AJ_TXT.pibpc)}</dt><dd>${reais(ind.pib_per_capita)}</dd>
       <dt>Empresas (2024)</dt><dd>${numero(ind.empresas)}</dd><dt>Unidades locais (2024)</dt><dd>${numero(ind.unidades_locais)}</dd>
       <dt>Pessoal ocupado (2024)</dt><dd>${numero(ind.pessoal_ocupado)}</dd><dt>Salário médio (2024)</dt><dd>${num1(ind.salario_medio_sm)} sal. mín.</dd>
-      <dt>Leads do segmento</dt><dd>${p ? numero(seg) : "–"}</dd><dt>Leads por 10 mil hab.</dt><dd>${p && ind.populacao ? num1((seg / ind.populacao) * 1e4) : "–"}</dd>
+      <dt>Leads do segmento${aj(AJ_TXT.seg)}</dt><dd>${p ? numero(seg) : "–"}</dd><dt>Leads por 10 mil hab.${aj(AJ_TXT.seg10k)}</dt><dd>${p && ind.populacao ? num1((seg / ind.populacao) * 1e4) : "–"}</dd>
     </dl>
     <p class="fonte">IBGE: Censo 2022 (SIDRA 4714); PIB dos Municípios 2022 (SIDRA 5938) ÷ Censo 2022 — calculado; CEMPRE 2024 (SIDRA 9509).</p>
     ${leadsLa.length ? `<h3 style="margin-top:10px">Leads do segmento em ${txt(m.nome)}</h3><div style="max-height:180px;overflow:auto;margin-top:6px">${leadsLa.slice(0, 30).map((l, i) => `<button class="clicavel entre small" data-mk-lead="${i}" style="width:100%;padding:6px 4px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;font:inherit;font-size:12.5px;min-height:36px;flex-wrap:nowrap"><span style="min-width:0">${pii(l.nome)}</span><span class="muted" style="text-align:right">${txt(l.categoria)} ›</span></button>`).join("")}</div>
@@ -2277,7 +2490,7 @@ async function desenharGraficosMercado(agg, pesq) {
 }
 
 // ============================================================ ADMIN
-async function carregarAdmin() { if (!ehAdmin) return; carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); }
+async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); }
 async function carregarUsuarios() {
   $("#u-tabela").innerHTML = `<tr><td><div class="esq" style="height:14px"></div></td></tr>`;
   try {
@@ -2332,10 +2545,10 @@ async function carregarSaude() {
     const MOTIVO = { motor_rodando: "motor rodando", fila_com_trabalho: "fila com trabalho", busca_orfa: "busca órfã", fila_vazia: "fila vazia" };
     $("#saude-quando").textContent = `lido às ${hora(new Date(s.agora))}`;
     $("#saude").innerHTML = `<div class="grade-kpi" style="grid-template-columns:repeat(2,minmax(0,1fr));margin:10px 0">
-      <div class="cartao kpi"><div class="rot">Na fila / rodando</div><div class="val num">${f.na_fila} / ${f.rodando}</div><div class="ctx">último sinal: ${quando(f.ultimo_batimento)}</div></div>
-      <div class="cartao kpi"><div class="rot">Disjuntor / agendadas</div><div class="val num">${f.pausadas} / ${f.agendadas}</div><div class="ctx">${f.pausada_ate ? "pausa até " + quando(f.pausada_ate) : "sem pausa"}</div></div>
-      <div class="cartao kpi"><div class="rot">Órfãs / Estado inteiro</div><div class="val num">${f.orfas} / ${f.rn_em_andamento}</div><div class="ctx">agora o despertador: ${txt(MOTIVO[s.decisao_agora.motivo] || s.decisao_agora.motivo)}</div></div>
-      <div class="cartao kpi"><div class="rot">Despertador (15 min)</div><div class="val" style="font-size:15px">${quando(s.despertador?.ultima_execucao)}</div><div class="ctx">${s.despertador ? txt(MOTIVO[s.despertador.motivo] || s.despertador.motivo) + (s.despertador.disparou ? " · disparou o motor" : "") : "ainda não rodou"}</div></div></div>
+      <div class="cartao kpi"><div class="rot">Na fila / rodando${aj("Buscas esperando a vez / buscas sendo feitas agora pelo motor.")}</div><div class="val num">${f.na_fila} / ${f.rodando}</div><div class="ctx">último sinal: ${quando(f.ultimo_batimento)}</div></div>
+      <div class="cartao kpi"><div class="rot">Disjuntor / agendadas${aj("Disjuntor: pausa automática de 30 min quando várias consultas seguidas voltam vazias (proteção contra bloqueio do Google). Agendadas: buscas marcadas para a noite.")}</div><div class="val num">${f.pausadas} / ${f.agendadas}</div><div class="ctx">${f.pausada_ate ? "pausa até " + quando(f.pausada_ate) : "sem pausa"}</div></div>
+      <div class="cartao kpi"><div class="rot">Órfãs / Estado inteiro${aj("Órfãs: buscas que ficaram presas sem sinal do motor (são recuperadas sozinhas). Estado inteiro: buscas do estado em andamento.")}</div><div class="val num">${f.orfas} / ${f.rn_em_andamento}</div><div class="ctx">agora o despertador: ${txt(MOTIVO[s.decisao_agora.motivo] || s.decisao_agora.motivo)}</div></div>
+      <div class="cartao kpi"><div class="rot">Despertador (15 min)${aj("Rotina que confere a fila a cada 15 minutos e liga o motor quando há busca esperando.")}</div><div class="val" style="font-size:15px">${quando(s.despertador?.ultima_execucao)}</div><div class="ctx">${s.despertador ? txt(MOTIVO[s.despertador.motivo] || s.despertador.motivo) + (s.despertador.disparou ? " · disparou o motor" : "") : "ainda não rodou"}</div></div></div>
       <h3>Últimas execuções do motor</h3>
       ${s.execucoes?.erro ? `<p class="small" style="color:var(--bad)">${txt(s.execucoes.erro)}</p>` : `<div class="caixa-tabela" style="max-height:260px;margin-top:6px"><table class="tabela vira-cartao"><thead><tr><th>#</th><th>Gatilho</th><th>Resultado</th><th>Início</th><th>Duração</th></tr></thead><tbody>
         ${execs.map((e) => `<tr><td data-rot="Execução"><a href="${link(e.link)}" target="_blank" rel="noopener">#${txt(e.numero)} ›</a></td><td data-rot="Gatilho">${txt(GATILHO[e.gatilho] || e.gatilho)}</td>
