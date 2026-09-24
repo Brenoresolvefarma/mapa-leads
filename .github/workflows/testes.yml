@@ -53,10 +53,9 @@ jobs:
         run: npm run test:empacotadas
       - name: Motor contra o emulador (scraper falso)
         run: npm run test:motor
-      - name: Tela no Chrome contra os emuladores (inclui .xlsx com o SheetJS do CDN oficial)
+      - name: Tela no Chrome contra os emuladores (inclui a planilha .xlsx gerada e lida de volta com o ExcelJS)
         env:
           NAVEGADOR: /usr/bin/google-chrome
-          TESTAR_XLSX: "1"
         run: npm run test:tela
       - name: Tema no WebKit (motor do Safari do iPhone)
         env:

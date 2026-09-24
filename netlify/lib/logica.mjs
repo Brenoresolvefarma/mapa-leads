@@ -13,8 +13,15 @@ export const FATOR_EMAIL = 1.6;
 export const PAUSA_MEDIA_SEG = 30; // pausa aleatória de 20–40 s entre consultas
 export const PARTIDA_EXECUCAO_SEG = 60; // máquina do GitHub ligar + preparar
 
-// Uma busca comum precisa caber numa execução do motor (5h20, com folga).
+// Uma busca comum (ou cada parte dela) precisa caber numa execução do motor (5h20, com folga).
 export const LIMITE_BUSCA_COMUM_SEG = 5 * 60 * 60;
+
+// Paralelismo (aprovado pelo Breno em 24/09): até 4 vagas (máquinas) ao mesmo tempo, no total.
+// Espelha motor/paralelismo.py — se mudar lá, mude aqui.
+export const VAGAS_MAX = 4;
+export const SOBE_UMA_VAGA_A_CADA_SEG = 2 * 60 * 60;
+// Aviso de cidades pequenas na Nova busca (valor do Breno: menos de 5 mil hab., Censo 2022).
+export const CIDADE_PEQUENA_ABAIXO_DE = 5000;
 // Cada lote (busca-filha) do RN inteiro mira ~40 min.
 export const ALVO_LOTE_RN_SEG = 40 * 60;
 // Limite diário padrão de buscas comuns por usuário (aprovado: 20).
@@ -71,6 +78,78 @@ export function estimarConsultaSeg(profundidade, extrairEmail, metricas = {}) {
 export function estimarConsultasSeg(consultas, extrairEmail, metricas = {}) {
   const soma = consultas.reduce((t, c) => t + estimarConsultaSeg(c.profundidade, extrairEmail, metricas), 0);
   return Math.trunc(soma + PAUSA_MEDIA_SEG * Math.max(consultas.length - 1, 0));
+}
+
+/** Vagas que podem trabalhar agora (config/paralelismo): base + 1 a cada 2 h sem novo sinal de bloqueio. */
+export function vagasEfetivas(doc = {}, agora = new Date()) {
+  const base = Math.max(1, Math.min(VAGAS_MAX, Number(doc?.vagas_base) || VAGAS_MAX));
+  const sinal = doc?.ultimo_sinal_em;
+  if (!sinal || base >= VAGAS_MAX) return base;
+  const ts = typeof sinal.toMillis === "function" ? sinal.toMillis() : new Date(sinal).getTime();
+  const subiu = Math.floor(Math.max(0, agora.getTime() - ts) / 1000 / SOBE_UMA_VAGA_A_CADA_SEG);
+  return Math.min(VAGAS_MAX, base + subiu);
+}
+
+/**
+ * Divide as cidades de uma busca comum em até `vagas` partes (uma por máquina).
+ * Cidades distribuídas em rodízio (partes do mesmo tamanho); dentro de cada parte, cidade por cidade
+ * (todos os termos de uma cidade seguidos: a cidade fica pronta de uma vez e já aparece na tela).
+ * Com 1 cidade (ou 1 vaga) não divide: devolve [].
+ */
+export function dividirEmPartes(parametros, vagas) {
+  const k = Math.min(VAGAS_MAX, Math.max(1, vagas), parametros.cidades.length);
+  if (k <= 1) return [];
+  const grupos = Array.from({ length: k }, () => []);
+  parametros.cidades.forEach((cidade, i) => grupos[i % k].push(cidade));
+  return grupos.map((cidades, parte) => {
+    const consultas = [];
+    for (const cidade of cidades) {
+      for (const termo of parametros.termos) {
+        consultas.push({ id: `p${parte}q${consultas.length}`, termo, cidade, texto: `${termo} ${cidade}`,
+          profundidade: parametros.profundidade, criterio: "cidade" });
+      }
+    }
+    return { cidades, consultas };
+  });
+}
+
+/** Tempo real da busca com as partes rodando ao mesmo tempo: partida + a parte mais demorada. */
+export function estimarComPartes(consultas, partes, extrairEmail, metricas = {}) {
+  const umMotor = estimarConsultasSeg(consultas, extrairEmail, metricas);
+  const maiorParte = partes.length
+    ? Math.max(...partes.map((p) => estimarConsultasSeg(p.consultas, extrairEmail, metricas)))
+    : umMotor;
+  return { estimativa: maiorParte + PARTIDA_EXECUCAO_SEG, maiorParte, umMotor: umMotor + PARTIDA_EXECUCAO_SEG };
+}
+
+const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+const POPULACAO_RN = new Map(municipiosRN.municipios.map((m) => [semAcento(m.nome), m.populacao_2022]));
+
+/** Cidades do RN com menos de 5 mil hab. (Censo 2022) entre as pedidas ("Nome RN"); cidades de fora ficam de fora. */
+export function cidadesPequenas(cidades, abaixoDe = CIDADE_PEQUENA_ABAIXO_DE) {
+  return cidades.filter((c) => {
+    const nome = semAcento(c).replace(/\s+rn$/, "");
+    const pop = POPULACAO_RN.get(nome);
+    return pop !== undefined && pop < abaixoDe;
+  });
+}
+
+/**
+ * Plano completo da busca comum: consultas, partes (paralelismo) e estimativa honesta.
+ * Também diz quanto tempo tirar as cidades pequenas economizaria (para o aviso da Nova busca).
+ */
+export function planoBuscaComum(parametros, metricas = {}, vagas = VAGAS_MAX) {
+  const consultas = consultasBuscaComum(parametros);
+  const partes = dividirEmPartes(parametros, vagas);
+  const tempo = estimarComPartes(consultas, partes, parametros.extrair_email, metricas);
+  const pequenas = cidadesPequenas(parametros.cidades);
+  let semPequenas = null;
+  if (pequenas.length && pequenas.length < parametros.cidades.length) {
+    const outras = { ...parametros, cidades: parametros.cidades.filter((c) => !pequenas.includes(c)) };
+    const t2 = estimarComPartes(consultasBuscaComum(outras), dividirEmPartes(outras, vagas), parametros.extrair_email, metricas);
+    semPequenas = { consultas: consultasBuscaComum(outras).length, estimativa_seg: t2.estimativa };
+  }
+  return { consultas, partes, vagas: Math.max(1, partes.length), ...tempo, pequenas, semPequenas };
 }
 
 /** Valida e normaliza o pedido de busca comum. Lança Error com mensagem clara. */
@@ -230,7 +309,8 @@ export function inserirNaFila(estado, novos) {
       itens.push(novo);
     }
   }
-  return { itens, rodando: estado?.rodando || [], aguardando: estado?.aguardando || [] };
+  return { itens, rodando: estado?.rodando || [], aguardando: estado?.aguardando || [],
+    ...(estado?.vagas ? { vagas: estado.vagas } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +338,8 @@ export function validarPerfil(corpo) {
 // Despertador (Netlify Scheduled Function a cada 15 min): rede de segurança caso o
 // agendamento do GitHub atrase ou não dispare. Espelha motor/fila.py (elegivel / órfãs).
 export const MOTOR_VIVO_SEG = 45 * 60; // mesmo prazo de órfã do motor (ORFA_APOS_SEG)
+// Busca que nunca roda direto: mãe do RN ou busca comum dividida em partes (espelha fila.eh_mae).
+export const ehMae = (b) => b?.tipo === "rn_mae" || ((b?.tipo || "comum") === "comum" && Number(b?.partes_total) > 0);
 
 const segundos = (valor) => {
   if (!valor) return 0;
@@ -268,7 +350,7 @@ const segundos = (valor) => {
 
 /** A busca pode rodar agora? (na fila, não é mãe, não agendada para depois, não pausada) */
 export function elegivel(dados, agora = new Date()) {
-  if (dados?.status !== "na_fila" || dados?.tipo === "rn_mae") return false;
+  if (dados?.status !== "na_fila" || ehMae(dados)) return false;
   const ts = agora.getTime() / 1000;
   return segundos(dados.agendada_para) <= ts && segundos(dados.pausada_ate) <= ts;
 }
@@ -277,13 +359,15 @@ export function elegivel(dados, agora = new Date()) {
  * Decide se o despertador deve disparar o motor.
  * buscas: documentos com status na_fila ou rodando (sem precisar de termos/cidades).
  */
-export function decidirDespertar(buscas, agora = new Date()) {
+export function decidirDespertar(buscas, agora = new Date(), vagas = VAGAS_MAX) {
   const ts = agora.getTime() / 1000;
-  const rodando = buscas.filter((b) => b.status === "rodando" && b.tipo !== "rn_mae");
+  const rodando = buscas.filter((b) => b.status === "rodando" && !ehMae(b));
   const vivas = rodando.filter((b) => ts - segundos(b.batimento_em || b.iniciada_em) < MOTOR_VIVO_SEG);
   const orfas = rodando.length - vivas.length;
   const elegiveis = buscas.filter((b) => elegivel(b, agora)).length;
-  if (vivas.length) return { disparar: false, motivo: "motor_rodando", elegiveis, orfas };
+  // Com vagas livres e trabalho esperando, dispara mesmo com outra máquina rodando (as vagas ocupadas
+  // não são afetadas: cada vaga tem o seu grupo de concurrency no workflow).
+  if (vivas.length >= vagas || (vivas.length && !elegiveis)) return { disparar: false, motivo: "motor_rodando", elegiveis, orfas };
   if (elegiveis) return { disparar: true, motivo: "fila_com_trabalho", elegiveis, orfas };
   if (orfas) return { disparar: true, motivo: "busca_orfa", elegiveis, orfas };
   return { disparar: false, motivo: "fila_vazia", elegiveis, orfas };

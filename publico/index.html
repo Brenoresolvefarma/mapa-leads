@@ -383,6 +383,12 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 
 /* ============================================================ TOUR */
 .tour { position:fixed; inset:0; z-index:2500; background:rgba(8,12,24,.55); display:grid; place-items:center; padding:16px; }
+.aviso-pequenas { margin-top:10px; padding:10px 12px; border-radius:var(--r); background:var(--warn-soft, var(--surface-2)); border:1px solid var(--line-2);
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.aviso-pequenas p { margin:0; flex:1 1 220px; font-size:13px; }
+.progresso-cidades { margin-top:6px; display:grid; gap:4px; }
+.barra-prog { height:6px; border-radius:99px; background:var(--line); overflow:hidden; }
+.barra-prog i { display:block; height:100%; background:var(--brand); border-radius:99px; transition:width .4s; }
 .comemoracao { position:fixed; inset:0; width:100vw; height:100vh; z-index:2900; pointer-events:none; }
 .confirmacao .caixa h2 { font-size:17px; } .confirmacao .caixa p { margin:8px 0 16px; }
 .confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
@@ -436,6 +442,14 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   .trilha .btn .rot-longo { display:none; }
   .form-usuario { grid-template-columns:1fr !important; gap:0 !important; }
   #densidade, #colunas-btn { display:none; } /* no celular a tabela vira cartões */
+}
+
+/* ============================================================ iPHONE: SEM ZOOM AO TOCAR NUM CAMPO
+   O Safari do iPhone amplia a tela quando o campo de digitação tem fonte menor que 16 px.
+   Até 768 px, todo campo usa 16 px (o visual compacto fica por conta do padding/altura).
+   Não usamos maximum-scale nem user-scalable=no: o usuário continua podendo ampliar quando quiser. */
+@media (max-width: 768px) {
+  input, select, textarea { font-size:16px !important; }
 }
 
 /* ============================================================ CELULAR COMO TELA PRINCIPAL */
@@ -613,8 +627,12 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
           </div>
           <div class="resumo-busca">
             <div class="cartao kpi"><div class="rot">Consultas</div><div class="val num" id="r-consultas">–</div><div class="ctx">termos × cidades</div></div>
-            <div class="cartao kpi"><div class="rot">Tempo estimado <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Estimativa pela média real das últimas buscas, depois que o motor começa. Pode haver fila antes.">i</button></div><div class="val num" id="r-tempo">–</div><div class="ctx" id="r-tempo-ctx">depois de começar</div></div>
+            <div class="cartao kpi"><div class="rot">Tempo estimado <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Estimativa pela média real das últimas buscas, com as cidades divididas entre até 4 máquinas trabalhando ao mesmo tempo (cada uma no ritmo seguro de sempre). Se outras buscas estiverem rodando, as máquinas se dividem e pode demorar mais.">i</button></div><div class="val num" id="r-tempo">–</div><div class="ctx" id="r-tempo-ctx">depois de começar</div></div>
             <div class="cartao kpi"><div class="rot">Cota de hoje <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Cada busca usa 1 da sua cota diária, não importa o tamanho. Zera à meia-noite (horário de Natal).">i</button></div><div class="val num" id="r-cota">–</div><div class="ctx" id="r-cota-ctx"></div></div>
+          </div>
+          <div class="aviso-pequenas oculto" id="aviso-pequenas" role="status">
+            <p id="aviso-pequenas-txt"></p>
+            <button class="btn btn-sec btn-mini" id="remover-pequenas">Remover as pequenas</button>
           </div>
           <p class="small ink2" id="r-resumo"></p>
           <div class="entre barra-passo" style="margin-top:12px"><button class="btn btn-sec" data-ir-passo="2">← Voltar</button><button class="btn btn-primario" id="buscar">Buscar</button></div>
@@ -809,7 +827,8 @@ const CDN = {
   leaflet: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js",
   cluster: "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js",
   chart: "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js",
-  xlsx: "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs",
+  // .xlsx com estilo (cabeçalho, filtro, links, larguras): ExcelJS, carregado só no clique de exportar.
+  exceljs: "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
 };
 
 // <relevancia> ------------------------------------------------ RELEVÂNCIA DO SEGMENTO (bloco puro)
@@ -1195,7 +1214,7 @@ function ouvirDados() {
     if (paginaAtual === "leads") abrirLeads();
     // Mapa/Mercado abertos direto pelo link desenham antes das buscas chegarem: redesenha quando as buscas com
     // leads mudam (não a cada progresso de busca rodando, para não mexer no zoom à toa).
-    const chave = buscas.filter((b) => (b.qtd_lotes || 0) > 0).map((b) => `${b.id}:${b.qtd_lotes}`).join(",");
+    const chave = buscas.filter(temLeads).map((b) => `${b.id}:${b.qtd_lotes || 0}:${b.cidades_prontas || 0}`).join(",");
     if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
     desenharCaixaBuscas();
     if (paginaAtual === "admin") desenharBuscasAdmin();
@@ -1237,9 +1256,12 @@ function posicaoNaFila(b) {
   const itens = estadoFila.itens || [], idx = itens.findIndex(pertence);
   if (idx < 0) return "";
   const decorrido = (Date.now() - estadoFila.lidoEm) / 1000;
+  // Várias máquinas (vagas) ao mesmo tempo: com vaga livre, começa já; senão, divide a espera pelas vagas.
+  const vagas = Math.max(1, estadoFila.vagas || 1), ocupadas = (estadoFila.rodando || []).length;
   const rodando = (estadoFila.rodando || []).reduce((t, r) => t + Math.max(0, r.restante_seg - decorrido), 0);
   const antes = itens.slice(0, idx).reduce((t, i) => t + (i.estimativa_seg || 0), 0);
-  return `${idx + 1}º na fila · início em ~${tempo(rodando + antes + (estadoFila.rodando?.length ? 0 : 60))}`;
+  if (ocupadas + idx < vagas) return "começa em ~1 min (máquina livre)";
+  return `${idx + 1}º na fila · início em ~${tempo((rodando + antes) / vagas + 60)}`;
 }
 const rotuloBusca = (b) => {
   const p = b.parametros || {};
@@ -1251,11 +1273,21 @@ const rotuloBusca = (b) => {
 // Cartões e gráfico contam os MESMOS leads que o detalhe mostra ao clicar: juntados sem repetidos e marcados com o
 // segmento das buscas do recorte. Padrão: só do segmento e da cidade pedida (como em Meus leads); "Ver total" = todos.
 const INICIO = { total: ler("mapaleads.inicio.total", false) };
-const lotesLidos = new Map(); // "busca:qtd_lotes" → leads (1 leitura por lote, guardado enquanto a página estiver aberta)
+const lotesLidos = new Map(); // "busca:lotes" → leads (1 leitura por lote, guardado enquanto a página estiver aberta)
+// Onde estão os leads da busca: nos lotes finais ou, enquanto ela roda dividida em partes (várias máquinas),
+// nos lotes PARCIAIS de cada parte — gravados a cada cidade pronta (mapa "parciais": id da parte → nº de lotes).
+function lotesDaBusca(b) {
+  if ((b.qtd_lotes || 0) > 0) return Array.from({ length: b.qtd_lotes }, (_, n) => `buscas/${b.id}/lotes/${n}`);
+  if (b.status !== "rodando" || !b.parciais) return [];
+  return Object.entries(b.parciais).sort().flatMap(([parte, n]) => Array.from({ length: n || 0 }, (_, k) => `buscas/${parte}/lotes/${k}`));
+}
+const temLeads = (b) => lotesDaBusca(b).length > 0;
+const parcial = (b) => !(b.qtd_lotes > 0) && temLeads(b); // ainda rodando, com cidades prontas
 function leadsDaBusca(b) {
-  const chave = `${b.id}:${b.qtd_lotes || 0}`;
+  const caminhos = lotesDaBusca(b);
+  const chave = `${b.id}:${caminhos.join(",")}:${b.cidades_prontas || 0}`;
   if (!lotesLidos.has(chave)) {
-    lotesLidos.set(chave, Promise.all(Array.from({ length: b.qtd_lotes || 0 }, (_, n) => getDoc(doc(db, `buscas/${b.id}/lotes/${n}`))))
+    lotesLidos.set(chave, Promise.all(caminhos.map((c) => getDoc(doc(db, c))))
       .then((lotes) => lotes.flatMap((l) => (l.data()?.leads || []).map((x) => ({ ...x, _busca: b.id }))))
       .catch((e) => { lotesLidos.delete(chave); throw e; }));
   }
@@ -1276,7 +1308,7 @@ async function desenharInicio() {
   for (const b of $$("#inicio-modo button")) b.setAttribute("aria-pressed", String((b.dataset.modo === "total") === INICIO.total));
   desenharUltimas();
   const ativas = buscas.filter((b) => ["na_fila", "rodando"].includes(b.status)).length;
-  const comLeads = buscas.filter((b) => (b.qtd_lotes || 0) > 0);
+  const comLeads = buscas.filter(temLeads);
   const semana = comLeads.filter((b) => buscaNoPeriodo(b, { dias: 7 }));
   const inicio30 = diasAtras(29), porDia = new Map();
   for (const b of comLeads) { const d = diaDaBusca(b); if (d >= inicio30) porDia.set(d, [...(porDia.get(d) || []), b]); }
@@ -1326,8 +1358,9 @@ function desenharGraficoDias(serieCompleta) {
 const STATUS = { na_fila: ["Na fila", "warn"], rodando: ["Rodando", "azul"], concluida: ["Concluída", "ok"], erro: ["Erro", "bad"], cancelada: ["Cancelada", "bad"] };
 function linhaDoTempo(b) {
   const pos = { na_fila: 0, rodando: 1 }[b.status] ?? 2;
-  const prog = b.tipo === "rn_mae" ? `${b.consultas_feitas || 0} de ${b.total_consultas || 0}` : String(b.progresso || "").replace("/", " de ");
-  const nomes = ["Na fila", b.status === "rodando" && prog ? `Rodando (${prog} consultas)` : "Rodando", b.status === "erro" ? "Erro" : b.status === "cancelada" ? "Cancelada" : "Concluída"];
+  const prog = b.cidades_total ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas`
+    : `${b.tipo === "rn_mae" ? `${b.consultas_feitas || 0} de ${b.total_consultas || 0}` : String(b.progresso || "").replace("/", " de ")} consultas`;
+  const nomes = ["Na fila", b.status === "rodando" && prog.trim() !== "consultas" ? `Rodando (${prog})` : "Rodando", b.status === "erro" ? "Erro" : b.status === "cancelada" ? "Cancelada" : "Concluída"];
   return `<div class="linha-tempo">${nomes.map((n, i) => `${i ? `<span class="ligacao ${i <= pos ? "feita" : ""}"></span>` : ""}<span class="etapa ${i < pos ? "feita" : i === pos ? "atual" : ""}"><i></i>${n}</span>`).join("")}</div>`;
 }
 function itemBusca(b) {
@@ -1335,14 +1368,16 @@ function itemBusca(b) {
   const podeCancelar = ["na_fila", "rodando"].includes(b.status) && !b.cancelar_solicitado;
   const extra = [ehAdmin && b.dono_email ? b.dono_email : "", b.criada_em ? dataHora(b.criada_em.toDate()) : "", b.status === "na_fila" ? posicaoNaFila(b) : "",
     b.pausada_ate?.toDate?.() > new Date() ? `pausada até ${hora(b.pausada_ate.toDate())}` : "", b.cancelar_solicitado && !["cancelada", "concluida", "erro"].includes(b.status) ? "cancelando…" : ""].filter(Boolean);
-  const temLeads = (b.qtd_lotes || 0) > 0;
-  return `<div class="busca-item ${temLeads ? "clicavel" : ""}" ${temLeads ? `data-ver-busca="${txt(b.id)}" tabindex="0" role="link" aria-label="Ver os leads desta busca"` : ""}><div class="entre" style="align-items:flex-start;flex-wrap:nowrap">
+  const comLeads = temLeads(b), soParcial = parcial(b);
+  return `<div class="busca-item ${comLeads ? "clicavel" : ""}" ${comLeads ? `data-ver-busca="${txt(b.id)}" tabindex="0" role="link" aria-label="Ver os leads desta busca"` : ""}><div class="entre" style="align-items:flex-start;flex-wrap:nowrap">
     <div style="min-width:0;flex:1"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${txt(rotuloBusca(b))}</div>
     <div class="small muted">${txt(extra.join(" · "))}</div></div>
-    <div style="text-align:right;flex:none"><span class="pilula ${cls}">${rot}</span>${b.resumo ? `<div class="small ink2 num" style="margin-top:3px">${numero(b.resumo.total)} leads</div>` : ""}</div>${temLeads ? '<span class="seta" aria-hidden="true">›</span>' : ""}</div>
+    <div style="text-align:right;flex:none"><span class="pilula ${cls}">${rot}</span>${b.resumo ? `<div class="small ink2 num" style="margin-top:3px">${numero(b.resumo.total)} leads</div>` : ""}</div>${comLeads ? '<span class="seta" aria-hidden="true">›</span>' : ""}</div>
     ${linhaDoTempo(b)}
+    ${b.status === "rodando" && b.cidades_total ? `<div class="progresso-cidades" data-cidades-prontas="${b.cidades_prontas || 0}"><div class="barra-prog"><i style="width:${Math.round((100 * (b.cidades_prontas || 0)) / b.cidades_total)}%"></i></div>
+      <span class="small"><b class="num">${b.cidades_prontas || 0} de ${b.cidades_total}</b> cidades prontas${soParcial ? " · os leads delas já estão disponíveis" : ""} · ${b.partes_total} máquinas em paralelo</span></div>` : ""}
     ${b.mensagem_erro ? `<div class="small" style="color:var(--bad);margin-top:4px">${txt(b.mensagem_erro)}</div>` : ""}
-    <div class="linha" style="margin-top:6px">${temLeads ? `<button class="btn btn-sec btn-mini" data-ver-busca="${txt(b.id)}">Ver leads</button><button class="btn btn-sec btn-mini" data-mapa-busca="${txt(b.id)}">Ver no mapa</button>` : ""}
+    <div class="linha" style="margin-top:6px">${comLeads ? `<button class="btn btn-sec btn-mini" data-ver-busca="${txt(b.id)}">${soParcial ? "Ver leads já prontos" : "Ver leads"}</button><button class="btn btn-sec btn-mini" data-mapa-busca="${txt(b.id)}">Ver no mapa</button>` : ""}
     ${podeCancelar ? `<button class="btn btn-perigo btn-mini" data-cancelar="${txt(b.id)}">Cancelar</button>` : ""}</div></div>`;
 }
 function desenharUltimas() {
@@ -1493,11 +1528,29 @@ function estimar() {
       const r = await api("criar-busca", pedidoComum(true));
       $("#r-consultas").textContent = numero(r.consultas);
       $("#r-tempo").textContent = `~${tempo(r.estimativa_seg)}`;
-      $("#r-resumo").textContent = `Estimativa: ${r.consultas} consulta(s) · cerca de ${tempo(r.estimativa_seg)} depois de começar · ${NB.termos.join(", ")} em ${cidadesDoPedido().length} cidade(s), profundidade ${profundidade()}.`;
-    } catch (e) { $("#r-resumo").textContent = e.message; $("#r-consultas").textContent = "–"; $("#r-tempo").textContent = "–"; }
+      $("#r-tempo-ctx").textContent = r.maquinas > 1 ? `${r.maquinas} máquinas em paralelo · numa só: ~${tempo(r.um_motor_seg)}` : "depois de começar";
+      $("#r-resumo").textContent = `Estimativa: ${r.consultas} consulta(s) · cerca de ${tempo(r.estimativa_seg)} depois de começar` +
+        `${r.maquinas > 1 ? ` (${r.maquinas} máquinas ao mesmo tempo; com outras buscas rodando, pode demorar mais)` : ""}` +
+        ` · ${NB.termos.join(", ")} em ${cidadesDoPedido().length} cidade(s), profundidade ${profundidade()}.`;
+      // Cidades pequenas (IBGE, Censo 2022): só avisa e sugere; nada é tirado sem o vendedor tocar no botão.
+      NB.pequenas = r.cidades_pequenas || [];
+      $("#aviso-pequenas").classList.toggle("oculto", !r.sem_pequenas);
+      if (r.sem_pequenas) {
+        const economia = Math.max(0, r.estimativa_seg - r.sem_pequenas.estimativa_seg);
+        $("#aviso-pequenas-txt").textContent = `${r.pequenas} de ${cidadesDoPedido().length} cidades têm menos de 5 mil habitantes (IBGE, Censo 2022) e costumam render poucos leads. ` +
+          `Tirá-las economiza ${numero(r.consultas - r.sem_pequenas.consultas)} consultas` +
+          (economia >= 60 ? ` ≈ ${tempo(economia)} (de ~${tempo(r.estimativa_seg)} para ~${tempo(r.sem_pequenas.estimativa_seg)}).` : ".");
+      }
+    } catch (e) { $("#r-resumo").textContent = e.message; $("#r-consultas").textContent = "–"; $("#r-tempo").textContent = "–"; $("#aviso-pequenas").classList.add("oculto"); }
   }, 350);
 }
 for (const el of [...$$("input[name=prof]"), $("#email-sn"), $("#sin-buscar")]) el.addEventListener("change", estimar);
+$("#remover-pequenas").onclick = () => {
+  const tirar = (NB.pequenas || []).map((c) => c.replace(/ RN$/, ""));
+  for (const nome of tirar) NB.cidades.set(nome, false);
+  desenharCidades(); desenharRegioes(); estimar();
+  toast(`${tirar.length} cidade(s) pequena(s) removida(s). Dá para marcar de novo na etapa "Onde?".`, "ok");
+};
 $("#outras").addEventListener("input", () => { if (NB.passo === 3) estimar(); });
 $("#buscar").onclick = async () => {
   if (!NB.termos.length || !cidadesDoPedido().length) return irParaPasso(1);
@@ -1610,9 +1663,9 @@ const salvarIds = () => guardar(`mapaleads.buscas.${usuario.uid}`, W.ids);
 const buscasAbertas = () => W.ids.map((id) => buscas.find((b) => b.id === id)).filter(Boolean);
 const chaveLead = (l) => l.id_lugar || `${normalizar(l.nome)}|${String(l.telefone || "").replace(/\D/g, "")}`;
 async function prepararLeads() {
-  const validas = new Set(buscas.filter((b) => (b.qtd_lotes || 0) > 0).map((b) => b.id));
+  const validas = new Set(buscas.filter(temLeads).map((b) => b.id));
   W.ids = W.ids.filter((id) => validas.has(id));
-  if (!W.ids.length) { const primeira = buscas.find((b) => (b.qtd_lotes || 0) > 0); if (primeira) W.ids = [primeira.id]; }
+  if (!W.ids.length) { const primeira = buscas.find(temLeads); if (primeira) W.ids = [primeira.id]; }
   const chave = W.ids.join(",");
   if (chave === W.chave) return;
   W.chave = chave;
@@ -1726,7 +1779,7 @@ async function detalharLeads({ ids = null, filtros = {}, manterGeo = false, mant
   W.origem = origem; W.origemNova = true;
   if (location.hash === "#leads") abrirLeads(); else location.hash = "#leads";
 }
-const idsComLeads = (filtro = () => true) => buscas.filter((b) => (b.qtd_lotes || 0) > 0 && filtro(b)).map((b) => b.id);
+const idsComLeads = (filtro = () => true) => buscas.filter((b) => temLeads(b) && filtro(b)).map((b) => b.id);
 function desenharTrilhaLeads() {
   const o = W.origem, el = $("#trilha-leads");
   el.classList.toggle("oculto", !o);
@@ -1735,7 +1788,7 @@ function desenharTrilhaLeads() {
 }
 const contar = (lista, chave) => lista.reduce((m, l) => { const k = chave(l); m.set(k, (m.get(k) || 0) + 1); return m; }, new Map());
 async function abrirLeads() {
-  if (!buscas.some((b) => (b.qtd_lotes || 0) > 0)) {
+  if (!buscas.some(temLeads)) {
     $("#leads-painel").classList.add("oculto");
     $("#leads-vazio").innerHTML = buscas.length ? `<div class="cartao vazio"><div class="ic">${icone("leads")}</div><h2>Suas buscas ainda não terminaram</h2><p>Os leads aparecem aqui quando a primeira busca terminar. Acompanhe no Início.</p><a class="btn btn-sec" href="#inicio">Ver o Início</a></div>`
       : `<div class="cartao vazio"><div class="ic">${icone("leads")}</div><h2>Você ainda não tem leads</h2><p>Faça sua primeira busca: escolha um segmento e uma microrregião.</p><a class="btn btn-primario" href="#nova">Nova busca →</a></div>`;
@@ -1937,8 +1990,9 @@ function desenharCaixaBuscas() {
   // Todas as buscas: com leads dá para abrir; terminada dá para apagar; em andamento, cancelar primeiro.
   const lista = buscas;
   $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>Suas buscas</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
-    (lista.map((b) => { const temLeads = (b.qtd_lotes || 0) > 0;
-      return `<div class="linha-busca"><label class="${temLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${temLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b><br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${temLeads ? `${numero(b.resumo?.total)} leads` : txt((STATUS[b.status] || [b.status])[0])}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label>${botaoApagar(b)}</div>`; }).join("") ||
+    (lista.map((b) => { const comLeads = temLeads(b);
+      const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(b.resumo?.total)} leads` : txt((STATUS[b.status] || [b.status])[0]);
+      return `<div class="linha-busca"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b><br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label>${botaoApagar(b)}</div>`; }).join("") ||
       `<p class="small muted" style="padding:8px">Nenhuma busca ainda.</p>`) +
     `<div class="entre" style="padding:8px"><span class="small muted">Cada lote de 300 leads = 1 leitura no banco.</span><button class="btn btn-primario btn-mini" id="aplicar-buscas">Abrir</button></div>`;
 }
@@ -2094,20 +2148,32 @@ const CAMPOS_EXPORTAR = ["nome", "categoria", "telefone", "whatsapp_link", "emai
   "regiao_imediata", "nota", "qtd_avaliacoes", "link_maps", "termo_que_encontrou", "cidade_buscada", "cidade_confere", "categorias", "no_segmento"];
 const camposExportados = () => CAMPOS_EXPORTAR;
 const linhasExportar = (lista) => { const campos = camposExportados(); return { campos, linhas: lista.map((l) => Object.fromEntries(campos.map((c) => [c, c === "categorias" ? (l.categorias || []).join("; ") : l[c] ?? ""]))) }; };
-function nomeArquivo(lista) {
-  const segmento = slug(W.segmento.termos.slice(0, 3).join("-")) || "leads", dia = diaFortaleza();
-  if (F.cidade) return `${segmento}-${slug(F.cidade)}-${dia}`;
-  if (F.micro) return `${segmento}-${slug(microPorId.get(F.micro)?.nome)}-${dia}`;
+// Lugar do arquivo: filtro de cidade → cidade; microrregião do filtro → ela; RN inteiro → RN; 1 cidade pedida → ela;
+// cidades pedidas = uma região inteira → a região; senão "varias-cidades".
+function lugarDoArquivo() {
+  if (F.cidade) return F.cidade;
+  if (F.micro) return microPorId.get(F.micro)?.nome || "varias-cidades";
   const abertas = buscasAbertas();
-  if (abertas.some((b) => b.tipo === "rn_mae")) return `${segmento}-RN-${dia}`;
+  if (abertas.some((b) => b.tipo === "rn_mae")) return "RN";
   const cidades = [...new Set(abertas.flatMap((b) => (b.parametros?.cidades || []).map((c) => infoCidade(c)?.nome || c)))];
-  if (cidades.length === 1) return `${segmento}-${slug(cidades[0])}-${dia}`;
+  if (cidades.length === 1) return cidades[0];
   const conj = new Set(cidades);
   for (const tipo of ["micro", "imediata"]) {
     const r = REGIOES[tipo].find((x) => x.municipios.length === conj.size && x.municipios.every((c) => conj.has(porCodigo.get(c).nome)));
-    if (r) return `${segmento}-${slug(r.nome)}-${dia}`;
+    if (r) return r.nome;
   }
-  return `${segmento}-varias-cidades-${dia}`;
+  return "varias-cidades";
+}
+// .csv (formato de sempre): segmento-lugar-AAAA-MM-DD
+function nomeArquivo() {
+  const segmento = slug(W.segmento.termos.slice(0, 3).join("-")) || "leads", lugar = lugarDoArquivo();
+  return `${segmento}-${lugar === "RN" ? "RN" : slug(lugar)}-${diaFortaleza()}`;
+}
+// .xlsx: MapaLeads_<termo>_<cidade ou região>_<dd-mm-aaaa>.xlsx (sem acento nem espaço: abre certo em qualquer celular)
+const trechoNome = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+function nomeArquivoXlsx() {
+  const [a, m, d] = diaFortaleza().split("-");
+  return `MapaLeads_${trechoNome(W.segmento.termos.slice(0, 3).join("-").toLowerCase()) || "leads"}_${trechoNome(lugarDoArquivo())}_${d}-${m}-${a}.xlsx`;
 }
 function baixar(blob, nome) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nome;
@@ -2117,22 +2183,110 @@ function baixarCsv(lista) {
   // Separador ";" e BOM UTF-8: abre certo no Excel em português. Sem assinatura (não quebra importações).
   const { campos, linhas } = linhasExportar(lista);
   const cel = (v) => { const s = typeof v === "number" ? String(v).replace(".", ",") : String(v ?? ""); return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  baixar(new Blob(["﻿" + [campos.join(";"), ...linhas.map((l) => campos.map((c) => cel(l[c])).join(";"))].join("\r\n")], { type: "text/csv;charset=utf-8" }), `${nomeArquivo(lista)}.csv`);
+  baixar(new Blob(["﻿" + [campos.join(";"), ...linhas.map((l) => campos.map((c) => cel(l[c])).join(";"))].join("\r\n")], { type: "text/csv;charset=utf-8" }), `${nomeArquivo()}.csv`);
+}
+// ---- Planilha .xlsx pronta para usar (pedido do Breno, 24/09): aba "Leads" formatada + aba "Resumo".
+// Só dados do Google Maps (nada de sócios nem outros dados pessoais — LGPD). O .csv continua simples.
+const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+const LARGURA_MAX = { "Endereço": 45, "Categoria": 32, "Nome": 42 }; // o resto: até 30
+const AZUL_MARCA = "FF1F5FD6", ZEBRA = "FFF3F6FB", AZUL_LINK = "FF1F5FD6";
+/** Telefone limpo: (84) 99999-9999 (celular) ou (84) 3333-3333 (fixo); outro formato fica como veio. */
+function telefonePadrao(t) {
+  let n = String(t || "").replace(/\D/g, "");
+  if (n.length > 11 && n.startsWith("55")) n = n.slice(2);
+  if (n.length === 11) return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+  if (n.length === 10) return `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}`;
+  return String(t || "");
+}
+/** Data da coleta = dia em que a busca do lead terminou (horário de Natal), como data do Excel. */
+function dataDaColeta(l) {
+  const b = buscas.find((x) => x.id === l._busca);
+  const quando = b?.finalizada_em?.toDate?.() || b?.criada_em?.toDate?.() || new Date();
+  const [a, m, d] = diaFortaleza(quando).split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d));
+}
+/** Linhas da aba "Leads": sem duplicados, ordenadas por Cidade e Nome, só as colunas pedidas. */
+function linhasXlsx(lista) {
+  const vistos = new Set(), unicos = lista.filter((l) => { const k = chaveLead(l); if (vistos.has(k)) return false; vistos.add(k); return true; });
+  const pt = (a, b) => (a || "").localeCompare(b || "", "pt-BR", { sensitivity: "base" });
+  unicos.sort((a, b) => (!a.cidade - !b.cidade) || pt(a.cidade, b.cidade) || pt(a.nome, b.nome)); // sem cidade vai para o fim
+  const link = (url, texto) => (url ? { text: texto, hyperlink: url } : "");
+  return unicos.map((l) => [
+    l.nome || "", l.categoria || "", l.cidade || "", l.microrregiao || "", l.bairro || "", l.endereco || "",
+    telefonePadrao(l.telefone), link(l.whatsapp_link, "Abrir WhatsApp"), link(l.site || l.instagram, "Abrir site"), l.email || "",
+    typeof l.nota === "number" && l.nota > 0 ? l.nota : "", typeof l.qtd_avaliacoes === "number" ? l.qtd_avaliacoes : "",
+    l.no_segmento === "sim" ? "Sim" : "Não", link(l.link_maps, "Ver no mapa"), l.termo_que_encontrou || "", dataDaColeta(l),
+  ]);
+}
+function estiloCabecalho(linha) {
+  linha.eachCell((c) => {
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: AZUL_MARCA } };
+    c.alignment = { vertical: "middle" };
+  });
+  linha.height = 20;
+}
+async function montarXlsx(lista) {
+  await carregarScript(CDN.exceljs);
+  const livro = new window.ExcelJS.Workbook();
+  livro.creator = "MapaLeads";
+  const linhas = linhasXlsx(lista);
+  // ---- aba Leads
+  const ws = livro.addWorksheet("Leads", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.addRow(COLUNAS_XLSX);
+  estiloCabecalho(ws.getRow(1));
+  linhas.forEach((valores, i) => {
+    const r = ws.addRow(valores);
+    if (i % 2 === 1) r.eachCell({ includeEmpty: true }, (c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } }; });
+    for (const col of [8, 9, 14]) { const c = r.getCell(col); if (c.value?.hyperlink) c.font = { color: { argb: AZUL_LINK }, underline: true }; }
+  });
+  ws.getColumn(11).numFmt = "0.0";
+  ws.getColumn(12).numFmt = "0";
+  ws.getColumn(16).numFmt = "dd/mm/yyyy";
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, linhas.length + 1), column: COLUNAS_XLSX.length } };
+  // O Excel, quando salva uma planilha com filtro, grava também o nome interno _xlnm._FilterDatabase (da aba 1).
+  // O ExcelJS não grava; sem ele o LibreOffice (e alguns apps) não mostram as setas do filtro. Mesmo formato do Excel.
+  const modeloNomes = livro._definedNames;
+  livro._definedNames = { get model() { return [...modeloNomes.model,
+    { name: "_xlnm._FilterDatabase", localSheetId: 0, ranges: [`'Leads'!$A$1:$P$${Math.max(1, linhas.length + 1)}`] }]; } };
+  // largura pelo conteúdo (o texto do link conta pelo que aparece), com limite
+  COLUNAS_XLSX.forEach((nome, i) => {
+    // cabeçalho: +4 para a seta do filtro não cobrir o texto
+    const maior = Math.max(nome.length + 2, ...linhas.map((v) => { const x = v[i]; return x instanceof Date ? 10 : String(x?.text ?? x ?? "").length; }));
+    ws.getColumn(i + 1).width = Math.min(LARGURA_MAX[nome] || 30, Math.max(10, maior + 2));
+  });
+  // ---- aba Resumo
+  const rs = livro.addWorksheet("Resumo");
+  const [a, m, d] = diaFortaleza().split("-");
+  const noSeg = linhas.filter((v) => v[12] === "Sim").length, comWhats = linhas.filter((v) => v[7]).length;
+  [["Termo buscado", W.segmento.termos.join(", ") || "–"], ["Data", `${d}/${m}/${a}`], ["Total de leads", linhas.length],
+    ["No segmento", noSeg], ["Com WhatsApp", comWhats]].forEach(([k, v]) => { const r = rs.addRow([k, v]); r.getCell(1).font = { bold: true }; });
+  rs.addRow([]);
+  const cab = rs.addRow(["Cidade", "Leads", "No segmento", "Com WhatsApp"]);
+  estiloCabecalho(cab);
+  const porCidade = new Map();
+  for (const v of linhas) {
+    const k = v[2] || "(sem cidade)", x = porCidade.get(k) || [0, 0, 0];
+    x[0]++; if (v[12] === "Sim") x[1]++; if (v[7]) x[2]++; porCidade.set(k, x);
+  }
+  [...porCidade].sort((p, q) => q[1][0] - p[1][0] || p[0].localeCompare(q[0], "pt-BR")).forEach(([k, x]) => rs.addRow([k, ...x]));
+  if (ASSINATURA.locais.xlsx) { rs.addRow([]); rs.addRow([`Gerado pelo MapaLeads – ${ASSINATURA.empresa}`]); }
+  rs.getColumn(1).width = Math.min(40, Math.max(16, ...[...porCidade.keys()].map((k) => k.length + 2)));
+  rs.getColumn(2).width = Math.max(14, Math.min(50, (W.segmento.termos.join(", ").length || 0) + 2));
+  rs.getColumn(3).width = 14; rs.getColumn(4).width = 15;
+  return { livro, linhas: linhas.length };
 }
 async function baixarXlsx(lista) {
+  const n = new Set(lista.map(chaveLead)).size;
+  if (!n) return toast("Nenhum lead para exportar com os filtros atuais.", "erro");
+  if (!(await confirmar({ titulo: "Exportar planilha", sim: "Baixar .xlsx",
+    texto: `Vão sair ${numero(n)} ${n === 1 ? "lead" : "leads"} — os que os filtros da tela mostram agora. A planilha abre direto no Excel ou no Planilhas.` }))) return;
   try {
-    const XLSX = await import(CDN.xlsx);
-    const { campos, linhas } = linhasExportar(lista);
-    const livro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(livro, XLSX.utils.json_to_sheet(linhas, { header: campos }), "Leads");
-    // Aba "Resumo": totais por microrregião e por cidade, com a assinatura no rodapé.
-    const por = (chave) => [...lista.reduce((m, l) => { const k = chave(l) || "(sem)"; const x = m.get(k) || [0, 0]; x[0]++; if (l.whatsapp_link) x[1]++; m.set(k, x); return m; }, new Map())].sort((a, b) => b[1][0] - a[1][0]);
-    const resumo = [["Resumo dos leads exportados"], [`Segmento: ${W.segmento.termos.join(", ")}`], [`Total: ${lista.length} leads`], [],
-      ["Microrregião", "Leads", "Com WhatsApp"], ...por((l) => l.microrregiao).map(([k, [n, w]]) => [k, n, w]), [],
-      ["Cidade", "Leads", "Com WhatsApp"], ...por((l) => l.cidade).map(([k, [n, w]]) => [k, n, w]), []];
-    if (ASSINATURA.locais.xlsx) resumo.push([`Gerado pelo MapaLeads – ${ASSINATURA.empresa} – ${new Date().toLocaleString("pt-BR", FUSO)}`]);
-    XLSX.utils.book_append_sheet(livro, XLSX.utils.aoa_to_sheet(resumo), "Resumo");
-    XLSX.writeFile(livro, `${nomeArquivo(lista)}.xlsx`, { compression: true });
+    const { livro } = await montarXlsx(lista);
+    const dados = await livro.xlsx.writeBuffer();
+    baixar(new Blob([dados], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nomeArquivoXlsx());
+    toast(`Planilha com ${numero(n)} leads baixada.`, "ok");
   } catch { toast("Não foi possível gerar o .xlsx agora. Tente o .csv.", "erro"); }
 }
 const selecionados = () => visiveis.filter((l) => F.sel.has(chaveLead(l)));
@@ -2566,6 +2720,9 @@ async function carregarSaude() {
       <div class="cartao kpi"><div class="rot">Disjuntor / agendadas${aj("Disjuntor: pausa automática de 30 min quando várias consultas seguidas voltam vazias (proteção contra bloqueio do Google). Agendadas: buscas marcadas para a noite.")}</div><div class="val num">${f.pausadas} / ${f.agendadas}</div><div class="ctx">${f.pausada_ate ? "pausa até " + quando(f.pausada_ate) : "sem pausa"}</div></div>
       <div class="cartao kpi"><div class="rot">Órfãs / Estado inteiro${aj("Órfãs: buscas que ficaram presas sem sinal do motor (são recuperadas sozinhas). Estado inteiro: buscas do estado em andamento.")}</div><div class="val num">${f.orfas} / ${f.rn_em_andamento}</div><div class="ctx">agora o despertador: ${txt(MOTIVO[s.decisao_agora.motivo] || s.decisao_agora.motivo)}</div></div>
       <div class="cartao kpi"><div class="rot">Despertador (15 min)${aj("Rotina que confere a fila a cada 15 minutos e liga o motor quando há busca esperando.")}</div><div class="val" style="font-size:15px">${quando(s.despertador?.ultima_execucao)}</div><div class="ctx">${s.despertador ? txt(MOTIVO[s.despertador.motivo] || s.despertador.motivo) + (s.despertador.disparou ? " · disparou o motor" : "") : "ainda não rodou"}</div></div></div>
+      ${s.paralelismo ? `<p class="small ink2" id="paralelismo-info" style="margin:0 0 10px">Paralelismo: <b>${s.paralelismo.vagas} de 4 máquinas</b> ligadas · ${s.paralelismo.maquinas_rodando} rodando agora${
+        s.paralelismo.ultimo_sinal_em ? ` · último sinal de bloqueio: ${quando(s.paralelismo.ultimo_sinal_em)} (${s.paralelismo.motivo === "consentimento" ? "tela de consentimento/captcha" : "consultas vazias em sequência"}); volta +1 máquina a cada 2 h sem novo sinal` : " · nenhum sinal de bloqueio"}
+        ${aj("O motor usa até 4 máquinas ao mesmo tempo, cada uma no ritmo seguro de sempre. Se o Google der sinal de bloqueio, as máquinas caem para a metade e voltam aos poucos.")}</p>` : ""}
       <h3>Últimas execuções do motor</h3>
       ${s.execucoes?.erro ? `<p class="small" style="color:var(--bad)">${txt(s.execucoes.erro)}</p>` : `<div class="caixa-tabela" style="max-height:260px;margin-top:6px"><table class="tabela vira-cartao"><thead><tr><th>#</th><th>Gatilho</th><th>Resultado</th><th>Início</th><th>Duração</th></tr></thead><tbody>
         ${execs.map((e) => `<tr><td data-rot="Execução"><a href="${link(e.link)}" target="_blank" rel="noopener">#${txt(e.numero)} ›</a></td><td data-rot="Gatilho">${txt(GATILHO[e.gatilho] || e.gatilho)}</td>
@@ -2594,7 +2751,7 @@ const PASSOS_TOUR = [
   ["Bem-vindo ao MapaLeads", "Aqui você encontra empresas por cidade, microrregião e segmento, com WhatsApp, mapa e dados do IBGE."],
   ["Como buscar", "Em “Nova busca”: escolha o segmento (ex.: home care), marque as cidades no mapa ou na lista e confira o tempo estimado antes de buscar."],
   ["Como ler os leads", "Em “Meus leads” você filtra por cidade, segmento e categoria. “Só do segmento” esconde o que o Google devolveu parecido mas não é do ramo. Clique num lead para a ficha com WhatsApp e Google Maps."],
-  ["Como exportar", `Baixe .xlsx (com aba “Resumo”) ou .csv com os leads que os filtros mostram. ${ASSINATURA.locais.tour ? `${ASSINATURA.texto} ${ASSINATURA.empresa}.` : ""}`],
+  ["Como exportar", `Baixe a planilha .xlsx pronta (cabeçalho com filtro, links de WhatsApp e mapa, aba “Resumo”) ou o .csv, com os leads que os filtros mostram. ${ASSINATURA.locais.tour ? `${ASSINATURA.texto} ${ASSINATURA.empresa}.` : ""}`],
 ];
 function abrirTour(i = 0) {
   const [t, d] = PASSOS_TOUR[i];

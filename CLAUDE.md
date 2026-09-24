@@ -34,7 +34,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
    `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
    Firebase; validam ID token (checkRevoked) — Fases 2 e 3a (feito).
-4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify.
+4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify;
+   **matrix de 4 vagas** (até 4 máquinas ao mesmo tempo) desde o PR 14.
 5. Banco: Firestore.
 
 ## Decisões tomadas
@@ -75,8 +76,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   motor se redispara (GITHUB_TOKEN, `actions: write`). Agendamento */15 como rede de segurança.
 - **Órfãs**: sem paralelo, toda busca "rodando" no início é órfã (comum → erro; filha → volta à fila 1 vez).
   Com paralelo (desligado), órfã após 45 min sem `batimento_em`.
-- **2 motores em paralelo**: código pronto, DESLIGADO (`MOTOR_PARALELO: "false"`). Ligar só após semanas
-  sem sinais de bloqueio (e mudar o `concurrency` do workflow).
+- **Motores em paralelo**: decisão antiga ("desligado até semanas sem bloqueio") **substituída em 24/09** pelo
+  Breno — ver "Motor em paralelo (PR 14)" abaixo (`MOTOR_PARALELO: "true"`, 4 vagas).
 - **Disjuntor**: 3 consultas "vazias" seguidas no RN → pausa de 30 min (mãe + filhas na fila com
   `pausada_ate`), consultas restantes voltam à fila. **Vazia (regra de 24/09, feita na 3a)** = sem lead E
   (scraper com falha/erro — motivo da vigia fora do fim normal ou código de erro — OU cidade > 20 mil hab.
@@ -198,7 +199,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   alternância "No segmento | Ver total" (guardada no navegador); calculados dos lotes das buscas (cache `lotesLidos`,
   compartilhado com Meus leads; 1 leitura por lote por visita — o Início não lê mais `estatisticas`), cada recorte com
   o segmento das suas buscas, igual ao detalhe. Gráfico: até 7 dias com busca nos últimos 30 → só esses dias.
-- **Exportação**: colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
+- **Exportação** (.csv): colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
+  **.xlsx refeito em 24/09 (pedido do Breno, PR 14)** — ver "Planilha .xlsx pronta para usar" abaixo.
   **Aprovado pelo Breno (23/09)**, junto com: "Sair" volta o endereço ao Início (sem #leads/#mapa do usuário anterior)
   e ranking do Mercado só com indicadores lado a lado (sem nota/índice calculado).
 - **Duplicados**: o mesmo lugar em outra busca completa os campos vazios (dado real do Google).
@@ -236,8 +238,75 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Comemoração** (`comemorar()`): ao criar busca comum, 16 (celular) / 26 logos (pino azul, desenhado uma vez num
   canvas de 64 px e copiado) saltam, quicam e giram por 2 s num `<canvas id="comemoracao">` com `pointer-events:none`,
   sem biblioteca; `prefers-reduced-motion: reduce` → só a mensagem "Busca criada! Te aviso quando os leads chegarem.".
+- **iPhone sem zoom ao tocar num campo** (bug visto pelo Breno em 24/09, junto com o PR 14): até 768 px, todo `input`,
+  `select` e `textarea` tem fonte de 16 px (`!important`; o Safari amplia a tela em campo com fonte < 16 px). O viewport
+  continua SEM `maximum-scale`/`user-scalable=no` (o usuário pode ampliar). Teste em 390 px confere a fonte calculada de
+  todos os campos visíveis em login, Nova busca (3 passos), Meus leads (lista de buscas e "Mais filtros"), Mapa, Mercado
+  e Admin — sem a correção ele acusa 34 campos com 13,5 px.
+- **Planilha .xlsx pronta para usar** (PR 14): ExcelJS 4.4.0 do cdnjs, carregado só no clique (`CDN.exceljs`; nos testes
+  vem do `node_modules`, devDependency fixada). Aba **Leads** com as colunas, nesta ordem: Nome, Categoria, Cidade,
+  Microrregião, Bairro, Endereço, Telefone, WhatsApp, Site, E-mail, Nota, Avaliações, No segmento (Sim/Não), Link do
+  Google Maps, Busca (termo), Data da coleta (= dia em que a busca do lead terminou, horário de Natal).
+  - Formatação: cabeçalho negrito branco sobre o azul da marca (#1F5FD6), primeira linha congelada e filtro automático
+    em A1:P(n+1), mais o nome interno `_xlnm._FilterDatabase` (o Excel grava; o ExcelJS não; sem ele o LibreOffice não
+    mostra as setas); largura pelo conteúdo com limite (Endereço 45, Nome 42, Categoria 32, demais 30); zebra leve.
+  - Conteúdo: telefone `(84) 99999-9999` / `(84) 3333-3333`; WhatsApp = link "Abrir WhatsApp" só para celular;
+    Site/Maps = "Abrir site"/"Ver no mapa"; nota `0.0`; avaliações número; data `dd/mm/yyyy`; ordem Cidade → Nome
+    (sem cidade no fim); sem duplicados e sem colunas técnicas (id_lugar, coordenadas).
+  - Aba **Resumo**: termo, data, total, no segmento, com WhatsApp e tabela Cidade | Leads | No segmento | Com WhatsApp.
+  - Nome: `MapaLeads_<termo>_<cidade ou região>_<dd-mm-aaaa>.xlsx` (sem acento/espaço; lugar pela mesma regra de
+    sempre, `lugarDoArquivo()`). O .csv continua simples e com o nome antigo.
+  - Respeita os filtros da tela (exporta os leads visíveis) e **confirma antes**: "Vão sair N leads — os que os
+    filtros da tela mostram agora" → "Baixar .xlsx". Só dados do Google Maps (LGPD; nada de sócios).
+  - Teste: gera pela tela e lê com o ExcelJS (colunas, ordem, cabeçalho, travado, filtro, links, formatos, Resumo).
+    Captura conferida no LibreOffice Calc (tela virtual): abre sem erro, com setas do filtro.
 - **Workflow "Capturas da tela"** (manual): capturas do celular em produção (login temporário + busca fictícia) na
   branch `capturas-tela`; a criação da busca nas capturas dos logos é **simulada** (rota interceptada, nada na fila).
+
+### Motor em paralelo (PR 14, aprovado pelo Breno em 24/09)
+- **Pedido**: acelerar sem custo. Medição real antes (execução #7, 30 consultas): raspagem 10–60 s (média ~25 s) +
+  pausa 20–40 s ≈ 56 s/consulta; partida ~20–35 s (pull da imagem ~15 s). 30 cidades × 3 termos (Rápida) = 90
+  consultas ≈ 1h15–1h25 numa máquina → ~20–22 min com 4 (primeiros leads em ~2–3 min).
+- **Aprovado**: 4 vagas; sinal de bloqueio → metade (4→2→1) + a parte pausa 30 min + volta +1 vaga a cada 2 h sem sinal;
+  **sem cache** da imagem do scraper (medido ~15 s de pull; o cache não ganharia); Estado inteiro no máximo 2 vagas,
+  vendedor na frente. **Riscos aceitos pelo Breno**: termos do GitHub Actions (uso para raspagem, agora 4× o volume;
+  pode restringir o Actions do repo) e volume total 4× maior no Google (por IP o ritmo é o mesmo).
+- **Workflow**: `motor.yml` com `matrix.vaga: [1,2,3,4]` e `concurrency: mapaleads-motor-vaga-N` por job (o limite de 4
+  é garantido pelo GitHub). `MOTOR_VAGA` = número da vaga; só a vaga 1 cria a busca do formulário manual.
+- **Partes** (`tipo: "parte"`, `mae_id`, `cidades`, `consultas`, `ordem`): criadas pela Function `criar-busca` na mesma
+  transação da busca, se houver ≥ 2 cidades e ≥ 2 vagas: k = min(4, vagas efetivas, nº de cidades), cidades em rodízio
+  (partes do mesmo tamanho), cidade por cidade dentro da parte. A busca vira "mãe" comum (`partes_total`,
+  `cidades_total`, `cidades_prontas`, `consultas_feitas`, `parciais: {id_da_parte: nº de lotes}`); `fila.eh_mae()` /
+  `logica.ehMae()` = rn_mae ou comum com `partes_total`. 1 cidade: roda como antes (sem partes).
+- **Fila**: partes entram no rodízio por dono com as comuns (vendedores diferentes ao mesmo tempo); filhas do RN só se
+  houver < `vagas_rn` (2) rodando (contado na transação de reserva). Espera na tela divide pelas `vagas` publicadas em
+  `fila/estado` ("começa em ~1 min (máquina livre)").
+- **Parciais**: a cada cidade pronta, um batch grava os lotes da parte (todos os leads dela até ali) + a parte
+  (`cidades_prontas`, `qtd_lotes`, `batimento_em`) + a mãe (`cidades_prontas` +1, `consultas_feitas` +n, `parciais.<id>`).
+  ~3 gravações por cidade (antes: 1 por consulta no progresso). A tela lê os lotes parciais (`lotesDaBusca()`:
+  finais se `qtd_lotes`, senão os de `parciais`) — Início, Meus leads, Mapa e Mercado; item da busca mostra barra
+  "X de Y cidades prontas · os leads delas já estão disponíveis · N máquinas em paralelo" e "Ver leads já prontos".
+- **Consolidação**: `rn_inteiro.finalizar_mae_se_pronta` serve às duas mães; **trava por transação**
+  (`consolidando_em`, retomável após 10 min) para duas vagas não consolidarem/contarem estatística em dobro.
+  Duração da mãe comum = agora − `iniciada_em`.
+- **Sinal de bloqueio** (`motor/paralelismo.py`, espelhado em `logica.vagasEfetivas`): consentimento/captcha (vigia) ou
+  3 vazias seguidas por máquina (mesma regra "vazia" do disjuntor). `config/paralelismo = {vagas_base, ultimo_sinal_em,
+  motivo}`; efetivas = base + 1 a cada 2 h desde o sinal (calculado na hora, sem agendamento). A parte com o sinal
+  devolve as cidades não prontas como nova parte com `pausada_ate` +30 min; vaga acima das efetivas termina a cidade
+  atual, devolve o resto (sem pausa) e sai. RN: o disjuntor de sempre + também reduz as vagas.
+- **Órfãs**: com paralelo, parte órfã após nº de termos × (limite da consulta + 1 min) + 10 min sem `batimento_em`
+  (sinal a cada cidade); volta à fila 1 vez. Filhas/comuns: 45 min.
+- **Cancelar/apagar**: busca dividida cancela como a mãe do RN; se nenhuma parte começou, cancela tudo na hora. Apagar
+  leva as partes e os lotes parciais. Parte sozinha → 400 ("pela busca principal").
+- **Despertador**: dispara se há trabalho e máquinas vivas < vagas efetivas (antes: só com nada rodando).
+- **Estimativa** (`logica.planoBuscaComum`): partida (60 s) + a maior parte; a simulação devolve `maquinas`,
+  `um_motor_seg`, `pequenas`, `sem_pequenas` e `cidades_pequenas` (RN < 5 mil hab., Censo 2022 — valor do Breno).
+  Limite de 5 h vale por parte. Nova busca: "N máquinas em paralelo · numa só: ~X" e aviso "Remover as pequenas".
+- **Admin**: Saúde do motor mostra "Paralelismo: N de 4 máquinas ligadas · M rodando · último sinal de bloqueio".
+- Testes: `test_paralelismo.py`, fila (partes, rodízio, órfã), emulador (partes + parciais + consolidação sem dobrar,
+  vaga desligada, sinal por vazias e por consentimento, cancelar, RN ≤ 2 vagas), Node (vagas, partes, estimativa,
+  pequenas, despertador), Functions (criar com partes, cancelar, apagar, pequenas) e tela (cidades prontas, leads
+  parciais, aviso de pequenas).
 
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
@@ -253,7 +322,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **PR 13 (celular primeiro)**: etiquetas de população, tema claro padrão, botão de tema no celular, telas do vendedor,
   ícones (i), apagar busca e comemoração — um commit só; merge após CI verde + teste real em produção.
   Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
-- Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
+- **PR 14 (motor em paralelo)**: 4 vagas, partes por cidade, parciais, sinal de bloqueio, aviso de cidades pequenas.
+- Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
+  **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 
 ## Fase 3 — Nordeste (decisão do Breno; próximo PR depois da 3a — apresentar plano antes de implementar)
 - O sistema **não pode ficar travado no RN**. **UF vira campo** em buscas (parâmetros e consultas), leads

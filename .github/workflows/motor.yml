@@ -46,13 +46,12 @@ on:
         required: false
         type: string
 
-# Fila: só uma execução do motor por vez, e nunca cancelamos a que está rodando.
-# O GitHub guarda só UMA execução pendente e descarta as outras, mas nenhuma
-# busca se perde: todas ficam salvas no Firestore com status "na_fila" e o
-# motor esvazia a fila inteira antes de terminar.
-concurrency:
-  group: mapaleads-motor
-  cancel-in-progress: false
+# Paralelismo (aprovado pelo Breno em 24/09): cada disparo abre 4 "vagas" (jobs da matrix).
+# Cada vaga tem o SEU grupo de concurrency: no total, nunca mais que 4 máquinas ao mesmo
+# tempo, e nunca cancelamos a que está rodando. O GitHub guarda só UMA execução pendente
+# por vaga e descarta as outras, mas nenhuma busca se perde: tudo fica no Firestore com
+# status "na_fila" e cada vaga esvazia a fila antes de terminar. Vaga sem trabalho (ou
+# desligada por sinal de bloqueio, ver motor/paralelismo.py) sai em segundos.
 
 permissions:
   contents: read
@@ -60,6 +59,13 @@ permissions:
 
 jobs:
   motor:
+    strategy:
+      fail-fast: false
+      matrix:
+        vaga: [1, 2, 3, 4]
+    concurrency:
+      group: mapaleads-motor-vaga-${{ matrix.vaga }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
@@ -85,8 +91,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           # UID do admin agora é SECRET (não aparece no log público).
           MAPALEADS_ADMIN_UID: ${{ secrets.MAPALEADS_ADMIN_UID }}
-          # Segundo motor em paralelo: pronto no código, DESLIGADO (aprovado).
-          MOTOR_PARALELO: "false"
+          # Várias vagas ao mesmo tempo: busca "rodando" só é órfã sem sinal de vida (aprovado em 24/09).
+          MOTOR_PARALELO: "true"
+          MOTOR_VAGA: ${{ matrix.vaga }}
           GITHUB_TOKEN: ${{ github.token }}
         run: python motor.py
 

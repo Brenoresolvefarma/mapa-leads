@@ -137,7 +137,7 @@ test("perfil salvo: nome obrigatório, mesmos campos validados da busca comum", 
   assert.equal(L.validarPerfil({ nome: "a", termos: "x", tipo_regiao: "outra" }).tipo_regiao, "micro");
 });
 
-test("despertador: dispara só com trabalho elegível ou órfã, e nunca com o motor vivo", () => {
+test("despertador: dispara só com trabalho elegível ou órfã, e só se houver vaga livre", () => {
   const agora = new Date("2026-09-23T15:00:00Z");
   const min = (m) => new Date(agora.getTime() + m * 60000);
   const d = (buscas) => L.decidirDespertar(buscas, agora);
@@ -148,10 +148,44 @@ test("despertador: dispara só com trabalho elegível ou órfã, e nunca com o m
   assert.equal(d([{ status: "na_fila", tipo: "rn_filha", pausada_ate: min(10) }]).disparar, false);
   assert.equal(d([{ status: "na_fila", tipo: "rn_filha", pausada_ate: min(-1) }]).disparar, true);
   assert.equal(d([{ status: "na_fila", tipo: "rn_mae" }]).disparar, false);
-  // Motor rodando (batimento recente): não dispara mesmo com fila.
-  assert.equal(d([{ status: "rodando", tipo: "comum", batimento_em: min(-10) }, { status: "na_fila", tipo: "comum" }]).motivo, "motor_rodando");
+  // Uma máquina rodando e trabalho esperando: com 4 vagas dispara (as outras vagas pegam a fila);
+  // com 1 vaga só (paralelismo reduzido) ou as 4 ocupadas, não dispara.
+  const viva = { status: "rodando", tipo: "parte", batimento_em: min(-10) };
+  assert.equal(d([viva, { status: "na_fila", tipo: "parte" }]).motivo, "fila_com_trabalho");
+  assert.equal(L.decidirDespertar([viva, { status: "na_fila", tipo: "parte" }], agora, 1).motivo, "motor_rodando");
+  assert.equal(d([viva, viva, viva, viva, { status: "na_fila", tipo: "parte" }]).motivo, "motor_rodando");
+  assert.equal(d([viva]).motivo, "motor_rodando");
+  // Busca comum dividida em partes (a "mãe") não roda direto: não conta como trabalho nem como máquina.
+  assert.equal(d([{ status: "na_fila", tipo: "comum", partes_total: 3 }]).disparar, false);
   // Sem batimento há 45 min: órfã -> dispara para o motor recuperar.
   assert.deepEqual(d([{ status: "rodando", tipo: "comum", batimento_em: min(-46) }]), { disparar: true, motivo: "busca_orfa", elegiveis: 0, orfas: 1 });
   // Timestamp do Firestore (toMillis) também é aceito.
   assert.equal(d([{ status: "rodando", tipo: "comum", batimento_em: { toMillis: () => min(-5).getTime() } }]).motivo, "motor_rodando");
+});
+
+test("paralelismo: vagas efetivas espelham o motor (metade no sinal, +1 a cada 2 h, máx. 4)", () => {
+  const agora = new Date("2026-09-24T12:00:00Z");
+  const h = (x) => new Date(agora.getTime() + x * 3600000);
+  assert.equal(L.vagasEfetivas({}, agora), 4);
+  const doc = { vagas_base: 1, ultimo_sinal_em: agora };
+  assert.equal(L.vagasEfetivas(doc, h(1.99)), 1);
+  assert.equal(L.vagasEfetivas(doc, h(2)), 2);
+  assert.equal(L.vagasEfetivas(doc, h(5)), 3);
+  assert.equal(L.vagasEfetivas(doc, h(30)), 4);
+  assert.equal(L.vagasEfetivas({ vagas_base: 2, ultimo_sinal_em: { toMillis: () => agora.getTime() } }, h(2)), 3);
+});
+
+test("paralelismo: partes por cidade, do mesmo tamanho, sem repetir nem perder consulta", () => {
+  const p = { termos: ["a", "b", "c"], cidades: Array.from({ length: 30 }, (_, i) => `C${i} RN`), profundidade: "rapida", extrair_email: false };
+  const partes = L.dividirEmPartes(p, 4);
+  assert.equal(partes.length, 4);
+  assert.deepEqual(partes.map((x) => x.cidades.length), [8, 8, 7, 7]);
+  const textos = partes.flatMap((x) => x.consultas.map((c) => c.texto)).sort();
+  assert.deepEqual(textos, L.consultasBuscaComum(p).map((c) => `${c.termo} ${c.cidade}`).sort());
+  assert.equal(new Set(partes.flatMap((x) => x.consultas.map((c) => c.id))).size, 90);
+  assert.deepEqual(L.dividirEmPartes({ ...p, cidades: ["Natal RN"] }, 4), []); // 1 cidade: não divide
+  assert.equal(L.dividirEmPartes(p, 1).length, 0); // 1 vaga: não divide
+  // 90 consultas (30 cidades × 3 termos, rápida): 4 máquinas levam ~1/4 do tempo de uma
+  const plano = L.planoBuscaComum(p, {}, 4);
+  assert.ok(plano.estimativa < plano.umMotor / 3.5, `${plano.estimativa} x ${plano.umMotor}`);
 });

@@ -120,3 +120,47 @@ def test_dia_fortaleza():
     from datetime import datetime, timezone
     assert fila.dia_fortaleza(datetime(2026, 9, 24, 2, 59, tzinfo=timezone.utc)) == "2026-09-23"
     assert fila.dia_fortaleza(datetime(2026, 9, 24, 3, 0, tzinfo=timezone.utc)) == "2026-09-24"
+
+
+def parte(id_, dono, minuto, ordem, **extra):
+    base = {"id": id_, "tipo": "parte", "mae_id": f"M{dono}", "dono_uid": dono, "status": "na_fila",
+            "criada_em": em(minuto), "ordem": ordem, "parametros": {"extrair_email": False},
+            "consultas": [{"termo": "x", "cidade": f"C{ordem}", "profundidade": "rapida"}]}
+    base.update(extra)
+    return base
+
+
+def test_busca_dividida_nao_roda_direto_so_as_partes():
+    mae = comum("M", "ana", -5, partes_total=2)
+    assert not fila.elegivel(mae, AGORA) and fila.eh_mae(mae)
+    assert ids(fila.ordenar_fila([mae, parte("P0", "ana", -5, 0), parte("P1", "ana", -5, 1)], AGORA)) == ["P0", "P1"]
+
+
+def test_partes_de_vendedores_diferentes_andam_juntas():
+    # Ana dividiu em 4 partes; Bia chegou depois com 2: com 4 vagas, as duas andam ao mesmo tempo.
+    buscas = [parte(f"A{i}", "ana", -10, i) for i in range(4)] + [parte(f"B{i}", "bia", -2, i) for i in range(2)]
+    assert ids(fila.ordenar_fila(buscas, AGORA))[:4] == ["A0", "B0", "A1", "B1"]
+
+
+def test_parte_pausada_so_depois_do_horario():
+    p = parte("P", "ana", -5, 0, pausada_ate=em(10))
+    assert not fila.elegivel(p, AGORA)
+    assert fila.elegivel(p, em(11))
+
+
+def test_parte_orfa_pelo_prazo_da_cidade():
+    p = parte("P", "ana", -5, 0, parametros={"extrair_email": False, "termos": ["a", "b"]},
+              consultas=[{"termo": "a", "cidade": "X", "profundidade": "rapida"},
+                         {"termo": "b", "cidade": "X", "profundidade": "rapida"}])
+    # 2 termos × (6 min + 1 min) + 10 min = 24 min
+    assert fila.orfa_apos_seg(p) == 2 * (6 * 60 + 60) + 600
+    assert fila.orfa_apos_seg(comum("C", "ana", 0)) == fila.ORFA_APOS_SEG
+
+
+def test_estado_da_fila_nao_mostra_a_mae_comum_rodando():
+    mae = comum("M", "ana", -5, partes_total=2, status="rodando")
+    p = parte("P0", "ana", -5, 0, status="rodando")
+    estado = fila.montar_estado_fila([mae, p, parte("P1", "ana", -5, 1)], AGORA)
+    assert [r["id"] for r in estado["rodando"]] == ["P0"]
+    assert [i["id"] for i in estado["itens"]] == ["P1"]
+    assert estado["itens"][0]["mae_id"] == "Mana"

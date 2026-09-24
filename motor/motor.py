@@ -13,6 +13,12 @@ O que ele faz:
   5. Grava os leads em lotes no Firestore, publica o estado da fila e, se sobrou
      trabalho quando o tempo da execução acabou, dispara a próxima execução.
 
+Paralelismo (aprovado pelo Breno em 24/09): o workflow roda até 4 cópias deste motor
+ao mesmo tempo ("vagas", MOTOR_VAGA=1..4), cada uma numa máquina. Uma busca comum com
+várias cidades chega dividida em partes; cada vaga pega a próxima parte da fila e grava
+os leads de cada cidade assim que ela fica pronta (resultados parciais na tela). Sinal de
+bloqueio → metade das vagas (ver paralelismo.py). O ritmo de cada máquina não muda.
+
 IMPORTANTE (repositório público, logs visíveis para qualquer pessoa):
   - nunca imprimir dados de leads, termos, cidades, conteúdo da busca ou tokens;
   - só imprimir contagens e status.
@@ -32,6 +38,7 @@ import firebase_admin
 from firebase_admin import auth, credentials, firestore
 
 import fila
+import paralelismo
 import rn_inteiro
 import tratamento
 import vigia
@@ -258,15 +265,17 @@ def rodar_consulta(consulta, extrair_email, pasta, limite_seg, nome_arquivo):
         limite_sem_atividade=tratamento.sem_atividade_seg(extrair_email),
     )
     log(f"  {vigia.resumo_diagnostico(motivo, codigo, segundos, diag)}")
-    return ler_resultados(arquivo_resultado), motivo, codigo, segundos
+    return ler_resultados(arquivo_resultado), motivo, codigo, segundos, diag
 
 
 # ------------------------------------------------------------ Processamento
 
 class Motor:
-    def __init__(self, db, paralelo=False):
+    def __init__(self, db, paralelo=False, vaga=1):
         self.db = db
         self.paralelo = paralelo
+        self.vaga = vaga
+        self.vazias_seguidas = 0  # sinal de bloqueio desta máquina (mesma regra do disjuntor)
         self.inicio = time.time()
         self.ultimo_fim_consulta = None
         self.metricas = fila.carregar_metricas(db)
@@ -293,6 +302,29 @@ class Motor:
         except Exception as erro:  # noqa: BLE001
             log(f"Não foi possível publicar o estado da fila ({type(erro).__name__}).")
 
+    def vaga_ligada(self):
+        """Esta vaga pode trabalhar? (vagas efetivas em config/paralelismo; 1 leitura)"""
+        try:
+            return self.vaga <= paralelismo.efetivas_agora(self.db)
+        except Exception:  # noqa: BLE001 - na dúvida, só a vaga 1 trabalha
+            return self.vaga == 1
+
+    def observar_sinal(self, consulta, encontrados, falhou, diag):
+        """Conta consultas vazias (regra do disjuntor) e a tela de consentimento.
+
+        Retorna o motivo do sinal de bloqueio (e já reduz as vagas) ou None.
+        """
+        conta = fila.vazia_conta_para_disjuntor(consulta, falhou)
+        self.vazias_seguidas, _ = fila.aplicar_disjuntor(self.vazias_seguidas, bool(encontrados), DISJUNTOR_VAZIAS, conta)
+        motivo = paralelismo.sinal_de_bloqueio(bool((diag or {}).get("consentimento")), self.vazias_seguidas, DISJUNTOR_VAZIAS)
+        if motivo:
+            self.vazias_seguidas = 0
+            try:
+                paralelismo.registrar_sinal(self.db, motivo, log)
+            except Exception as erro:  # noqa: BLE001
+                log(f"Não foi possível registrar o sinal de bloqueio ({type(erro).__name__}).")
+        return motivo
+
     def eh_admin(self, uid):
         if uid not in self.admins:
             try:
@@ -304,11 +336,12 @@ class Motor:
 
     # ------------------------------------------------ consultas
 
-    def executar_consultas(self, ref, consultas, extrair_email, antes=None, depois=None):
+    def executar_consultas(self, ref, consultas, extrair_email, antes=None, depois=None, progresso=True):
         """Roda uma lista de consultas. "antes"/"depois" podem pedir parada.
 
+        progresso=False: não grava o progresso a cada consulta (as partes gravam a cada cidade).
         Retorna dict com itens, falhas, parciais, feitas e parada
-        (None | "cancelada" | "tempo" | "pausa").
+        (None | "cancelada" | "tempo" | "pausa" | "vaga").
         """
         pasta = tempfile.mkdtemp(prefix="mapaleads-")
         resultado = {"itens": [], "falhas": 0, "parciais": 0, "feitas": 0, "parada": None}
@@ -329,11 +362,12 @@ class Motor:
                 self.pausar_entre_consultas()
                 log(f"Consulta {indice + 1}/{total} iniciada.")
                 encontrados = []
+                diag = {}
                 falhou = True  # consulta com erro ou cortada pela vigia (sinal para o disjuntor)
                 try:
-                    encontrados, motivo, codigo, segundos = rodar_consulta(
-                        consulta, extrair_email, pasta, limite, f"q{indice}"
-                    )
+                    retorno = rodar_consulta(consulta, extrair_email, pasta, limite, f"q{indice}")
+                    encontrados, motivo, codigo, segundos = retorno[:4]
+                    diag = retorno[4] if len(retorno) > 4 else {}
                     self.duracoes[tratamento.chave_metrica(consulta["profundidade"], extrair_email)].append(segundos)
                     resultado["itens"].extend((e, consulta) for e in encontrados)
                     normal = motivo in vigia.MOTIVOS_NORMAIS
@@ -348,13 +382,14 @@ class Motor:
                 self.ultimo_fim_consulta = time.time()
                 resultado["feitas"] = indice + 1
                 log(f"Consulta {indice + 1}/{total}: {len(encontrados)} lugar(es).")
-                ref.update({
-                    "progresso": f"{indice + 1}/{total}",
-                    "consultas_feitas": indice + 1,
-                    "batimento_em": firestore.SERVER_TIMESTAMP,
-                })
+                if progresso:
+                    ref.update({
+                        "progresso": f"{indice + 1}/{total}",
+                        "consultas_feitas": indice + 1,
+                        "batimento_em": firestore.SERVER_TIMESTAMP,
+                    })
                 if depois:
-                    resultado["parada"] = depois(indice, encontrados, falhou)
+                    resultado["parada"] = depois(indice, encontrados, falhou, diag, resultado)
                     if resultado["parada"]:
                         break
         finally:
@@ -403,7 +438,11 @@ class Motor:
                 return "cancelada"
             return None
 
-        resultado = self.executar_consultas(ref, consultas, extrair_email, antes=antes)
+        def depois(indice, encontrados, falhou, diag, _resultado):
+            self.observar_sinal(consultas[indice], encontrados, falhou, diag)  # só reduz as vagas
+            return None
+
+        resultado = self.executar_consultas(ref, consultas, extrair_email, antes=antes, depois=depois)
         feitas = resultado["feitas"]
 
         if resultado["parada"] == "tempo":
@@ -481,11 +520,22 @@ class Motor:
             atual = mae_ref.get().to_dict() or {}
             if atual.get("cancelar_solicitado"):
                 return "cancelada"
+            if indice > 0 and not self.vaga_ligada():
+                return "vaga"
             return None
 
-        def depois(indice, encontrados, falhou):
+        def depois(indice, encontrados, falhou, diag, _resultado):
             conta = fila.vazia_conta_para_disjuntor(consultas[indice], falhou)
             vazias, disparou = fila.aplicar_disjuntor(estado["vazias"], bool(encontrados), DISJUNTOR_VAZIAS, conta)
+            consentimento = bool((diag or {}).get("consentimento"))
+            if disparou or consentimento:
+                try:  # sinal de bloqueio: metade das vagas (além da pausa de 30 min do RN)
+                    paralelismo.registrar_sinal(
+                        self.db, paralelismo.MOTIVO_CONSENTIMENTO if consentimento else paralelismo.MOTIVO_VAZIAS, log)
+                except Exception as erro:  # noqa: BLE001
+                    log(f"Não foi possível registrar o sinal de bloqueio ({type(erro).__name__}).")
+                disparou = True
+                vazias = 0 if consentimento else vazias
             estado["vazias"] = vazias
             mae_ref.update({
                 "consultas_feitas": firestore.Increment(1),
@@ -501,10 +551,10 @@ class Motor:
         restantes = consultas[resultado["feitas"]:]
 
         if resultado["parada"] == "pausa":
-            log("Disjuntor: 3 consultas seguidas sem lead; RN pausado por 30 min.")
+            log("Disjuntor: sinal de bloqueio; RN pausado por 30 min.")
             rn_inteiro.pausar_rn(self.db, mae_id, estado["pausa_ate"])
             mae_ref.update({"vazias_seguidas": 0})
-        if resultado["parada"] in ("tempo", "pausa") and restantes:
+        if resultado["parada"] in ("tempo", "pausa", "vaga") and restantes:
             rn_inteiro.criar_filha_restante(self.db, dados, restantes, estado["pausa_ate"])
             log(f"{len(restantes)} consulta(s) do lote voltaram para a fila.")
             if resultado["parada"] == "tempo":
@@ -517,6 +567,107 @@ class Motor:
         gravar_resultado(ref, dados, dono, leads, resumo, aviso, time.time() - inicio, status=status)
         log(f"Lote do RN {status}: {len(leads)} lead(s).")
 
+    # ------------------------------------------------ parte de uma busca comum (paralelismo)
+
+    def gravar_parcial(self, ref, mae_ref, dados, leads, cidades_prontas, consultas_da_cidade):
+        """Leads já prontos desta parte (1 cidade a mais) + contadores na mãe, num único batch.
+
+        A tela mostra "X de Y cidades prontas" e já deixa ver esses leads.
+        """
+        dono = dados.get("dono_uid") or ""
+        lotes = tratamento.dividir_em_lotes(leads)
+        antigos = int(dados.get("_lotes_parciais") or 0)
+        lote = self.db.batch()
+        for indice, itens in enumerate(lotes):
+            lote.set(ref.collection("lotes").document(str(indice)), {"dono_uid": dono, "indice": indice, "leads": itens})
+        for indice in range(len(lotes), antigos):
+            lote.delete(ref.collection("lotes").document(str(indice)))
+        lote.update(ref, {
+            "cidades_prontas": cidades_prontas,
+            "qtd_lotes": len(lotes),
+            "batimento_em": firestore.SERVER_TIMESTAMP,
+        })
+        lote.update(mae_ref, {
+            "cidades_prontas": firestore.Increment(1),
+            "consultas_feitas": firestore.Increment(consultas_da_cidade),
+            f"parciais.{ref.id}": len(lotes),
+            "batimento_em": firestore.SERVER_TIMESTAMP,
+        })
+        lote.commit()
+        dados["_lotes_parciais"] = len(lotes)
+
+    def processar_parte(self, doc):
+        ref = doc.reference
+        dados = doc.to_dict() or {}
+        mae_ref = self.db.collection(COLECAO).document(dados.get("mae_id"))
+        mae = mae_ref.get().to_dict() or {}
+        inicio = time.time()
+        dono = dados.get("dono_uid") or ""
+        extrair_email = bool((dados.get("parametros") or {}).get("extrair_email"))
+
+        if mae.get("cancelar_solicitado"):
+            ref.update({"status": "cancelada", "finalizada_em": firestore.SERVER_TIMESTAMP})
+            return
+        if mae.get("status") == "na_fila":
+            mae_ref.update({"status": "rodando", "iniciada_em": firestore.SERVER_TIMESTAMP})
+
+        # Cidade por cidade: todas as consultas (termos) de uma cidade seguidas.
+        brutas = list(dados.get("consultas") or [])
+        ordem_cidades = {cidade: i for i, cidade in enumerate(dict.fromkeys(c.get("cidade") for c in brutas))}
+        consultas = sorted(brutas, key=lambda c: ordem_cidades[c.get("cidade")])
+        total = len(consultas)
+        log(f"Parte iniciada (vaga {self.vaga}): {total} consulta(s).")
+        ref.update({"total_consultas": total, "cidades_prontas": 0})
+        estado = {"cidades": 0, "pausa_ate": None}
+
+        def antes(indice):
+            if indice == 0:
+                return None
+            if (mae_ref.get().to_dict() or {}).get("cancelar_solicitado"):
+                return "cancelada"
+            if not self.vaga_ligada():
+                return "vaga"
+            return None
+
+        def depois(indice, encontrados, falhou, diag, resultado):
+            cidade = consultas[indice].get("cidade")
+            ultima_da_cidade = indice + 1 == total or consultas[indice + 1].get("cidade") != cidade
+            if ultima_da_cidade:
+                estado["cidades"] += 1
+                por_cidade = sum(1 for c in consultas if c.get("cidade") == cidade)
+                try:
+                    self.gravar_parcial(ref, mae_ref, dados, tratamento.tratar_resultados(resultado["itens"]),
+                                        estado["cidades"], por_cidade)
+                except Exception as erro:  # noqa: BLE001 - o parcial não derruba a parte (o final grava tudo)
+                    log(f"Não foi possível gravar o parcial ({type(erro).__name__}).")
+                log(f"Cidade pronta ({estado['cidades']} desta parte).")
+            if self.observar_sinal(consultas[indice], encontrados, falhou, diag):
+                estado["pausa_ate"] = fila.agora_utc() + DISJUNTOR_PAUSA
+                return "pausa"
+            return None
+
+        resultado = self.executar_consultas(ref, consultas, extrair_email, antes=antes, depois=depois, progresso=False)
+        feitas = resultado["feitas"]
+        # Cidade começada e não terminada volta inteira (os leads dela ficam só no final desta parte).
+        cidades_feitas = list(dict.fromkeys(c.get("cidade") for c in consultas[:feitas]))[:estado["cidades"]]
+        restantes = [c for c in consultas if c.get("cidade") not in cidades_feitas]
+        if resultado["parada"] in ("tempo", "pausa", "vaga") and restantes:
+            rn_inteiro.criar_filha_restante(self.db, dados, restantes, estado["pausa_ate"])
+            motivo = {"tempo": "tempo da execução", "pausa": "pausa de 30 min", "vaga": "vaga desligada"}[resultado["parada"]]
+            log(f"{len(restantes)} consulta(s) da parte voltaram para a fila ({motivo}).")
+            if resultado["parada"] == "tempo":
+                self.parou_por_tempo = True
+            # Só as cidades prontas ficam nesta parte (sem repetir as que voltaram).
+            resultado["itens"] = [(e, c) for e, c in resultado["itens"] if c.get("cidade") in cidades_feitas]
+
+        leads = tratamento.tratar_resultados(resultado["itens"])
+        resumo = tratamento.calcular_resumo(leads)
+        status = "cancelada" if resultado["parada"] == "cancelada" else "concluida"
+        aviso = self.montar_aviso(resultado, max(feitas, 1), leads) if leads else ""
+        gravar_resultado(ref, {**dados, "qtd_lotes": dados.get("_lotes_parciais") or dados.get("qtd_lotes")},
+                         dono, leads, resumo, aviso, time.time() - inicio, status=status)
+        log(f"Parte {status}: {len(leads)} lead(s).")
+
     # ------------------------------------------------ laço principal
 
     def processar_com_tratamento_de_erro(self, doc):
@@ -525,6 +676,8 @@ class Motor:
         try:
             if tipo == fila.TIPO_FILHA:
                 self.processar_filha(doc)
+            elif tipo == fila.TIPO_PARTE:
+                self.processar_parte(doc)
             else:
                 self.processar_comum(doc)
         except ErroBusca as erro:
@@ -534,7 +687,7 @@ class Motor:
             log(f"Busca terminou com erro inesperado ({type(erro).__name__}).")
             marcar_erro(doc.reference, "Erro inesperado no motor. Tente novamente; se persistir, avise o administrador.", inicio)
         finally:
-            if tipo == fila.TIPO_FILHA:
+            if tipo in (fila.TIPO_FILHA, fila.TIPO_PARTE):
                 mae_id = (doc.to_dict() or {}).get("mae_id")
                 if mae_id:
                     try:
@@ -543,6 +696,9 @@ class Motor:
                         log(f"Não foi possível consolidar a busca-mãe ({type(erro).__name__}).")
 
     def rodar(self):
+        if not self.vaga_ligada():
+            log(f"Vaga {self.vaga} desligada agora (paralelismo reduzido); nada a fazer.")
+            return
         fila.recuperar_orfas(self.db, self.paralelo, log)
         rn_inteiro.finalizar_maes_pendentes(self.db, gravar_resultado, log)
 
@@ -551,7 +707,11 @@ class Motor:
             if self.restante_seg() < MARGEM_NOVA_BUSCA_SEG:
                 self.parou_por_tempo = True
                 break
-            doc = fila.reservar_proxima(self.db, fila.agora_utc())
+            efetivas = paralelismo.efetivas_agora(self.db)
+            if self.vaga > efetivas:
+                log(f"Vaga {self.vaga} desligada (paralelismo {efetivas}); encerrando.")
+                break
+            doc = fila.reservar_proxima(self.db, fila.agora_utc(), vagas_rn=paralelismo.vagas_rn(efetivas))
             if doc is None:
                 break
             processadas += 1
@@ -571,10 +731,14 @@ class Motor:
 
 def main():
     db = conectar_firestore()
-    inputs = ler_inputs_do_disparo()
-    criar_busca_manual(db, inputs)
+    try:
+        vaga = max(1, min(paralelismo.VAGAS_MAX, int(os.environ.get("MOTOR_VAGA") or 1)))
+    except ValueError:
+        vaga = 1
+    if vaga == 1:  # as 4 vagas recebem o mesmo formulário: só a 1ª cria a busca manual
+        criar_busca_manual(db, ler_inputs_do_disparo())
     paralelo = os.environ.get("MOTOR_PARALELO", "").strip().lower() in ("1", "true", "sim")
-    Motor(db, paralelo=paralelo).rodar()
+    Motor(db, paralelo=paralelo, vaga=vaga).rodar()
 
 
 if __name__ == "__main__":

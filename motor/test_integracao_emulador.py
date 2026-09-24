@@ -208,3 +208,152 @@ def test_agendada_nao_roda_antes_da_hora(db, monkeypatch):
     assert chamadas == []
     estado = db.collection("fila").document("estado").get().to_dict()
     assert estado["aguardando"] == [{"id": "F0", "tipo": "rn_filha", "mae_id": "M"}]
+
+
+# ---------------------------------------------------------------- paralelismo (partes por cidade)
+
+def busca_em_partes(db, dono, termos, grupos, id_="B", minuto=0):
+    """Busca comum já dividida em partes (como a Function cria): grupos = [[cidade, ...], ...]."""
+    cidades = [c for g in grupos for c in g]
+    criar(db, id_, {**comum(dono, termos, cidades, minuto=minuto, status="na_fila"),
+                    "partes_total": len(grupos), "cidades_total": len(cidades),
+                    "total_consultas": len(termos) * len(cidades), "consultas_feitas": 0, "cidades_prontas": 0})
+    for i, grupo in enumerate(grupos):
+        consultas = [{"id": f"q{i}{j}{k}", "termo": t, "cidade": c, "texto": f"{t} {c}", "profundidade": "rapida",
+                      "criterio": "cidade"} for j, c in enumerate(grupo) for k, t in enumerate(termos)]
+        criar(db, f"{id_}p{i}", {"tipo": "parte", "mae_id": id_, "dono_uid": dono, "status": "na_fila", "ordem": i,
+                                 "criada_em": datetime(2026, 9, 23, 12, minuto, tzinfo=timezone.utc),
+                                 "parametros": {"termos": termos, "extrair_email": False}, "cidades": grupo,
+                                 "consultas": consultas})
+
+
+def test_partes_juntam_os_leads_sem_duplicar_e_gravam_parciais(db, monkeypatch):
+    busca_em_partes(db, "ana", ["home care", "cuidador"], [["Natal RN", "Macaíba RN"], ["Parnamirim RN"]])
+    parciais = []
+
+    def ao_rodar(consulta):
+        mae = ler(db, "B")
+        parciais.append((mae.get("cidades_prontas"), dict(mae.get("parciais") or {})))
+
+    def respostas(consulta):
+        cidade = consulta["cidade"].replace(" RN", "")
+        # P1 (Natal) aparece nas duas partes e nos dois termos: fica 1 só
+        return [lugar(1), lugar(len(consulta["texto"]), cidade)]
+
+    chamadas = instalar_scraper_falso(monkeypatch, respostas, ao_rodar)
+    motor.Motor(db, paralelo=True, vaga=1).rodar()
+
+    # Cidade por cidade: os 2 termos de Natal, depois os 2 de Macaíba (parte 0), depois Parnamirim (parte 1)
+    assert chamadas == ["home care Natal RN", "cuidador Natal RN", "home care Macaíba RN", "cuidador Macaíba RN",
+                        "home care Parnamirim RN", "cuidador Parnamirim RN"]
+    # Parciais: depois de Natal (2 consultas) a mãe já tinha 1 cidade pronta e o lote parcial da parte 0
+    assert parciais[2] == (1, {"Bp0": 1})
+    assert parciais[4][0] == 2
+    b = ler(db, "B")
+    assert b["status"] == "concluida" and b["cidades_prontas"] == 3 and b["consultas_feitas"] == 6
+    ids = [l["id_lugar"] for l in leads_de(db, "B")]
+    assert len(ids) == len(set(ids)) and ids.count("P1") == 1
+    assert b["resumo"]["total"] == len(ids)
+    assert ler(db, "Bp0")["status"] == "concluida" and ler(db, "Bp1")["status"] == "concluida"
+    assert b.get("duracao_segundos") is not None
+    estado = db.collection("fila").document("estado").get().to_dict()
+    assert estado["itens"] == [] and estado["rodando"] == []
+
+
+def test_duas_maquinas_nao_consolidam_duas_vezes(db, monkeypatch):
+    import rn_inteiro
+    busca_em_partes(db, "ana", ["x"], [["Natal RN"], ["Parnamirim RN"]])
+    for i in (0, 1):  # as duas partes acabaram de terminar em vagas diferentes
+        ref = db.collection("buscas").document(f"Bp{i}")
+        ref.update({"status": "concluida", "qtd_lotes": 1})
+        ref.collection("lotes").document("0").set({"dono_uid": "ana", "leads": [tratamento.montar_lead(
+            lugar(i + 1), {"termo": "x", "cidade": "Natal RN", "criterio": "cidade"})]})
+    mae = db.collection("buscas").document("B")
+    assert rn_inteiro.pegar_trava_consolidacao(db, mae) is True
+    assert rn_inteiro.pegar_trava_consolidacao(db, mae) is False  # a outra máquina não consolida de novo
+    mae.update({"consolidando_em": None})
+    assert rn_inteiro.finalizar_mae_se_pronta(db, "B", motor.gravar_resultado, motor.log) is True
+    assert rn_inteiro.finalizar_mae_se_pronta(db, "B", motor.gravar_resultado, motor.log) is False
+    estat = [d.to_dict() for d in db.collection("estatisticas").stream() if d.id.endswith("__ana")]
+    assert len(estat) == 1 and estat[0]["buscas"] == 1 and estat[0]["leads"] == 2
+
+
+def test_vaga_desligada_nao_trabalha_e_devolve_o_resto(db, monkeypatch):
+    busca_em_partes(db, "ana", ["x"], [["Natal RN", "Macaíba RN", "Ceará-Mirim RN"]])
+    db.collection("config").document("paralelismo").set({"vagas_base": 1, "ultimo_sinal_em": datetime.now(timezone.utc)})
+    chamadas = instalar_scraper_falso(monkeypatch, lambda c: [lugar(len(c["texto"]))])
+    motor.Motor(db, paralelo=True, vaga=2).rodar()
+    assert chamadas == []  # vaga 2 desligada: nem começa
+
+    # Vaga 3 trabalhando quando o paralelismo cai para 2: termina a cidade atual e devolve o resto.
+    db.collection("config").document("paralelismo").set({})
+
+    def ao_rodar(consulta):
+        db.collection("config").document("paralelismo").set({"vagas_base": 2, "ultimo_sinal_em": datetime.now(timezone.utc)})
+
+    chamadas = instalar_scraper_falso(monkeypatch, lambda c: [lugar(len(c["texto"]))], ao_rodar)
+    motor.Motor(db, paralelo=True, vaga=3).rodar()
+    assert chamadas == ["x Natal RN"]
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    novas = [d.to_dict() for d in db.collection("buscas").where(filter=FieldFilter("mae_id", "==", "B"))
+             .where(filter=FieldFilter("status", "==", "na_fila")).stream()]
+    assert [n["cidades"] for n in novas] == [["Macaíba RN", "Ceará-Mirim RN"]]
+    assert "pausada_ate" not in novas[0]
+    assert ler(db, "B")["partes_total"] == 2 and ler(db, "B")["cidades_prontas"] == 1
+
+
+def test_sinal_de_bloqueio_corta_as_vagas_e_pausa_a_parte(db, monkeypatch):
+    # Cidades grandes (> 20 mil hab.) sem nenhum resultado: 3 seguidas = sinal de bloqueio.
+    busca_em_partes(db, "ana", ["x"], [["Natal RN", "Mossoró RN", "Parnamirim RN", "Caicó RN", "Macaíba RN"]])
+    instalar_scraper_falso(monkeypatch, lambda c: [])
+    saida = []
+    monkeypatch.setattr(motor, "log", lambda m: saida.append(m))
+    motor.Motor(db, paralelo=True, vaga=1).rodar()
+
+    conf = db.collection("config").document("paralelismo").get().to_dict()
+    assert conf["vagas_base"] == 2 and conf["motivo"] == "vazias"
+    assert any("paralelismo 4 → 2" in m for m in saida)
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    novas = [d.to_dict() for d in db.collection("buscas").where(filter=FieldFilter("mae_id", "==", "B"))
+             .where(filter=FieldFilter("status", "==", "na_fila")).stream()]
+    assert [n["cidades"] for n in novas] == [["Caicó RN", "Macaíba RN"]]
+    assert novas[0]["pausada_ate"] > datetime.now(timezone.utc)
+    assert ler(db, "B")["status"] == "rodando"  # termina depois da pausa
+    # Log público: só números e status (nenhuma cidade ou termo)
+    assert not any(("Natal" in m or "Mossoró" in m or " x " in m) for m in saida)
+
+
+def test_consentimento_e_sinal_na_hora(db, monkeypatch):
+    busca_em_partes(db, "ana", ["x"], [["Natal RN", "Macaíba RN"]])
+
+    def falso(consulta, extrair_email, pasta, limite_seg, nome_arquivo):
+        return [lugar(1)], "fim_real", 0, 30, {"consentimento": True}
+
+    monkeypatch.setattr(motor, "rodar_consulta", falso)
+    motor.Motor(db, paralelo=True, vaga=1).rodar()
+    conf = db.collection("config").document("paralelismo").get().to_dict()
+    assert conf["vagas_base"] == 2 and conf["motivo"] == "consentimento"
+
+
+def test_cancelar_busca_em_partes_guarda_o_parcial(db, monkeypatch):
+    busca_em_partes(db, "ana", ["x"], [["Natal RN", "Macaíba RN"], ["Parnamirim RN"]])
+
+    def ao_rodar(consulta):
+        if consulta["texto"] == "x Natal RN":
+            db.collection("buscas").document("B").update({"cancelar_solicitado": True})
+
+    instalar_scraper_falso(monkeypatch, lambda c: [lugar(len(c["texto"]))], ao_rodar)
+    motor.Motor(db, paralelo=True, vaga=1).rodar()
+    b = ler(db, "B")
+    assert b["status"] == "cancelada" and b["resumo"]["total"] == 1
+    assert ler(db, "Bp1")["status"] == "cancelada"
+
+
+def test_estado_inteiro_ocupa_no_maximo_2_vagas(db, monkeypatch):
+    mae_e_filhas(db, [["Caicó"], ["Assú"], ["Apodi"]])
+    db.collection("buscas").document("F0").update({"status": "rodando", "batimento_em": datetime.now(timezone.utc)})
+    db.collection("buscas").document("F1").update({"status": "rodando", "batimento_em": datetime.now(timezone.utc)})
+    chamadas = instalar_scraper_falso(monkeypatch, lambda c: [lugar(1)])
+    motor.Motor(db, paralelo=True, vaga=3).rodar()
+    assert chamadas == []  # 2 lotes do Estado inteiro já rodando: a vaga 3 não pega o terceiro
+    assert ler(db, "F2")["status"] == "na_fila"

@@ -96,7 +96,9 @@ try {
     ...celular.map(([nome, hash, acao], i) => [`${t + 1}${String(i + 1).padStart(2, "0")}-${nome}-390-${tema}`, 390, 844, tema, hash, acao]),
     [`${t + 1}90-inicio-360-${tema}`, 360, 780, tema, "inicio"], [`${t + 1}91-leads-360-${tema}`, 360, 780, tema, "leads"],
   ]);
-  const telas = process.env.CONJUNTO === "celular" ? telasCelular : [
+  // CONJUNTO=planilha: só baixa a planilha .xlsx pela tela (Meus leads → .xlsx → "Baixar .xlsx"), com os leads fictícios.
+  const telas = process.env.CONJUNTO === "planilha" ? [["planilha", 1366, 768, "claro", "leads", "planilha"]]
+    : process.env.CONJUNTO === "celular" ? telasCelular : [
     // [arquivo, largura, altura, tema, hash, acao]
     ["01-login-1366", 1366, 768, "claro", null],
     ["02-inicio-1366", 1366, 768, "claro", "inicio"],
@@ -123,7 +125,7 @@ try {
     ...(admin ? [["29-admin-390", 390, 844, "claro", "admin"]] : []),
   ];
   for (const [arquivo, largura, altura, tema, hash, acao] of telas) {
-    const ctx = await navegador.newContext({ viewport: { width: largura, height: altura }, deviceScaleFactor: largura < 500 ? 2 : 1, locale: "pt-BR",
+    const ctx = await navegador.newContext({ viewport: { width: largura, height: altura }, deviceScaleFactor: largura < 500 ? 2 : 1, locale: "pt-BR", acceptDownloads: true,
       colorScheme: largura < 500 ? "dark" : "light", hasTouch: largura < 500, isMobile: largura < 500 });
     if (local) await rotearCdn(ctx);
     if (funcoesLocais) await rotearApiLocal(ctx, site, funcoesLocais);
@@ -186,6 +188,14 @@ try {
         await p.waitForTimeout(450); // meio do salto
         await p.screenshot({ path: `${PASTA}/${arquivo}.png` });
         console.log(`${arquivo}.png`);
+        await ctx.close();
+        continue;
+      }
+      if (acao === "planilha") {
+        await p.click("#baixar-xlsx"); await p.waitForSelector("#confirmacao:not(.oculto)");
+        const [arquivo] = await Promise.all([p.waitForEvent("download"), p.click("#conf-sim")]);
+        await arquivo.saveAs(`${PASTA}/${arquivo.suggestedFilename()}`);
+        console.log(arquivo.suggestedFilename());
         await ctx.close();
         continue;
       }

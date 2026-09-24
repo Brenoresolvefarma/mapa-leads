@@ -10,11 +10,11 @@
 // e rodando no runner com as credenciais reais. Motivo: o deploy preview não recebe as
 // variáveis secretas do Netlify. /api/config-publica vem do site de produção (é pública).
 import { randomBytes } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
+import ExcelJS from "exceljs";
 import { medirLargura } from "../testes/rotas-cdn.mjs";
 import { carregarFuncoesLocais, rotearApiLocal } from "./api_local.mjs";
 import { initializeApp, cert } from "firebase-admin/app";
@@ -155,16 +155,25 @@ try {
     confere(/Microrregião\s*Natal/.test(await p.textContent("#ficha")), "ficha");
     await p.click("#ficha [data-fechar]");
   });
-  await etapa("download .csv e .xlsx (SheetJS do CDN oficial)", async () => {
+  await etapa("download .csv e planilha .xlsx formatada (ExcelJS do cdnjs)", async () => {
     await p.selectOption("#f-cidade", "Natal");
     const [csv] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-csv")]);
     confere(csv.suggestedFilename() === `teste-tela-natal-${hoje}.csv`, `nome do csv: ${csv.suggestedFilename().replace(/[^a-z0-9.-]/gi, "")}`);
     confere(readFileSync(await csv.path(), "utf8").trim().split("\r\n").length === 3, "linhas do csv");
-    const [xlsx] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-xlsx")]);
-    confere(xlsx.suggestedFilename() === `teste-tela-natal-${hoje}.xlsx`, "nome do xlsx");
+    await p.click("#baixar-xlsx");
+    await p.waitForSelector("#confirmacao:not(.oculto)");
+    confere(/^Vão sair 2 leads/.test(await p.textContent("#conf-texto")), "aviso de quantas linhas vão sair");
+    const [xlsx] = await Promise.all([p.waitForEvent("download"), p.click("#conf-sim")]);
+    const [a, m, d] = hoje.split("-");
+    confere(xlsx.suggestedFilename() === `MapaLeads_teste-tela_Natal_${d}-${m}-${a}.xlsx`, "nome do xlsx");
     await xlsx.saveAs(join(pasta, "t.xlsx"));
-    const xml = execFileSync("unzip", ["-p", join(pasta, "t.xlsx")], { encoding: "utf8" });
-    confere(xml.includes("cidade_confere") && !xml.includes("id_lugar") && xml.includes("Fictício A"), "conteúdo do xlsx");
+    const livro = new ExcelJS.Workbook();
+    await livro.xlsx.readFile(join(pasta, "t.xlsx"));
+    const ws = livro.getWorksheet("Leads");
+    confere(ws && livro.getWorksheet("Resumo"), "abas Leads e Resumo");
+    confere(ws.getRow(1).values.slice(1).join("|") === "Nome|Categoria|Cidade|Microrregião|Bairro|Endereço|Telefone|WhatsApp|Site|E-mail|Nota|Avaliações|No segmento|Link do Google Maps|Busca (termo)|Data da coleta", "colunas do xlsx");
+    confere(ws.views[0]?.state === "frozen" && ws.autoFilter === "A1:P3", "cabeçalho travado e filtro");
+    confere(ws.getCell("A2").value === "Fictício A" && ws.getCell("H2").value?.hyperlink === "https://wa.me/5584900000001", "linha e link do WhatsApp");
     await p.selectOption("#f-cidade", ""); // o mapa acompanha o filtro da tabela: volta ao RN inteiro
   });
   await etapa("mapa (Leaflet do CDN): RN › Natal › Natal pelo painel e categoria → tabela", async () => {
@@ -195,8 +204,12 @@ try {
       await p.click("#buscar");
       await esperarHash(p, "#inicio");
       await esperar(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
-      const snap = await db.collection("buscas").where("dono_uid", "==", usuarios.comum.uid).where("status", "in", ["na_fila", "rodando"]).get();
-      confere(snap.size === 1, "busca criada no banco");
+      const todas = await db.collection("buscas").where("dono_uid", "==", usuarios.comum.uid).where("status", "in", ["na_fila", "rodando"]).get();
+      // A busca (lista: true) e, com várias cidades, as partes dela (uma por máquina do motor).
+      const snap = { docs: todas.docs.filter((d) => d.data().lista === true) };
+      confere(snap.docs.length === 1, "busca criada no banco");
+      const partes = todas.docs.filter((d) => d.data().tipo === "parte" && d.data().mae_id === snap.docs[0].id).length;
+      confere(partes === Number(snap.docs[0].data().partes_total || 0), `partes criadas: ${partes}`);
       criadas.push(snap.docs[0].id);
       await p.click(`#ultimas [data-cancelar='${snap.docs[0].id}']`);
       await p.click("#conf-sim"); // confirmação em dois passos
@@ -320,7 +333,10 @@ try {
 } finally {
   // ---------- limpeza: nada do teste fica em produção
   await navegador?.close();
-  for (const id of [BUSCA, ...Object.values(APAGAR), ...criadas]) {
+  // Partes (paralelismo) das buscas criadas pelo teste também saem, com os lotes parciais.
+  const partesCriadas = [];
+  for (const id of criadas) partesCriadas.push(...(await db.collection("buscas").where("mae_id", "==", id).get()).docs.map((d) => d.id));
+  for (const id of [BUSCA, ...Object.values(APAGAR), ...criadas, ...partesCriadas]) {
     for (const l of (await db.collection(`buscas/${id}/lotes`).get()).docs) await l.ref.delete();
     await db.doc(`buscas/${id}`).delete();
   }

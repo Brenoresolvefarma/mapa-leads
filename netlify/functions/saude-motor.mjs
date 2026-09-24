@@ -4,7 +4,7 @@
 // pausadas pelo disjuntor, agendadas, órfãs) e números do dia.
 // Não devolve termos, cidades nem dados de leads.
 
-import { decidirDespertar, diaFortaleza, MOTOR_VIVO_SEG } from "../lib/logica.mjs";
+import { decidirDespertar, diaFortaleza, ehMae, MOTOR_VIVO_SEG, vagasEfetivas } from "../lib/logica.mjs";
 import { ErroHttp, firebase, handler, json, usuarioDoToken } from "../lib/servidor.mjs";
 
 export default handler(async (req) => {
@@ -13,36 +13,42 @@ export default handler(async (req) => {
   const { db } = firebase();
   const agora = new Date();
   const col = db.collection("buscas");
-  const campos = ["status", "tipo", "agendada_para", "pausada_ate", "batimento_em", "iniciada_em", "mae_id"];
+  const campos = ["status", "tipo", "agendada_para", "pausada_ate", "batimento_em", "iniciada_em", "mae_id", "partes_total"];
 
-  const [naFila, rodando, despertador, metricas, hoje, execucoes] = await Promise.all([
+  const [naFila, rodando, despertador, metricas, hoje, execucoes, paralelismo] = await Promise.all([
     col.where("status", "==", "na_fila").select(...campos).limit(300).get(),
     col.where("status", "==", "rodando").select(...campos).limit(100).get(),
     db.doc("config/despertador").get(),
     db.doc("config/metricas").get(),
     db.doc(`estatisticas/${diaFortaleza(agora)}__geral`).get(),
     execucoesDoGitHub(),
+    db.doc("config/paralelismo").get(),
   ]);
 
   const ts = agora.getTime() / 1000;
   const seg = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() / 1000 : 0);
   const fila = naFila.docs.map((d) => d.data());
-  const ativos = rodando.docs.map((d) => d.data()).filter((b) => b.tipo !== "rn_mae");
+  const ativos = rodando.docs.map((d) => d.data()).filter((b) => !ehMae(b));
   const situacao = {
-    na_fila: fila.filter((b) => b.tipo !== "rn_mae").length,
+    na_fila: fila.filter((b) => !ehMae(b)).length,
     rodando: ativos.length,
     pausadas: fila.filter((b) => seg(b.pausada_ate) > ts).length,
     pausada_ate: maior(fila.map((b) => seg(b.pausada_ate)).filter((s) => s > ts)),
     agendadas: fila.filter((b) => seg(b.agendada_para) > ts).length,
     orfas: ativos.filter((b) => ts - seg(b.batimento_em || b.iniciada_em) >= MOTOR_VIVO_SEG).length,
     ultimo_batimento: maior(ativos.map((b) => seg(b.batimento_em))),
-    rn_em_andamento: new Set([...fila, ...ativos].filter((b) => b.mae_id).map((b) => b.mae_id)).size,
+    rn_em_andamento: new Set([...fila, ...ativos].filter((b) => b.tipo === "rn_filha").map((b) => b.mae_id)).size,
   };
   const desp = despertador.data() || null;
+  const par = paralelismo.data() || {};
+  const vagas = vagasEfetivas(par, agora);
   return json(200, {
     agora: agora.toISOString(),
     fila: situacao,
-    decisao_agora: decidirDespertar([...fila, ...ativos], agora),
+    // Paralelismo: só números e data do último sinal de bloqueio (nada de leads).
+    paralelismo: { vagas, maquinas_rodando: ativos.length, ultimo_sinal_em: par.ultimo_sinal_em?.toDate?.().toISOString() ?? null,
+      motivo: par.motivo ?? null },
+    decisao_agora: decidirDespertar([...fila, ...ativos], agora, vagas),
     despertador: desp && {
       ultima_execucao: desp.ultima_execucao?.toDate?.().toISOString() ?? null,
       motivo: desp.motivo ?? null,

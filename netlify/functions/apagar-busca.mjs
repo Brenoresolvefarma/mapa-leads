@@ -24,11 +24,14 @@ export default handler(async (req) => {
   const dados = doc.data();
   if (!usuario.admin && dados.dono_uid !== usuario.uid) throw new ErroHttp(403, "Você só pode apagar as suas buscas.");
   if (dados.tipo === "rn_filha") throw new ErroHttp(400, "Apague pela busca principal do Estado inteiro.");
+  if (dados.tipo === "parte") throw new ErroHttp(400, "Apague pela busca principal.");
   if (!FINAIS.includes(dados.status)) throw new ErroHttp(409, "Busca em andamento: cancele primeiro e depois apague.");
 
   // Mãe do Estado inteiro: as filhas (lotes de consultas) vão junto. A mãe só fica final
   // depois que todas as filhas terminaram, mas conferimos de novo por segurança.
-  const filhas = dados.tipo === "rn_mae" ? (await db.collection("buscas").where("mae_id", "==", id).get()).docs : [];
+  // Busca comum dividida em partes (paralelismo): as partes e os leads parciais delas vão junto.
+  const temFilhas = dados.tipo === "rn_mae" || Number(dados.partes_total) > 0;
+  const filhas = temFilhas ? (await db.collection("buscas").where("mae_id", "==", id).get()).docs : [];
   if (filhas.some((f) => !FINAIS.includes(f.data().status))) throw new ErroHttp(409, "Busca em andamento: cancele primeiro e depois apague.");
 
   let lotes = 0;

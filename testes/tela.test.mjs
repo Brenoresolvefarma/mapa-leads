@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium, webkit } from "playwright-core";
 import { medirLargura, rotearCdn } from "./rotas-cdn.mjs";
+import ExcelJS from "exceljs";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 process.env.FIREBASE_PROJECT_ID = "demo-mapaleads";
@@ -31,6 +32,8 @@ let navegador, local, erros = [];
 const uids = {};
 
 const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+// Dia (Fortaleza) em que as buscas b1/b2 de exemplo terminam: 1–2 min antes do teste.
+const diaDasBuscas = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() - 90000));
 const EXTREMOZ = "2403608", NATAL = "2408102", MICRO_NATAL = "24018";
 const lead = (x) => ({
   nome: "", categoria: "Clínica", telefone: "", whatsapp_link: "", email: "", site: "", instagram: "", endereco: "Rua Fictícia, 1",
@@ -49,7 +52,7 @@ before(async () => {
   const agora = Date.now();
   // Duas buscas concluídas hoje (com um lead repetido entre elas, id_lugar "p1") e uma de 10 dias atrás.
   await db.doc("buscas/b1").set({ tipo: "comum", lista: true, dono_uid: ana.uid, dono_email: "ana@x.example", status: "concluida",
-    criada_em: new Date(agora - 3600000), finalizada_em: new Date(agora - 3500000), parametros: { termos: ["clínica"], cidades: ["Natal RN"] }, qtd_lotes: 1,
+    criada_em: new Date(agora - 3600000), finalizada_em: new Date(agora - 120000), parametros: { termos: ["clínica"], cidades: ["Natal RN"] }, qtd_lotes: 1,
     resumo: { total: 3, com_telefone: 2, com_email: 0, com_site: 1, com_whatsapp: 1, na_cidade_buscada: 2 } });
   await db.doc("buscas/b1/lotes/0").set({ dono_uid: ana.uid, leads: [
     lead({ nome: "Clínica Alfa", telefone: "(84) 99999-0001", whatsapp_link: "https://wa.me/5584999990001", bairro: "Tirol", cidade: "Natal", nota: 4.8, qtd_avaliacoes: 120, id_lugar: "p1", latitude: -5.79, longitude: -35.2 }),
@@ -57,7 +60,7 @@ before(async () => {
     lead({ nome: "Clínica Gama", cidade: "Parnamirim", cidade_confere: "nao", id_lugar: "p3" }),
   ] });
   await db.doc("buscas/b2").set({ tipo: "comum", lista: true, dono_uid: ana.uid, dono_email: "ana@x.example", status: "concluida",
-    criada_em: new Date(agora - 1800000), finalizada_em: new Date(agora - 1700000), parametros: { termos: ["clínica"], cidades: ["Extremoz RN"] }, qtd_lotes: 1,
+    criada_em: new Date(agora - 1800000), finalizada_em: new Date(agora - 60000), parametros: { termos: ["clínica"], cidades: ["Extremoz RN"] }, qtd_lotes: 1,
     resumo: { total: 4, com_telefone: 2, com_email: 0, com_site: 1, com_whatsapp: 2, na_cidade_buscada: 2 } });
   await db.doc("buscas/b2/lotes/0").set({ dono_uid: ana.uid, leads: [
     lead({ nome: "Clínica Alfa", telefone: "(84) 99999-0001", whatsapp_link: "https://wa.me/5584999990001", cidade: "Natal", id_lugar: "p1", termo_que_encontrou: "consultório", cidade_buscada: "Extremoz RN", cidade_confere: "nao" }),
@@ -151,7 +154,8 @@ test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", a
   await esperarTexto(p, "#conta", /^2 de 7 leads$/);
   assert.match(await texto(p, "#chips"), /Tem WhatsApp/);
 
-  // Barra do dia de hoje no gráfico → leads das buscas que terminaram hoje (mesmo número da barra)
+  // Barra do dia em que as buscas terminaram (1–2 min antes do teste; perto da meia-noite pode ser "ontem")
+  const hoje = diaDasBuscas;
   await p.click("[data-ir=inicio]");
   await p.waitForSelector(`#grafico-dias [data-dia="${hoje}"]`);
   assert.equal((await p.locator(`#grafico-dias [data-dia="${hoje}"] .valor-barra`).textContent()).trim(), "3");
@@ -358,10 +362,14 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await esperarHash(p, "#inicio");
   await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem.[\s\S]*ainda pode fazer 2 hoje/);
   const { db } = firebase();
-  const criadas = await db.collection("buscas").where("dono_uid", "==", uids.ana).where("status", "==", "na_fila").get();
-  assert.equal(criadas.size, 1);
-  assert.deepEqual(criadas.docs[0].data().parametros.cidades, ["Natal RN", "Parnamirim RN"]);
-  assert.deepEqual(criadas.docs[0].data().parametros.sinonimos, []);
+  const naFila = (await db.collection("buscas").where("dono_uid", "==", uids.ana).where("status", "==", "na_fila").get()).docs.map((d) => d.data());
+  const criadas = naFila.filter((b) => b.tipo === "comum");
+  assert.equal(criadas.length, 1);
+  assert.deepEqual(criadas[0].parametros.cidades, ["Natal RN", "Parnamirim RN"]);
+  assert.deepEqual(criadas[0].parametros.sinonimos, []);
+  // 2 cidades → 2 partes, uma por máquina (paralelismo)
+  assert.equal(criadas[0].partes_total, 2);
+  assert.deepEqual(naFila.filter((b) => b.tipo === "parte").map((b) => b.cidades).sort(), [["Natal RN"], ["Parnamirim RN"]]);
 
   // ---- Meus leads: juntar b1 + b2 pelo seletor de buscas
   await p.click("[data-ir=leads]");
@@ -435,15 +443,7 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await p.selectOption("#f-cidade", "");
   const [csv2] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-csv")]);
   assert.equal(csv2.suggestedFilename(), `clinica-varias-cidades-${hoje}.csv`);
-  if (process.env.TESTAR_XLSX === "1") {
-    const [xlsx] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-xlsx")]);
-    assert.equal(xlsx.suggestedFilename(), `clinica-varias-cidades-${hoje}.xlsx`);
-    const destino = join(pasta, "planilha.xlsx");
-    await xlsx.saveAs(destino);
-    const xml = execFileSync("unzip", ["-p", destino], { encoding: "utf8" });
-    assert.ok(xml.includes("cidade_confere") && xml.includes("regiao_imediata") && !xml.includes("id_lugar"));
-    assert.ok(xml.includes("Clínica Alfa") && xml.includes("Resolve Farma")); // assinatura na aba Resumo
-  }
+  await conferirPlanilha(p);
   assert.deepEqual(erros, []);
   await p.context().close();
 });
@@ -825,3 +825,190 @@ test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mens
   assert.deepEqual(erros, []);
   await ctx.close();
 });
+
+test("paralelismo: busca rodando mostra 'X de Y cidades prontas' e os leads já prontos; aviso de cidades pequenas na Nova busca", async () => {
+  const { db } = firebase();
+  // Busca dividida em 2 partes (2 máquinas): 1 de 3 cidades pronta, com o lote parcial da parte 0.
+  await db.doc("buscas/bp").set({ tipo: "comum", lista: true, dono_uid: uids.ana, dono_email: "ana@x.example", status: "rodando",
+    criada_em: new Date(), iniciada_em: new Date(), parametros: { termos: ["clínica"], cidades: ["Macaíba RN", "São José de Mipibu RN", "Nísia Floresta RN"] },
+    partes_total: 2, cidades_total: 3, cidades_prontas: 1, consultas_feitas: 1, total_consultas: 3, parciais: { bp_p0: 1 } });
+  await db.doc("buscas/bp_p0").set({ tipo: "parte", mae_id: "bp", dono_uid: uids.ana, status: "rodando", cidades: ["Macaíba RN", "Nísia Floresta RN"], qtd_lotes: 1 });
+  await db.doc("buscas/bp_p0/lotes/0").set({ dono_uid: uids.ana, leads: [
+    lead({ nome: "Clínica Parcial Macaíba", telefone: "(84) 99999-0077", whatsapp_link: "https://wa.me/5584999990077", cidade: "Macaíba", cidade_buscada: "Macaíba RN", id_lugar: "par1" })] });
+
+  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
+  await esperarTexto(p, "#ultimas", /1 de 3\s*cidades prontas/);
+  assert.match(await texto(p, "#ultimas"), /os leads delas já estão disponíveis · 2 máquinas em paralelo/);
+  assert.match(await texto(p, "#ultimas"), /Rodando \(1 de 3 cidades prontas\)/);
+  await p.locator("#ultimas [data-ver-busca=bp] >> text=Ver leads já prontos").tap();
+  await p.waitForSelector("#cartoes .cartao-lead >> text=Clínica Parcial Macaíba");
+  // Chegou mais uma cidade: a lista de buscas mostra 2 de 3 sem recarregar
+  await db.doc("buscas/bp").update({ cidades_prontas: 2 });
+  await p.tap("#abrir-buscas");
+  await esperarTexto(p, "#caixa-buscas", /2 de 3 cidades prontas/);
+  await p.tap("#titulo-pagina"); // tocar fora fecha a lista
+
+  // Nova busca: 1 cidade pequena (Água Nova, 2.946 hab.) entre 2 → aviso com a economia e botão para tirar
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  await p.fill("#termo-input", "farmácia"); await p.press("#termo-input", "Enter");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  for (const nome of ["Água Nova", "Natal"]) {
+    await p.fill("#busca-cidade", nome);
+    await p.locator(`#lista-cidades input[data-cidade="${nome}"]`).check();
+  }
+  await p.fill("#busca-cidade", "");
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  await p.waitForSelector("#aviso-pequenas:not(.oculto)");
+  assert.match(await texto(p, "#aviso-pequenas-txt"), /^1 de 2 cidades têm menos de 5 mil habitantes \(IBGE, Censo 2022\).*Tirá-las economiza \d+ consultas/);
+  assert.ok((await p.locator("#remover-pequenas").boundingBox()).height >= 44);
+  await p.tap("#remover-pequenas");
+  await p.waitForSelector("#aviso-pequenas.oculto", { state: "attached" });
+  await esperarTexto(p, "#r-resumo", /em 1 cidade\(s\)/);
+  assert.equal(await p.evaluate(() => [...document.querySelectorAll("#lista-cidades input:checked")].map((i) => i.dataset.cidade).join()), "Natal");
+  assert.deepEqual(erros, []);
+  await p.context().close();
+  for (const id of ["bp_p0/lotes/0", "bp_p0", "bp"]) await db.doc(`buscas/${id}`).delete();
+});
+
+// Campos de digitação visíveis com fonte menor que 16 px (o Safari do iPhone dá zoom ao tocar neles).
+async function camposComFontePequena(p, onde) {
+  return p.evaluate((onde) => {
+    const vistos = [...document.querySelectorAll("input, select, textarea")].filter((e) => {
+      if (["checkbox", "radio", "range", "hidden", "file", "color", "button", "submit"].includes(e.type)) return false;
+      const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+      return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none";
+    });
+    const pequenos = vistos.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 16)
+      .map((e) => `${onde}: ${e.id || e.getAttribute("aria-label") || e.tagName.toLowerCase()} (${getComputedStyle(e).fontSize})`);
+    return { vistos: vistos.length, pequenos };
+  }, onde);
+}
+
+test("iPhone (390 px): todo campo de digitação visível tem fonte de 16 px ou mais (sem zoom ao tocar), e o zoom do usuário continua liberado", async () => {
+  const ctx = await navegador.newContext({ locale: "pt-BR", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await rotearCdn(ctx);
+  await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
+  const p = await ctx.newPage();
+  erros = []; p.on("pageerror", (e) => erros.push(e.message));
+  await p.goto(`${local.url}/?emulador=1`);
+  await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+  // Zoom do usuário liberado: sem maximum-scale nem user-scalable=no
+  const viewport = await p.getAttribute('meta[name="viewport"]', "content");
+  assert.doesNotMatch(viewport, /maximum-scale|user-scalable/);
+  const problemas = [], contagem = {};
+  const conferir = async (onde) => { const r = await camposComFontePequena(p, onde); contagem[onde] = r.vistos; problemas.push(...r.pequenos); };
+  await conferir("login");
+  await p.fill("#le", "ana@x.example"); await p.fill("#ls", "senha-forte-2"); await p.tap("#entrar");
+  await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
+  // Nova busca: termos e sinônimos, depois cidades/outras cidades, depois o passo 3
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
+  await conferir("nova-1");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  await conferir("nova-2");
+  await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+  await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  await conferir("nova-3");
+  // Meus leads: busca, filtros, lista de buscas e gaveta "Mais filtros"
+  await p.tap("#barra-inferior a[data-ir=leads]");
+  await p.waitForSelector("#leads-painel:not(.oculto)");
+  await conferir("leads");
+  await p.tap("#abrir-buscas"); await conferir("leads-buscas"); await p.tap("#titulo-pagina");
+  await p.tap("#abrir-filtros"); await p.waitForSelector("#gaveta-filtros:not(.oculto)"); await conferir("leads-mais-filtros");
+  await p.keyboard.press("Escape");
+  // Mapa (camadas) e Mercado
+  await p.tap("#barra-inferior a[data-ir=mapa]"); await p.waitForSelector("#mapa-painel h2");
+  await p.tap("#mapa-camadas-btn"); await conferir("mapa");
+  await p.evaluate(() => { location.hash = "#mercado"; }); await p.waitForSelector("#kpis-mercado .kpi");
+  await conferir("mercado");
+  await ctx.close();
+  // Admin (e-mail, senha, nome, limite, nomes na tabela de usuários, Estado inteiro)
+  const a = await abrir("breno@x.example", "senha-forte-1", { width: 390, height: 844 });
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await a.waitForSelector("#u-tabela [data-nome]");
+  const r = await camposComFontePequena(a, "admin"); contagem.admin = r.vistos; problemas.push(...r.pequenos);
+  await a.context().close();
+
+  assert.deepEqual(problemas, [], `campos com fonte < 16 px: ${problemas.join(" | ")}`);
+  // Conferiu campos de verdade em cada tela
+  for (const onde of ["login", "nova-1", "nova-2", "leads", "leads-mais-filtros", "mapa", "mercado", "admin"]) assert.ok(contagem[onde] > 0, `${onde}: nenhum campo visível`);
+  assert.deepEqual(erros, []);
+});
+
+// Planilha .xlsx pronta para usar (pedido do Breno, 24/09): gera pela tela e confere o arquivo de verdade.
+const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+async function conferirPlanilha(p) {
+  const visiveis = Number((await texto(p, "#conta")).match(/^([\d.]+)/)[1].replace(".", ""));
+  await p.click("#baixar-xlsx");
+  await p.waitForSelector("#confirmacao:not(.oculto)");
+  assert.match(await texto(p, "#conf-texto"), new RegExp(`^Vão sair ${visiveis} leads? — os que os filtros da tela mostram agora`));
+  const [arquivo] = await Promise.all([p.waitForEvent("download"), p.click("#conf-sim")]);
+  const [a, m, d] = hoje.split("-");
+  assert.equal(arquivo.suggestedFilename(), `MapaLeads_clinica_varias-cidades_${d}-${m}-${a}.xlsx`);
+  const destino = join(pasta, "planilha.xlsx");
+  await arquivo.saveAs(destino);
+  const livro = new ExcelJS.Workbook();
+  await livro.xlsx.readFile(destino);
+  assert.deepEqual(livro.worksheets.map((w) => w.name), ["Leads", "Resumo"]);
+  const ws = livro.getWorksheet("Leads");
+  // Colunas na ordem pedida; cabeçalho negrito, branco sobre o azul da marca
+  assert.deepEqual(ws.getRow(1).values.slice(1), COLUNAS_XLSX);
+  const h = ws.getCell("A1");
+  assert.equal(h.font.bold, true);
+  assert.equal(h.font.color.argb, "FFFFFFFF");
+  assert.equal(h.fill.fgColor.argb, "FF1F5FD6");
+  // Cabeçalho travado e filtro automático em todas as colunas
+  assert.equal(ws.views[0].state, "frozen");
+  assert.equal(ws.views[0].ySplit, 1);
+  assert.equal(ws.autoFilter, `A1:P${visiveis + 1}`);
+  // Nome interno do filtro (o Excel grava; sem ele o LibreOffice não mostra as setas)
+  assert.match(execFileSync("unzip", ["-p", destino, "xl/workbook.xml"], { encoding: "utf8" }),
+    new RegExp(`<definedName name="_xlnm._FilterDatabase" localSheetId="0">&apos;Leads&apos;!\\$A\\$1:\\$P\\$${visiveis + 1}</definedName>`));
+  // Uma linha por lead (os mesmos da tela), sem duplicados, ordenadas por Cidade e depois Nome
+  const linhas = [];
+  for (let r = 2; r <= ws.rowCount; r++) linhas.push(ws.getRow(r));
+  assert.equal(linhas.length, visiveis);
+  const chave = (r) => [String(r.getCell(3).value || "\uffff"), String(r.getCell(1).value)];
+  const ordenadas = [...linhas].sort((x, y) => chave(x)[0].localeCompare(chave(y)[0], "pt-BR") || chave(x)[1].localeCompare(chave(y)[1], "pt-BR"));
+  assert.deepEqual(linhas.map((r) => r.getCell(1).value), ordenadas.map((r) => r.getCell(1).value));
+  assert.equal(new Set(linhas.map((r) => `${r.getCell(1).value}|${r.getCell(7).value}`)).size, linhas.length);
+  // Links curtos e clicáveis; telefone padronizado; WhatsApp só para celular
+  const alfa = linhas.find((r) => r.getCell(1).value === "Clínica Alfa");
+  assert.equal(alfa.getCell(7).value, "(84) 99999-0001");
+  assert.deepEqual(alfa.getCell(8).value, { text: "Abrir WhatsApp", hyperlink: "https://wa.me/5584999990001" });
+  assert.equal(alfa.getCell(14).value.text, "Ver no mapa");
+  assert.match(alfa.getCell(14).value.hyperlink, /^https:\/\/maps\.google\.com/);
+  assert.equal(alfa.getCell(11).value, 4.8);
+  assert.equal(ws.getColumn(11).numFmt, "0.0");
+  assert.equal(alfa.getCell(12).value, 120);
+  assert.ok(alfa.getCell(16).value instanceof Date);
+  assert.equal(ws.getColumn(16).numFmt, "dd/mm/yyyy");
+  assert.equal(alfa.getCell(13).value, "Sim");
+  const beta = linhas.find((r) => r.getCell(1).value === "Clínica Beta");
+  if (beta) {
+    assert.equal(beta.getCell(7).value, "(84) 3333-0002");
+    assert.ok(!beta.getCell(8).value, "fixo não tem WhatsApp");
+    assert.deepEqual(beta.getCell(9).value, { text: "Abrir site", hyperlink: "https://beta.example" });
+  }
+  // Nada técnico: sem id do lugar, coordenadas ou place_id; larguras com limite
+  const tudo = linhas.flatMap((r) => r.values.map((v) => JSON.stringify(v ?? ""))).join(" ");
+  assert.ok(!/"p\d"|-5\.79|place_id|id_lugar/.test(tudo));
+  assert.ok(ws.getColumn(6).width <= 45);
+  // Aba Resumo: termo, data, totais e tabela por cidade
+  const rs = livro.getWorksheet("Resumo");
+  const valores = [];
+  rs.eachRow((r) => valores.push(r.values.slice(1)));
+  assert.deepEqual(valores[0], ["Termo buscado", "clínica"]);
+  assert.deepEqual(valores[1], ["Data", `${d}/${m}/${a}`]);
+  assert.deepEqual(valores[2], ["Total de leads", visiveis]);
+  assert.equal(valores[3][0], "No segmento");
+  assert.equal(valores[4][0], "Com WhatsApp");
+  const cab = valores.findIndex((v) => v[0] === "Cidade");
+  assert.deepEqual(valores[cab], ["Cidade", "Leads", "No segmento", "Com WhatsApp"]);
+  const soma = valores.slice(cab + 1).filter((v) => typeof v[1] === "number").reduce((t, v) => t + v[1], 0);
+  assert.equal(soma, visiveis);
+  return destino;
+}
