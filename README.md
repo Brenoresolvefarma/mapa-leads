@@ -25,6 +25,17 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
 - **Busca comum** (qualquer usuário): termos e cidades livres, profundidade, e-mail sim/não.
   Conta no **limite diário** (padrão **20 por dia**, o admin muda por usuário; o dia vira à
   meia-noite de **Fortaleza/Natal**).
+- **Limites do vendedor** (não valem para o admin; conferidos no servidor e mostrados na tela):
+  - por busca: no máximo **40 cidades OU 120 consultas** (o que vier primeiro). Acima disso a Function
+    `criar-busca` recusa com 400: "Busca grande demais para vendedor (X cidades / Y consultas). Máximo: 40 cidades ou
+    120 consultas. Divida por região ou peça ao admin.";
+  - por dia: no máximo **300 consultas** (além do nº de buscas), contadas em `usuarios/{uid}.consultas_dia` na mesma
+    transação da busca; o admin muda por usuário (`limite_consultas_dia`, coluna "Consultas/dia" no Admin);
+  - Nova busca: sem "Selecionar todas" no estado inteiro (continua valendo por região e com a procura filtrando),
+    contador "X de 40 cidades" que fica vermelho ao passar e botão Buscar travado com o aviso;
+  - máquinas: com **outro vendedor esperando** na fila, cada vendedor usa no máximo **2 das 4** ao mesmo tempo;
+  - os números 40 / 120 / 300 ficam em **Admin › Configurações** (`config/geral`: `max_cidades_busca`,
+    `max_consultas_busca`, `max_consultas_dia`).
 - **RN inteiro** (**só admin**, bloqueado no servidor): um segmento nos 167 municípios do RN.
   Não conta no limite diário. Detalhes abaixo.
 - **Fila sem perda e sem travar ninguém**: buscas comuns passam na frente dos lotes do RN
@@ -258,6 +269,10 @@ O log público mostra só números, ex.:
 
 3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
+
+## Configuração depois do merge do PR 15 (limites do vendedor)
+Nada a cadastrar: sem valores em `config/geral`, valem 40 cidades / 120 consultas por busca e 300 consultas por dia.
+Para mudar: Admin › Configurações (todos) ou a coluna "Consultas/dia" da tabela de usuários (um vendedor).
 
 ## Configuração depois do merge do PR 14 (motor em paralelo)
 Nada a cadastrar: o `motor.yml` já abre as 4 vagas e o `config/paralelismo` é criado sozinho no primeiro sinal de

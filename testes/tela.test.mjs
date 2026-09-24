@@ -104,7 +104,8 @@ async function abrir(email, senha, viewport = { width: 1366, height: 768 }) {
   p.on("pageerror", (e) => erros.push(e.message));
   p.on("dialog", (d) => d.accept(d.type() === "prompt" ? "Clínicas Natal" : undefined));
   await p.goto(`${local.url}/?emulador=1`);
-  await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+  await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 })
+    .catch((e) => { throw new Error(`${e.message}\nErros da página: ${erros.join(" | ") || "nenhum"}`); });
   await p.fill("#le", email);
   await p.fill("#ls", senha);
   await p.click("#entrar");
@@ -313,7 +314,7 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
   assert.equal(await p.locator("#lista-cidades input:checked").count(), 3);
   await p.uncheck("#lista-cidades input[data-cidade='Extremoz']");
-  assert.match(await texto(p, "#qtd-cidades"), /^2 cidades/);
+  assert.match(await texto(p, "#qtd-cidades"), /^2 de 40 cidades$/);
   assert.equal(await p.locator(`#mapa-escolha path.mun[data-cod="${NATAL}"]`).getAttribute("fill"), "var(--brand)");
   // Etiquetas de população: dentro da linha, nada flutua nem sai da caixa (bug visto pelo Breno)
   const linhasCidades = p.locator("#lista-cidades label");
@@ -1012,3 +1013,63 @@ async function conferirPlanilha(p) {
   assert.equal(soma, visiveis);
   return destino;
 }
+
+test("limite do vendedor (390 px): sem 'Selecionar todas' no estado, contador 'X de 40 cidades' fica vermelho e o Buscar trava; admin sem limite", async () => {
+  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  await p.fill("#termo-input", "farmácia"); await p.press("#termo-input", "Enter");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  // "Selecionar todas" some no estado inteiro; com a procura filtrando, volta
+  assert.equal(await p.isVisible("#marcar-filtradas"), false);
+  await p.fill("#busca-cidade", "São"); assert.equal(await p.isVisible("#marcar-filtradas"), true);
+  await p.fill("#busca-cidade", "");
+  await esperarTexto(p, "#qtd-cidades", /^0 de 40 cidades$/);
+  // Marca regiões até passar de 40 cidades
+  const regioes = p.locator("#regioes input[data-regiao]");
+  for (let i = 0; i < await regioes.count(); i++) {
+    await regioes.nth(i).evaluate((e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+    await regioes.nth(i).check();
+    if (Number((await texto(p, "#qtd-cidades")).split(" ")[0]) > 40) break;
+  }
+  const marcadas = Number((await texto(p, "#qtd-cidades")).split(" ")[0]);
+  assert.ok(marcadas > 40);
+  assert.match(await texto(p, "#qtd-cidades"), new RegExp(`^${marcadas} de 40 cidades$`));
+  assert.ok(await p.$eval("#qtd-cidades", (e) => e.classList.contains("passou-limite")));
+  const vermelho = await p.$eval("#qtd-cidades", (e) => getComputedStyle(e).color.match(/\d+/g).map(Number));
+  assert.ok(vermelho[0] > 150 && vermelho[1] < 100, `cor ${vermelho}`);
+  // Passo 3: Buscar travado, com a mensagem
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  assert.equal(await p.isDisabled("#buscar"), true);
+  await p.waitForSelector("#aviso-limite:not(.oculto)");
+  assert.match(await texto(p, "#aviso-limite"), new RegExp(`^Busca grande demais para vendedor \\(${marcadas} cidades / ${marcadas} consultas\\)\\. Máximo: 40 cidades ou 120 consultas\\.`));
+  // Voltando para até 40, destrava
+  await p.tap("[data-passo-conteudo='3'] [data-ir-passo='2']");
+  await p.tap("#limpar-cidades");
+  await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
+  await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
+  assert.ok(!(await p.$eval("#qtd-cidades", (e) => e.classList.contains("passou-limite"))));
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  assert.equal(await p.isDisabled("#buscar"), false);
+  assert.equal(await p.isVisible("#aviso-limite"), false);
+  assert.deepEqual(erros, []);
+  await p.context().close();
+
+  // Admin: "Selecionar todas" visível, sem contador de limite
+  const a = await abrir("breno@x.example", "senha-forte-1", { width: 390, height: 844 });
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.tap("#barra-inferior a[data-ir=nova]");
+  await a.fill("#termo-input", "farmácia"); await a.press("#termo-input", "Enter");
+  await a.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  assert.equal(await a.isVisible("#marcar-filtradas"), true);
+  await a.tap("#marcar-filtradas");
+  await esperarTexto(a, "#qtd-cidades", /^167 cidades marcada\(s\)$/);
+  await a.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  assert.equal(await a.isDisabled("#buscar"), false);
+  // Admin › Configurações mostra os números valendo
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await a.waitForFunction(() => document.querySelector("#cfg-cidades")?.value === "40");
+  assert.equal(await a.inputValue("#cfg-consultas"), "120");
+  assert.equal(await a.inputValue("#cfg-consultas-dia"), "300");
+  assert.deepEqual(erros, []);
+  await a.context().close();
+});

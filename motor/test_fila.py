@@ -164,3 +164,18 @@ def test_estado_da_fila_nao_mostra_a_mae_comum_rodando():
     assert [r["id"] for r in estado["rodando"]] == ["P0"]
     assert [i["id"] for i in estado["itens"]] == ["P1"]
     assert estado["itens"][0]["mae_id"] == "Mana"
+
+
+def test_no_maximo_2_maquinas_por_vendedor_com_outro_esperando():
+    rodando = [parte("A0", "ana", -10, 0, status="rodando"), parte("A1", "ana", -10, 1, status="rodando")]
+    fila_ = [parte("A2", "ana", -10, 2), parte("B0", "bia", -2, 0)]
+    # Ana já usa 2 máquinas e a Bia está esperando: a próxima vaga vai para a Bia
+    assert ids(fila.limitar_por_vendedor(fila_, rodando)) == ["B0"]
+    # Sem ninguém esperando, a Ana usa as máquinas livres
+    assert ids(fila.limitar_por_vendedor([parte("A2", "ana", -10, 2)], rodando)) == ["A2"]
+    # Admin não tem o limite
+    assert ids(fila.limitar_por_vendedor(fila_, rodando, isento=lambda uid: uid == "ana")) == ["A2", "B0"]
+    # Com 1 máquina só, a Ana continua na vez
+    assert ids(fila.limitar_por_vendedor(fila_, rodando[:1])) == ["A2", "B0"]
+    # Lotes do Estado inteiro não entram nessa conta
+    assert ids(fila.limitar_por_vendedor([filha("F1", -60)], rodando)) == ["F1"]

@@ -27,6 +27,34 @@ export const ALVO_LOTE_RN_SEG = 40 * 60;
 // Limite diário padrão de buscas comuns por usuário (aprovado: 20).
 export const LIMITE_DIARIO_PADRAO = 20;
 
+// Limites do VENDEDOR (não admin), valores do Breno (24/09), ajustáveis em Admin › Configurações (config/geral):
+// por busca, no máximo 40 cidades OU 120 consultas; por dia, no máximo 300 consultas (também por usuário).
+export const LIMITES_VENDEDOR_PADRAO = { max_cidades_busca: 40, max_consultas_busca: 120, max_consultas_dia: 300 };
+// Máquinas do motor por vendedor quando outro vendedor está esperando (valor do Breno; espelha motor/fila.py).
+export const MAQUINAS_POR_VENDEDOR = 2;
+
+/** Limites do vendedor valendo agora: os de config/geral (inteiros ≥ 1) ou os padrões. */
+export function limitesVendedor(geral = {}) {
+  const valor = (k) => (Number.isInteger(geral?.[k]) && geral[k] >= 1 ? geral[k] : LIMITES_VENDEDOR_PADRAO[k]);
+  return { max_cidades_busca: valor("max_cidades_busca"), max_consultas_busca: valor("max_consultas_busca"),
+    max_consultas_dia: valor("max_consultas_dia") };
+}
+
+/** Busca grande demais para vendedor? Devolve a mensagem de erro (ou null). */
+export function conferirTamanhoVendedor(cidades, consultas, limites) {
+  if (cidades <= limites.max_cidades_busca && consultas <= limites.max_consultas_busca) return null;
+  return `Busca grande demais para vendedor (${cidades} cidades / ${consultas} consultas). ` +
+    `Máximo: ${limites.max_cidades_busca} cidades ou ${limites.max_consultas_busca} consultas. Divida por região ou peça ao admin.`;
+}
+
+/** Consultas do dia do vendedor (mesmo "dia" do limite de buscas): { permitido, usadas, limite, dia }. */
+export function conferirConsultasDia(usuario = {}, geral = {}, novas = 0, agora = new Date()) {
+  const dia = diaFortaleza(agora);
+  const usadas = usuario.dia === dia ? Number(usuario.consultas_dia || 0) : 0;
+  const limite = Number.isInteger(usuario.limite_consultas_dia) ? usuario.limite_consultas_dia : limitesVendedor(geral).max_consultas_dia;
+  return { permitido: usadas + novas <= limite, usadas, limite, dia };
+}
+
 // Faixas de população (Censo 2022) do RN inteiro (aprovadas).
 export const ATE_RAPIDA = 20000;
 export const ATE_NORMAL = 100000;

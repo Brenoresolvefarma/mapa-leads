@@ -473,7 +473,7 @@ class Motor:
     def atender_comuns_pendentes(self):
         """Preempção: roda as buscas comuns que chegaram enquanto o RN rodava."""
         while self.restante_seg() > MARGEM_NOVA_BUSCA_SEG and fila.existe_comum_na_fila(self.db, fila.agora_utc()):
-            doc = fila.reservar_proxima(self.db, fila.agora_utc(), somente_comum=True)
+            doc = fila.reservar_proxima(self.db, fila.agora_utc(), somente_comum=True, isento=self.eh_admin)
             if doc is None:
                 return
             log("Busca comum passou na frente do RN inteiro.")
@@ -711,7 +711,8 @@ class Motor:
             if self.vaga > efetivas:
                 log(f"Vaga {self.vaga} desligada (paralelismo {efetivas}); encerrando.")
                 break
-            doc = fila.reservar_proxima(self.db, fila.agora_utc(), vagas_rn=paralelismo.vagas_rn(efetivas))
+            doc = fila.reservar_proxima(self.db, fila.agora_utc(), vagas_rn=paralelismo.vagas_rn(efetivas),
+                                        isento=self.eh_admin)
             if doc is None:
                 break
             processadas += 1
