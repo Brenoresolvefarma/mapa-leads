@@ -45,6 +45,7 @@ await checar("criar-busca método errado", "/api/criar-busca", {}, 405);
 await checar("cancelar-busca sem login", "/api/cancelar-busca", post({ id: "x" }), 401);
 await checar("apagar-busca sem login", "/api/apagar-busca", post({ id: "x" }), 401);
 await checar("liberar-busca sem login", "/api/liberar-busca", post({ id: "x", acao: "simular" }), 401);
+await checar("crm-lead sem login", "/api/crm-lead", post({ acao: "status" }), 401);
 await checar("admin-usuarios sem login", "/api/admin-usuarios", post({ acao: "listar" }), 401);
 await checar("perfis sem login", "/api/perfis", post({ acao: "listar" }), 401);
 await checar("saude-motor sem login", "/api/saude-motor", post({}), 401);

@@ -162,3 +162,26 @@ test("busca liberada pelo admin: vendedor liberado lê; não liberado recebe neg
   await assertFails(getDoc(doc(ana(), "buscas/bia1")));
   await assertFails(getDoc(doc(ana(), "buscas/bia1/lotes/0")));
 });
+
+test("mini-CRM e carteira: cada vendedor lê só o próprio CRM; carteira todos leem; ninguém grava (vendedor B não escreve no lead do A)", async () => {
+  await amb.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "crm/ana__03"), { dono_uid: "ana", leads: { p_x: { s: "contatado", n: "ligar sexta" } } });
+    await setDoc(doc(db, "carteira/03"), { leads: { p_x: { uid: "ana", nome: "Ana", s: "contatado", desde: 1, ultimo: 1 } } });
+  });
+  const bia = () => amb.authenticatedContext("bia").firestore();
+  await assertSucceeds(getDoc(doc(ana(), "crm/ana__03")));
+  await assertSucceeds(getDoc(doc(ana(), "crm/ana__07"))); // ainda não existe: lê mesmo assim (pelo id)
+  await assertFails(getDoc(doc(bia(), "crm/ana__03")));
+  await assertFails(getDocs(query(collection(bia(), "crm"))));
+  await assertSucceeds(getDocs(query(collection(admin(), "crm"))));
+  await assertSucceeds(getDoc(doc(bia(), "carteira/03")));
+  await assertFails(getDoc(doc(anonimo(), "carteira/03")));
+  // Gravação: ninguém pelo navegador — nem o dono, nem o vendedor B tomando o lead, nem o admin.
+  await assertFails(setDoc(doc(bia(), "carteira/03"), { leads: { p_x: { uid: "bia", nome: "Bia", s: "cliente" } } }));
+  await assertFails(updateDoc(doc(bia(), "carteira/03"), { "leads.p_x.uid": "bia" }));
+  await assertFails(setDoc(doc(bia(), "crm/ana__03"), { leads: {} }));
+  await assertFails(setDoc(doc(bia(), "crm/bia__03"), { dono_uid: "bia", leads: { p_x: { s: "cliente" } } }));
+  await assertFails(setDoc(doc(ana(), "crm/ana__03"), { leads: {} }));
+  await assertFails(setDoc(doc(admin(), "carteira/03"), { leads: {} }));
+});

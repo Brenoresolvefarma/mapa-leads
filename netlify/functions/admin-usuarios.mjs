@@ -4,7 +4,7 @@
 // o admin é definido só pelo workflow "Definir admin" no GitHub.
 
 import { FieldValue } from "firebase-admin/firestore";
-import { LIMITE_DIARIO_PADRAO, LIMITES_VENDEDOR_PADRAO, diaFortaleza, limitesVendedor } from "../lib/logica.mjs";
+import { LIMITE_DIARIO_PADRAO, LIMITES_VENDEDOR_PADRAO, diaFortaleza, diasCarteira, limitesVendedor } from "../lib/logica.mjs";
 import { ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
 
 export default handler(async (req) => {
@@ -75,7 +75,7 @@ async function listar(auth, db) {
     if (p.removido) usuarios.push({ uid, email: p.email || "", nome: p.nome || "", admin: false, removido: true });
   }
   const limitePadrao = Number.isInteger(geral.data()?.limite_padrao) ? geral.data().limite_padrao : LIMITE_DIARIO_PADRAO;
-  return { usuarios, limite_padrao: limitePadrao, config: limitesVendedor(geral.data() || {}) };
+  return { usuarios, limite_padrao: limitePadrao, config: configPublica(geral.data() || {}) };
 }
 
 // Consultas por dia de um vendedor (null = volta ao padrão de Admin › Configurações).
@@ -96,6 +96,8 @@ async function definirLimiteConsultas(auth, db, { uid, limite_consultas_dia }) {
 }
 
 // Admin › Configurações: limites do vendedor por busca e por dia (inteiros de 1 a 10.000).
+const configPublica = (geral) => ({ ...limitesVendedor(geral), carteira_dias: diasCarteira(geral) });
+
 async function definirConfig(db, corpo) {
   const novos = {};
   for (const chave of Object.keys(LIMITES_VENDEDOR_PADRAO)) {
@@ -104,9 +106,15 @@ async function definirConfig(db, corpo) {
     if (!(Number.isInteger(v) && v >= 1 && v <= 10000)) throw new ErroHttp(400, "Cada limite precisa ser um número inteiro de 1 a 10.000.");
     novos[chave] = v;
   }
+  // Carteira: dias sem contato até o lead voltar a ficar livre (padrão 60).
+  if (corpo?.carteira_dias !== undefined) {
+    const v = corpo.carteira_dias;
+    if (!(Number.isInteger(v) && v >= 1 && v <= 3650)) throw new ErroHttp(400, "Prazo da carteira: número inteiro de 1 a 3.650 dias.");
+    novos.carteira_dias = v;
+  }
   if (!Object.keys(novos).length) throw new ErroHttp(400, "Nada para salvar.");
   await db.doc("config/geral").set(novos, { merge: true });
-  return { config: limitesVendedor({ ...((await db.doc("config/geral").get()).data() || {}) }) };
+  return { config: configPublica((await db.doc("config/geral").get()).data() || {}) };
 }
 
 // Nome mostrado na saudação ("Olá, Breno"): até 60 caracteres, sem espaços sobrando.

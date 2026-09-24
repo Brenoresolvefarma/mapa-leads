@@ -15,7 +15,7 @@ export async function carregarFuncoesLocais(conta) {
   process.env.FIREBASE_CLIENT_EMAIL = conta.client_email;
   process.env.FIREBASE_PRIVATE_KEY = conta.private_key.replace(/\n/g, "\\n");
   const funcoes = {};
-  for (const nome of ["criar-busca", "cancelar-busca", "apagar-busca", "liberar-busca", "admin-usuarios", "perfis", "saude-motor"]) {
+  for (const nome of ["criar-busca", "cancelar-busca", "apagar-busca", "liberar-busca", "crm-lead", "admin-usuarios", "perfis", "saude-motor"]) {
     const caminho = resolve(".netlify/teste-empacotamento", nome, "netlify/functions", `${nome}.mjs`);
     funcoes[`/api/${nome}`] = (await import(pathToFileURL(caminho).href)).default;
   }

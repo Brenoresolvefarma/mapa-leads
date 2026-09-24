@@ -205,3 +205,18 @@ test("liberar busca: divisão entre vendedores sem repetir cidade (nem lead) e e
   assert.deepEqual([so.modo, so.leads, so.cidades], ["recorte", 8, ["Macau", "Natal"]]);
   assert.throws(() => planoLiberacao(leads, { vendedores: ["a", "b", "c"], modo: "cidades", cidades: ["Natal", "Macau"], dividir: true }), /Só há 2 cidade/);
 });
+
+test("liberar dividindo respeita a carteira: lead de um vendedor vai só para ele; de quem não foi escolhido, para ninguém", async () => {
+  const { planoLiberacao } = await import("../netlify/lib/logica.mjs");
+  const leads = [
+    { cidade: "Natal", id_lugar: "a" }, { cidade: "Natal", id_lugar: "b" }, { cidade: "Natal", id_lugar: "c" },
+    { cidade: "Mossoró", id_lugar: "d" }, { cidade: "Mossoró", id_lugar: "e" }, { cidade: "Caicó", id_lugar: "f" },
+  ];
+  const donos = { a: "v2", f: "v9" }; // "a" é do v2 (escolhido); "f" é do v9 (não escolhido)
+  const p = planoLiberacao(leads, { vendedores: ["v1", "v2"], dividir: true, donoDe: (l) => donos[l.id_lugar] || null });
+  assert.equal(p.na_carteira_de_outros, 1);
+  const [v1, v2] = p.por_vendedor;
+  assert.equal(v1.leads + v2.leads, 5); // 6 menos o do v9
+  assert.equal(v2.carteira, 1);
+  assert.ok(!v1.cidades.some((c) => v2.cidades.includes(c)));
+});

@@ -15,7 +15,7 @@
 // Não conta na cota diária do vendedor. Log só com ids e números (nada de leads).
 
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
-import { cidadeDoLead, planoLiberacao } from "../lib/logica.mjs";
+import { carteiraAtiva, chaveLead, cidadeDoLead, diasCarteira, fatiaDe, planoLiberacao } from "../lib/logica.mjs";
 import { ErroHttp, firebase, handler, json, lerCorpo, logPrivado, usuarioDoToken } from "../lib/servidor.mjs";
 
 const FINAIS = ["concluida", "erro", "cancelada"];
@@ -45,16 +45,17 @@ export default handler(async (req) => {
   const disponiveis = await vendedoresDisponiveis(auth, busca.dono_uid);
   const leads = await lerLeads(db, ref, qtdLotes);
   const vendedores = corpo.vendedores === undefined && corpo.acao === "simular" ? [] : conferirVendedores(corpo.vendedores, disponiveis);
+  const donoDe = corpo.dividir && vendedores.length > 1 ? await donosNaCarteira(db, leads) : () => null;
   let plano;
   try {
-    plano = planoLiberacao(leads, { vendedores, modo: corpo.modo || "inteira", cidades: Array.isArray(corpo.cidades) ? corpo.cidades.map(String) : [], dividir: !!corpo.dividir });
+    plano = planoLiberacao(leads, { vendedores, modo: corpo.modo || "inteira", cidades: Array.isArray(corpo.cidades) ? corpo.cidades.map(String) : [], dividir: !!corpo.dividir, donoDe });
   } catch (e) { throw new ErroHttp(400, e.message); }
 
   if (corpo.acao === "simular") {
     return json(200, { vendedores: disponiveis.map(({ uid, rotulo }) => ({ uid, rotulo })), total: leads.length, ...plano });
   }
   const rotulos = new Map(disponiveis.map((v) => [v.uid, v.rotulo]));
-  await liberar(db, ref, busca, leads, qtdLotes, plano, !!corpo.dividir && vendedores.length > 1, rotulos, usuario.uid);
+  await liberar(db, ref, busca, leads, qtdLotes, plano, !!corpo.dividir && vendedores.length > 1, rotulos, usuario.uid, donoDe);
   const somaLeads = plano.por_vendedor.reduce((t, p) => t + p.leads, 0);
   logPrivado(`liberar-busca: busca ${id} liberada para ${vendedores.length} vendedor(es) (${corpo.modo || "inteira"}${corpo.dividir ? ", dividida" : ""}), ${somaLeads} leads no total`);
   return json(200, { resultado: "liberada", por_vendedor: plano.por_vendedor });
@@ -63,6 +64,15 @@ export default handler(async (req) => {
 export const config = { path: "/api/liberar-busca" };
 
 /** Vendedores que podem receber: contas ativas sem a claim admin, fora o dono da busca. */
+/** Dono (uid) de cada lead na carteira agora — lê só as fatias da carteira que os leads usam (até 16 leituras). */
+async function donosNaCarteira(db, leads) {
+  const fatias = [...new Set(leads.map((l) => fatiaDe(chaveLead(l))))];
+  const [docs, geral] = await Promise.all([db.getAll(...fatias.map((f) => db.doc(`carteira/${f}`))), db.doc("config/geral").get()]);
+  const dias = diasCarteira(geral.data()), agora = Date.now(), cart = new Map();
+  docs.forEach((d, i) => cart.set(fatias[i], d.data()?.leads || {}));
+  return (l) => { const k = chaveLead(l), e = cart.get(fatiaDe(k))?.[k]; return carteiraAtiva(e, agora, dias) ? e.uid : null; };
+}
+
 async function vendedoresDisponiveis(auth, donoUid) {
   const contas = await auth.listUsers(1000);
   return contas.users
@@ -109,9 +119,10 @@ function desfazer(ref, busca, uid, atual) {
   return ops;
 }
 
-async function liberar(db, ref, busca, leads, qtdLotes, plano, dividida, rotulos, adminUid) {
+async function liberar(db, ref, busca, leads, qtdLotes, plano, dividida, rotulos, adminUid, donoDe) {
   const ops = [];
   const campos = [];
+  const recorte = plano.cidades_recorte ? new Set(plano.cidades_recorte) : null;
   for (const p of plano.por_vendedor) {
     const atual = busca.liberacoes?.[p.uid];
     if (atual) ops.push(...desfazer(ref, busca, p.uid, atual));
@@ -122,7 +133,11 @@ async function liberar(db, ref, busca, leads, qtdLotes, plano, dividida, rotulos
       }
     } else {
       const minhas = new Set(p.cidades);
-      const meus = leads.filter((l) => minhas.has(cidadeDoLead(l)));
+      // Dividida: o lead na carteira de alguém vai só para o dono dele (e o livre, pela cidade).
+      const meus = leads.filter((l) => {
+        const dono = dividida ? donoDe(l) : null;
+        return dono ? dono === p.uid && (!recorte || recorte.has(cidadeDoLead(l))) : minhas.has(cidadeDoLead(l));
+      });
       qtd = Math.ceil(meus.length / POR_LOTE);
       for (let n = 0; n < qtd; n++) {
         const itens = meus.slice(n * POR_LOTE, (n + 1) * POR_LOTE);

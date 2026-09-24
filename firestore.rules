@@ -73,6 +73,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Mini-CRM: status/anotações de cada vendedor em crm/{uid}__{fatia} (16 fatias por vendedor).
+    // Só o próprio vendedor (pelo id do documento, mesmo que ainda não exista) e o admin leem. Grava só a Function.
+    match /crm/{id} {
+      allow read: if admin() || (logado() && id.matches('^' + request.auth.uid + '__[0-9]{2}$'));
+      allow write: if false;
+    }
+
+    // Carteira: de quem é cada estabelecimento (chave do lugar → uid, nome do vendedor, status, datas).
+    // Todo logado lê (para mostrar "Na carteira de <nome>"); sem dados do lead. Grava só a Function.
+    match /carteira/{fatia} {
+      allow read: if logado();
+      allow write: if false;
+    }
+
     // Qualquer outra coisa (inclui perfis salvos, métricas e despertador): bloqueada.
     // Perfis são lidos e gravados só pela Function /api/perfis.
     match /{documento=**} {

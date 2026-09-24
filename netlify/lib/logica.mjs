@@ -437,8 +437,27 @@ export function dividirCidades(contagem, uids) {
  *   leads das cidades dele, em documentos separados por vendedor, para a regra do Firestore conseguir filtrar).
  * Devolve { cidades: [{cidade, leads}], por_vendedor: [{uid, modo, cidades|null, leads}] } ou lança Error com a mensagem.
  */
-export function planoLiberacao(leads, { vendedores = [], modo = "inteira", cidades = [], dividir = false } = {}) {
+export function planoLiberacao(leads, { vendedores = [], modo = "inteira", cidades = [], dividir = false, donoDe = () => null } = {}) {
   const contagem = contarPorCidade(leads);
+  // Dividir respeita a carteira: lead que já é de um vendedor vai só para ele (se ele estiver entre os escolhidos);
+  // se não estiver, não vai para ninguém. Os outros são divididos por cidade.
+  if (dividir && vendedores.length > 1) {
+    const escolhidas = modo === "cidades" ? new Set(cidades) : null;
+    const noRecorte = leads.filter((l) => !escolhidas || escolhidas.has(cidadeDoLead(l)));
+    if (!noRecorte.length) throw new Error("Escolha pelo menos uma cidade com leads.");
+    const livres = noRecorte.filter((l) => !donoDe(l));
+    const alvoLivre = contarPorCidade(livres);
+    if (alvoLivre.length < vendedores.length) throw new Error(`Só há ${alvoLivre.length} cidade(s) com leads livres para dividir entre ${vendedores.length} vendedores: escolha menos vendedores ou mais cidades.`);
+    const partes = dividirCidades(alvoLivre, vendedores);
+    let fora = 0;
+    for (const l of noRecorte) {
+      const dono = donoDe(l);
+      if (!dono) continue;
+      const p = partes.find((x) => x.uid === dono);
+      if (p) { p.leads++; p.carteira = (p.carteira || 0) + 1; } else fora++;
+    }
+    return { cidades: contagem, cidades_recorte: escolhidas ? [...escolhidas] : null, na_carteira_de_outros: fora, por_vendedor: partes.map((p) => ({ ...p, carteira: p.carteira || 0, modo: "recorte" })) };
+  }
   if (!["inteira", "cidades"].includes(modo)) throw new Error("Escolha \"Lista inteira\" ou \"Só estas cidades/regiões\".");
   let alvo = contagem;
   if (modo === "cidades") {
@@ -458,4 +477,37 @@ export function planoLiberacao(leads, { vendedores = [], modo = "inteira", cidad
     por_vendedor = vendedores.map((uid) => ({ uid, modo: "recorte", cidades: lista, leads: total }));
   }
   return { cidades: contagem, por_vendedor };
+}
+
+// ------------------------------------------------------------ MINI-CRM E CARTEIRA (espelho do bloco <crm> do index.html;
+// testes/crm.test.mjs confere que os dois dão o mesmo resultado)
+export const STATUS_CRM = ["novo", "contatado", "negociando", "cliente", "descartado"];
+export const MOTIVOS_DESCARTE = ["sem_interesse", "fechou", "numero_errado", "outro"];
+export const STATUS_DA_CARTEIRA = ["contatado", "negociando", "cliente"]; // marcar um destes põe o lead na carteira
+export const CARTEIRA_DIAS_PADRAO = 60;
+export const HISTORICO_MAX = 10;
+export const FATIAS_CRM = 16;
+const slugCrm = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+/** Mesmo estabelecimento em buscas diferentes: place_id do Google; sem ele, telefone + nome; sem telefone, nome + cidade. */
+export function chaveLead(l) {
+  const id = String(l?.id_lugar ?? "").trim();
+  if (id) return `p_${id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)}`;
+  const tel = String(l?.telefone ?? "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+  if (tel) return `t_${tel}_${slugCrm(l?.nome)}`;
+  return `n_${slugCrm(l?.nome)}_${slugCrm(l?.cidade)}`;
+}
+/** Em qual documento (fatia 00–15) a chave fica: carteira/{fatia} e crm/{uid}__{fatia}. */
+export function fatiaDe(chave) {
+  let h = 0;
+  for (const c of String(chave)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return String(h % FATIAS_CRM).padStart(2, "0");
+}
+/** A entrada da carteira ainda vale? Descartado sai na hora; sem contato há mais de `dias` volta a ficar livre. */
+export function carteiraAtiva(entrada, agoraMs, dias = CARTEIRA_DIAS_PADRAO) {
+  if (!entrada || !entrada.uid || !STATUS_DA_CARTEIRA.includes(entrada.s)) return false;
+  return agoraMs - Number(entrada.ultimo || 0) <= dias * 86400000;
+}
+export function diasCarteira(geral = {}) {
+  const v = geral?.carteira_dias;
+  return Number.isInteger(v) && v >= 1 && v <= 3650 ? v : CARTEIRA_DIAS_PADRAO;
 }

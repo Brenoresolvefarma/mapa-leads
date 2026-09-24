@@ -23,6 +23,7 @@ const { default: criarBusca } = await import(funcao("criar-busca"));
 const { default: cancelarBusca } = await import(funcao("cancelar-busca"));
 const { default: apagarBusca } = await import(funcao("apagar-busca"));
 const { default: liberarBusca } = await import(funcao("liberar-busca"));
+const { default: crmLead } = await import(funcao("crm-lead"));
 const { default: adminUsuarios } = await import(funcao("admin-usuarios"));
 const { default: configPublica } = await import(funcao("config-publica"));
 const { default: perfis } = await import(funcao("perfis"));
@@ -487,13 +488,13 @@ test("limites do vendedor: 167 cidades → 400; 30 cidades passam; admin com 167
   assert.equal((await pedido(adminUsuarios, { acao: "definir_config", max_cidades_busca: 999 }, caio)).status, 403);
   assert.equal((await pedido(adminUsuarios, { acao: "definir_config", max_cidades_busca: 0 }, tokens.breno)).status, 400);
   const cfg = await pedido(adminUsuarios, { acao: "definir_config", max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400 }, tokens.breno);
-  assert.deepEqual(cfg.corpo.config, { max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400 });
+  assert.deepEqual(cfg.corpo.config, { max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400, carteira_dias: 60 });
   const r10 = await pedido(criarBusca, { termos: "a", cidades: cidades(11), profundidade: "rapida", simular: true }, caio);
   assert.match(r10.corpo.erro, /Máximo: 10 cidades ou 50 consultas/);
   // com 400 por dia, a 3ª busca de 120 passa (240 + 120 = 360)
   assert.equal((await pedido(criarBusca, { termos: "i,j", cidades: cidades(10), profundidade: "rapida" }, caio)).status, 201);
   const lista = await pedido(adminUsuarios, { acao: "listar" }, tokens.breno);
-  assert.deepEqual(lista.corpo.config, { max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400 });
+  assert.deepEqual(lista.corpo.config, { max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400, carteira_dias: 60 });
   const linhaCaio = lista.corpo.usuarios.find((u) => u.email === "caio@x.example");
   assert.equal(linhaCaio.consultas_hoje, 260);
 
@@ -608,4 +609,101 @@ test("liberar busca: só admin; lista inteira, recorte e divisão sem repetir le
   assert.equal((await ref.collection("liberacoes").doc(davi.uid).collection("lotes").doc("0").get()).exists, false);
   assert.equal((await ref.collection("liberacoes").doc(vivi.uid).collection("lotes").doc("0").get()).exists, false);
   for (const id of ["lib2", "lib3"]) await db.doc(`buscas/${id}`).delete();
+});
+
+test("mini-CRM e carteira: status com histórico; vendedor B recebe 409 no lead da carteira do A; prazo; admin transfere; painel", async () => {
+  const { auth, db } = firebase();
+  const { chaveLead, fatiaDe } = await import("../netlify/lib/logica.mjs");
+  const fla = await auth.createUser({ email: "fla@x.example", password: "senha-forte-f", displayName: "Flávio" });
+  const gil = await auth.createUser({ email: "gil@x.example", password: "senha-forte-g", displayName: "Gil" });
+  tokens.fla = await entrar("fla@x.example", "senha-forte-f");
+  tokens.gil = await entrar("gil@x.example", "senha-forte-g");
+  // O mesmo estabelecimento (place_id C1) em buscas diferentes, uma de cada vendedor.
+  const c1 = { nome: "Clínica Um", cidade: "Natal", id_lugar: "C1", telefone: "(84) 99999-1111" };
+  const semId = { nome: "Clínica Dois", cidade: "Natal", id_lugar: "", telefone: "(84) 3333-2222" };
+  for (const [id, dono, leads] of [["crm1", fla.uid, [c1, semId]], ["crm2", gil.uid, [c1]]]) {
+    await db.doc(`buscas/${id}`).set({ dono_uid: dono, tipo: "comum", lista: true, status: "concluida", qtd_lotes: 1, criada_em: new Date() });
+    await db.doc(`buscas/${id}/lotes/0`).set({ dono_uid: dono, leads });
+  }
+  const K1 = chaveLead(c1), K2 = chaveLead(semId);
+  assert.equal(K1, "p_C1");
+  assert.equal(K2, "t_8433332222_clinica-dois");
+  const st = (token, corpo) => pedido(crmLead, { acao: "status", ...corpo }, token);
+
+  // Validações
+  assert.equal((await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "talvez" })).status, 400);
+  assert.equal((await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "descartado" })).status, 400); // sem motivo
+  assert.equal((await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "contatado", proximo: "amanhã" })).status, 400);
+  // Flávio: Contatado com anotação e próximo contato → histórico e carteira
+  const r1 = await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "contatado", anotacao: "ligar sexta", proximo: "2026-09-26" });
+  assert.equal(r1.status, 200);
+  const crmFla = (await db.doc(`crm/${fla.uid}__${fatiaDe(K1)}`).get()).data();
+  assert.equal(crmFla.dono_uid, fla.uid);
+  const reg = crmFla.leads[K1];
+  assert.deepEqual([reg.s, reg.n, reg.p, reg.busca], ["contatado", "ligar sexta", "2026-09-26", "crm1"]);
+  assert.deepEqual([reg.h[0].u, reg.h[0].s, reg.h[0].n], ["Flávio", "contatado", "ligar sexta"]);
+  let cart = (await db.doc(`carteira/${fatiaDe(K1)}`).get()).data().leads[K1];
+  assert.deepEqual([cart.uid, cart.nome, cart.s], [fla.uid, "Flávio", "contatado"]);
+  // Gil tem o mesmo lugar numa busca dele: 409 "Na carteira de Flávio"
+  const r2 = await st(tokens.gil, { busca_id: "crm2", chave: K1, status: "contatado" });
+  assert.equal(r2.status, 409);
+  assert.match(r2.corpo.erro, /carteira de Flávio/);
+  // Gil não mexe em lead de busca que não é dele, nem em lead que não está na busca dele
+  assert.equal((await st(tokens.gil, { busca_id: "crm1", chave: K1, status: "contatado" })).status, 403);
+  assert.equal((await st(tokens.gil, { busca_id: "crm2", chave: K2, status: "contatado" })).status, 403);
+  // Negociando mantém o "desde"; o histórico cresce (mais recente primeiro)
+  await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "negociando", anotacao: "mandou proposta" });
+  const reg2 = (await db.doc(`crm/${fla.uid}__${fatiaDe(K1)}`).get()).data().leads[K1];
+  assert.deepEqual(reg2.h.map((h) => h.s), ["negociando", "contatado"]);
+  assert.equal(reg2.p, "2026-09-26"); // próximo contato continua
+  // Prazo: sem contato há 61 dias → livre (padrão 60); com o prazo em 90 dias, continua do Flávio
+  const refCart = db.doc(`carteira/${fatiaDe(K1)}`);
+  await refCart.set({ leads: { [K1]: { ...cart, s: "negociando", ultimo: Date.now() - 61 * 86400000 } } }, { merge: true });
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_config", carteira_dias: 90 }, tokens.breno)).corpo.config.carteira_dias, 90);
+  assert.equal((await st(tokens.gil, { busca_id: "crm2", chave: K1, status: "contatado" })).status, 409);
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_config", carteira_dias: 0 }, tokens.breno)).status, 400);
+  await pedido(adminUsuarios, { acao: "definir_config", carteira_dias: 60 }, tokens.breno);
+  const r3 = await st(tokens.gil, { busca_id: "crm2", chave: K1, status: "contatado", anotacao: "retomado" });
+  assert.equal(r3.status, 200);
+  assert.equal((await refCart.get()).data().leads[K1].uid, gil.uid);
+  // Admin transfere de volta para o Flávio
+  assert.equal((await pedido(crmLead, { acao: "transferir", chave: K1, para_uid: fla.uid }, tokens.gil)).status, 403);
+  assert.equal((await pedido(crmLead, { acao: "transferir", chave: K1, para_uid: "nao-existe" }, tokens.breno)).status, 400);
+  const tr = await pedido(crmLead, { acao: "transferir", chave: K1, para_uid: fla.uid }, tokens.breno);
+  assert.equal(tr.status, 200);
+  cart = (await refCart.get()).data().leads[K1];
+  assert.deepEqual([cart.uid, cart.nome, cart.s], [fla.uid, "Flávio", "contatado"]);
+  const regFla = (await db.doc(`crm/${fla.uid}__${fatiaDe(K1)}`).get()).data().leads[K1];
+  assert.match(regFla.h[0].n, /^Transferido por .+ \(antes: Gil\)$/);
+  const regGil = (await db.doc(`crm/${gil.uid}__${fatiaDe(K1)}`).get()).data().leads[K1];
+  assert.match(regGil.h[0].n, /Transferido para Flávio/);
+  // Cliente e depois Descartado (com motivo): sai da carteira
+  await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "cliente" });
+  const painel = await pedido(crmLead, { acao: "carteiras" }, tokens.breno);
+  assert.equal(painel.status, 200);
+  const pf = painel.corpo.vendedores.find((v) => v.uid === fla.uid);
+  assert.equal(pf.carteira, 1);
+  assert.equal(pf.por_status.cliente, 1);
+  assert.equal(pf.conversao, 1);
+  assert.equal((await pedido(crmLead, { acao: "carteiras" }, tokens.fla)).status, 403);
+  const r4 = await st(tokens.fla, { busca_id: "crm1", chave: K1, status: "descartado", motivo: "fechou" });
+  assert.equal(r4.status, 200);
+  assert.equal((await refCart.get()).data().leads[K1], undefined);
+  // Lead sem place_id (telefone + nome) também funciona; não mexe na cota do vendedor
+  assert.equal((await st(tokens.fla, { busca_id: "crm1", chave: K2, status: "contatado" })).status, 200);
+  assert.equal((await db.doc(`usuarios/${fla.uid}`).get()).exists, false);
+  // Liberar dividindo respeita a carteira: C1 (do Gil agora) vai só para o Gil, mesmo que Natal caia para o Flávio.
+  await st(tokens.gil, { busca_id: "crm2", chave: K1, status: "contatado" });
+  const ana = await auth.getUserByEmail("ana@x.example");
+  await db.doc("buscas/crm3").set({ dono_uid: ana.uid, tipo: "comum", lista: true, status: "concluida", qtd_lotes: 1, criada_em: new Date() });
+  await db.doc("buscas/crm3/lotes/0").set({ dono_uid: ana.uid, leads: [c1, { nome: "N2", cidade: "Natal", id_lugar: "N2" }, { nome: "N3", cidade: "Natal", id_lugar: "N3" },
+    { nome: "M1", cidade: "Mossoró", id_lugar: "M1" }] });
+  const lib = await pedido(liberarBusca, { acao: "liberar", id: "crm3", vendedores: [fla.uid, gil.uid], modo: "inteira", dividir: true }, tokens.breno);
+  assert.equal(lib.status, 200);
+  const copia = async (uid) => ((await db.doc(`buscas/crm3/liberacoes/${uid}/lotes/0`).get()).data()?.leads || []).map((l) => l.id_lugar);
+  const [cf, cg] = [await copia(fla.uid), await copia(gil.uid)];
+  assert.ok(cg.includes("C1") && !cf.includes("C1"), "C1 só na cópia do dono da carteira");
+  assert.deepEqual([...cf, ...cg].sort(), ["C1", "M1", "N2", "N3"]);
+  await pedido(apagarBusca, { id: "crm3" }, tokens.breno);
+  for (const id of ["crm1", "crm2"]) { await db.doc(`buscas/${id}/lotes/0`).delete(); await db.doc(`buscas/${id}`).delete(); }
 });
