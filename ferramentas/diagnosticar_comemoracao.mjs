@@ -131,9 +131,10 @@ try {
     ["vendedor 390 Nova busca", 390, false, "comemoracao-celular.webm"],
     ["vendedor 390 Nova busca (reduzir movimento)", 390, true, "comemoracao-celular-reduzir-movimento.webm"],
   ]) {
-    const p = await abrir(contas.vendedor, { largura, reduzir, video });
-    try { await novaBusca(p); await medir(nome, p); } catch (e) { falhas++; console.log(`FALHOU ${nome}: ${String(e.message).split("\n")[0].slice(0, 140)}`); }
-    await fecharComVideo(p, video);
+    let p;
+    try { p = await abrir(contas.vendedor, { largura, reduzir, video }); await novaBusca(p); await medir(nome, p); }
+    catch (e) { falhas++; console.log(`FALHOU ${nome}: ${String(e.message).split("\n")[0].slice(0, 140)}`); }
+    if (p) await fecharComVideo(p, video).catch(() => {});
   }
   // Master (vê as buscas de todos — por isso SEM vídeo e SEM captura; só números).
   for (const [nome, largura, fazer] of [
@@ -141,9 +142,10 @@ try {
     ["master 1366 Estado inteiro RN", 1366, (p) => estadoInteiro(p, "RN")],
     ["master 390 Estado inteiro PB", 390, (p) => estadoInteiro(p, "PB")],
   ]) {
-    const p = await abrir(contas.master, { largura });
-    try { await fazer(p); await medir(nome, p); } catch (e) { falhas++; console.log(`FALHOU ${nome}: ${String(e.message).split("\n")[0].slice(0, 140)}`); }
-    await p.context().close();
+    let p;
+    try { p = await abrir(contas.master, { largura }); await fazer(p); await medir(nome, p); }
+    catch (e) { falhas++; console.log(`FALHOU ${nome}: ${String(e.message).split("\n")[0].slice(0, 140)}`); }
+    if (p) await p.context().close().catch(() => {});
   }
 } finally {
   await navegador.close().catch(() => {});
