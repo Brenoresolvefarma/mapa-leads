@@ -1073,3 +1073,126 @@ test("limite do vendedor (390 px): sem 'Selecionar todas' no estado, contador 'X
   assert.deepEqual(erros, []);
   await a.context().close();
 });
+
+test("liberar busca (390 px): admin libera dividindo sem repetir; vendedor vê 'Liberada por admin' sem Apagar; revogar tira na hora", async () => {
+  const { auth, db } = firebase();
+  const lia = await auth.createUser({ email: "lia@x.example", password: "senha-forte-l", displayName: "Lia" });
+  const rui = await auth.createUser({ email: "rui@x.example", password: "senha-forte-r", displayName: "Rui" });
+  const breno = await auth.getUserByEmail("breno@x.example");
+  // Lista do admin: 3 leads em Natal, 2 em Mossoró e 1 em Caicó.
+  await db.doc("buscas/lib").set({ tipo: "comum", lista: true, dono_uid: breno.uid, dono_email: "breno@x.example", status: "concluida",
+    criada_em: new Date(Date.now() - 5000), finalizada_em: new Date(), parametros: { termos: ["clínica"], cidades: ["Natal RN", "Mossoró RN", "Caicó RN"] }, qtd_lotes: 1,
+    resumo: { total: 6 } });
+  await db.doc("buscas/lib/lotes/0").set({ dono_uid: breno.uid, leads: [
+    lead({ nome: "Lib Natal 1", cidade: "Natal", id_lugar: "q1", telefone: "(84) 99999-1001", whatsapp_link: "https://wa.me/5584999991001" }),
+    lead({ nome: "Lib Natal 2", cidade: "Natal", id_lugar: "q2" }), lead({ nome: "Lib Natal 3", cidade: "Natal", id_lugar: "q3" }),
+    lead({ nome: "Lib Mossoró 1", cidade: "Mossoró", cidade_buscada: "Mossoró RN", id_lugar: "q4" }), lead({ nome: "Lib Mossoró 2", cidade: "Mossoró", cidade_buscada: "Mossoró RN", id_lugar: "q5" }),
+    lead({ nome: "Lib Caicó 1", cidade: "Caicó", cidade_buscada: "Caicó RN", id_lugar: "q6" }),
+  ] });
+  const tel = { width: 390, height: 844 };
+
+  // ---- Admin (celular): Meus leads › Liberar para vendedor › Lia + Rui, dividir
+  const a = await abrir("breno@x.example", "senha-forte-1", tel);
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.tap("#barra-inferior a[data-ir=leads]");
+  await a.tap("#abrir-buscas");
+  await a.locator("#caixa-buscas [data-liberar=lib]").tap();
+  await a.waitForSelector(`#painel-liberar:not(.oculto) [data-lib-vend="${lia.uid}"]`);
+  // O dono (admin) não aparece como vendedor; a Ana, a Lia e o Rui sim.
+  assert.equal(await a.locator(`[data-lib-vend="${breno.uid}"]`).count(), 0);
+  assert.equal(await a.locator(`[data-lib-vend="${uids.ana}"]`).count(), 1);
+  assert.equal(await a.locator("#lib-confirmar").isDisabled(), true);
+  await a.locator(`[data-lib-vend="${lia.uid}"]`).check();
+  await a.locator(`[data-lib-vend="${rui.uid}"]`).check();
+  await a.locator("#lib-dividir").check();
+  // Prévia antes de confirmar: quantos leads cada um recebe (3 + 3, cidades diferentes).
+  await esperarTexto(a, "#lib-previa", /Lia: 3 leads · 1 cidade/);
+  assert.match(await a.textContent("#lib-previa"), /Rui: 3 leads · 2 cidade/);
+  let m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `painel: ${m.fora.join(", ")}`);
+  const conf = a.locator("#lib-confirmar");
+  assert.ok((await conf.boundingBox()).height >= 44);
+  // "Só estas cidades/regiões": regiões e cidades com contagem (prévia muda; volta para a lista inteira depois)
+  await a.locator("input[name=lib-modo][value=cidades]").check();
+  await a.waitForSelector("#lib-cidades [data-lib-cidade='Mossoró']");
+  await esperarTexto(a, "#lib-previa", /Marque pelo menos uma cidade/);
+  await a.locator("#lib-cidades [data-lib-cidade='Mossoró']").check();
+  await a.locator("#lib-cidades [data-lib-cidade='Caicó']").check();
+  await esperarTexto(a, "#lib-previa", /Lia: 2 leads · 1 cidade/);
+  m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `painel (cidades): ${m.fora.join(", ")}`);
+  await a.locator("input[name=lib-modo][value=inteira]").check();
+  await esperarTexto(a, "#lib-previa", /Lia: 3 leads · 1 cidade/);
+  await conf.tap();
+  await esperarTexto(a, "#toasts", /liberada para 2 vendedor/);
+  let b = (await db.doc("buscas/lib").get()).data();
+  assert.deepEqual([...b.liberada_para].sort(), [lia.uid, rui.uid].sort());
+  const copia = async (uid) => (await db.doc(`buscas/lib/liberacoes/${uid}/lotes/0`).get()).data().leads.map((l) => l.id_lugar);
+  const [il, ir] = [await copia(lia.uid), await copia(rui.uid)];
+  assert.deepEqual([...il, ...ir].sort(), ["q1", "q2", "q3", "q4", "q5", "q6"]); // todos, nenhum repetido
+  // Lista inteira para a Ana também.
+  await a.tap("#abrir-buscas");
+  await a.locator("#caixa-buscas [data-liberar=lib]").tap();
+  await a.locator(`[data-lib-vend="${uids.ana}"]`).check();
+  await esperarTexto(a, "#lib-previa", /Ana Souza|ana@x.example/);
+  await a.locator("#lib-confirmar").tap();
+  await esperarTexto(a, "#toasts", /liberada para 1 vendedor/);
+  // Chips "Liberada para" com revogar
+  await a.tap("#abrir-buscas");
+  await a.waitForSelector(`#caixa-buscas [data-revogar=lib][data-uid="${lia.uid}"]`);
+  await a.keyboard.press("Escape");
+  assert.deepEqual(erros, []);
+
+  // ---- Lia (celular): vê a lista com a etiqueta, só os leads das cidades dela, sem Apagar/Liberar
+  const l = await abrir("lia@x.example", "senha-forte-l", tel);
+  await l.tap("#barra-inferior a[data-ir=leads]");
+  await l.tap("#abrir-buscas");
+  const linha = l.locator("#caixa-buscas .linha-busca[data-busca=lib]");
+  await linha.waitFor();
+  assert.match(await linha.textContent(), /Liberada por admin/);
+  assert.match(await linha.textContent(), /3 leads/);
+  assert.equal(await linha.locator("[data-apagar], [data-liberar], [data-cancelar]").count(), 0);
+  await linha.locator("[data-abrir=lib]").check();
+  await l.tap("#aplicar-buscas");
+  await l.locator("#cartoes .cartao-lead", { hasText: "Lib Natal 1" }).waitFor();
+  const nomes = await l.$$eval("#cartoes .cartao-lead .nome-lead", (xs) => xs.map((x) => x.textContent.trim()));
+  assert.deepEqual(nomes.filter((n) => n.startsWith("Lib")).sort(), ["Lib Natal 1", "Lib Natal 2", "Lib Natal 3"]);
+  const cartao = l.locator("#cartoes .cartao-lead", { hasText: "Lib Natal 1" });
+  assert.equal(await cartao.locator("a.btn-whats").getAttribute("href"), "https://wa.me/5584999991001");
+  assert.equal(await cartao.locator("a[href^='tel:']").getAttribute("href"), "tel:84999991001");
+  m = await medirLargura(l); assert.equal(m.rolagem, m.largura, `Meus leads (liberada): ${m.fora.join(", ")}`);
+  // Não conta na cota: o documento de uso da Lia nem existe.
+  assert.equal((await db.doc(`usuarios/${lia.uid}`).get()).exists, false);
+
+  // ---- Admin revoga a Lia (no Admin); a lista some da tela dela na hora
+  await a.evaluate(() => { location.hash = "#admin"; });
+  const rev = a.locator(`#buscas-admin [data-revogar=lib][data-uid="${lia.uid}"]`);
+  await rev.waitFor();
+  m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `Admin: ${m.fora.join(", ")}`);
+  assert.ok((await rev.boundingBox()).height >= 28);
+  await rev.tap();
+  await a.waitForSelector("#confirmacao:not(.oculto)");
+  assert.match(await a.textContent("#conf-texto"), /Tirar esta lista de Lia\?/);
+  await a.tap("#conf-sim");
+  await esperarTexto(a, "#toasts", /Liberação revogada/);
+  b = (await db.doc("buscas/lib").get()).data();
+  assert.ok(!b.liberada_para.includes(lia.uid));
+  assert.equal((await db.doc(`buscas/lib/liberacoes/${lia.uid}/lotes/0`).get()).exists, false);
+  await l.waitForFunction(() => !document.querySelector("#caixa-buscas [data-busca=lib]"), null, { timeout: 15000 });
+  await l.waitForFunction(() => ![...document.querySelectorAll("#cartoes .cartao-lead .nome-lead")].some((e) => e.offsetParent && e.textContent.startsWith("Lib")), null, { timeout: 15000 })
+    .catch(async (e) => { throw new Error(`${e.message} — ${await l.evaluate(() => document.querySelector("#leads-painel")?.innerText.slice(0, 300))}`); });
+  assert.deepEqual(erros, []);
+  await l.context().close();
+  await a.context().close();
+
+  // Ana (lista inteira) continua vendo os 6.
+  const n = await abrir("ana@x.example", "senha-forte-2", tel);
+  await n.tap("#barra-inferior a[data-ir=leads]");
+  await n.tap("#abrir-buscas");
+  const la = n.locator("#caixa-buscas .linha-busca[data-busca=lib]");
+  await la.waitFor();
+  assert.match(await la.textContent(), /Liberada por admin[\s\S]*6 leads/);
+  await n.context().close();
+  // Limpeza: a busca de teste sai (para não mexer nos outros testes).
+  await db.doc("buscas/lib/lotes/0").delete();
+  for (const uid of [rui.uid]) await db.doc(`buscas/lib/liberacoes/${uid}/lotes/0`).delete();
+  await db.doc("buscas/lib").delete();
+});

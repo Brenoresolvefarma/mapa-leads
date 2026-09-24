@@ -120,3 +120,45 @@ test("perfis salvos e despertador: só pelo servidor (nem o dono lê direto)", a
   await assertFails(setDoc(doc(ana(), "usuarios/ana/perfis/p2"), { nome: "x" }));
   await assertFails(getDoc(doc(ana(), "config/despertador")));
 });
+
+test("busca liberada pelo admin: vendedor liberado lê; não liberado recebe negado; recorte só o dele; revogar tira", async () => {
+  await amb.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    // bia1 liberada inteira para a Ana e em recorte (dividida) para Caio e Duda.
+    await setDoc(doc(db, "buscas/bia1"), { dono_uid: "bia", lista: true, status: "concluida", criada_em: new Date(),
+      liberada_para: ["ana", "caio", "duda"], liberacoes: { ana: { modo: "inteira" }, caio: { modo: "recorte", qtd_lotes: 1 }, duda: { modo: "recorte", qtd_lotes: 1 } } });
+    await setDoc(doc(db, "buscas/bia1/lotes/0"), { dono_uid: "bia", liberada_para: ["ana"], leads: [{ nome: "Outro" }] });
+    await setDoc(doc(db, "buscas/bia1/liberacoes/caio/lotes/0"), { vendedor_uid: "caio", leads: [{ nome: "Do Caio" }] });
+    await setDoc(doc(db, "buscas/bia1/liberacoes/duda/lotes/0"), { vendedor_uid: "duda", leads: [{ nome: "Da Duda" }] });
+  });
+  const caio = () => amb.authenticatedContext("caio").firestore();
+  const edu = () => amb.authenticatedContext("edu").firestore();
+  // Liberado (lista inteira): documento e lotes da busca; a lista dele funciona com array-contains.
+  await assertSucceeds(getDoc(doc(ana(), "buscas/bia1")));
+  await assertSucceeds(getDoc(doc(ana(), "buscas/bia1/lotes/0")));
+  await assertSucceeds(getDocs(query(collection(ana(), "buscas"), where("lista", "==", true), where("liberada_para", "array-contains", "ana"), orderBy("criada_em", "desc"), limit(50))));
+  await assertFails(getDocs(query(collection(ana(), "buscas"), where("lista", "==", true), where("liberada_para", "array-contains", "bia"), orderBy("criada_em", "desc"), limit(50))));
+  // Recorte: só a cópia dele; nem os lotes inteiros nem a cópia de outro vendedor.
+  await assertSucceeds(getDoc(doc(caio(), "buscas/bia1")));
+  await assertSucceeds(getDoc(doc(caio(), "buscas/bia1/liberacoes/caio/lotes/0")));
+  await assertFails(getDoc(doc(caio(), "buscas/bia1/lotes/0")));
+  await assertFails(getDoc(doc(caio(), "buscas/bia1/liberacoes/duda/lotes/0")));
+  await assertFails(getDoc(doc(ana(), "buscas/bia1/liberacoes/caio/lotes/0")));
+  // Não liberado: negado em tudo.
+  await assertFails(getDoc(doc(edu(), "buscas/bia1")));
+  await assertFails(getDoc(doc(edu(), "buscas/bia1/lotes/0")));
+  await assertFails(getDoc(doc(edu(), "buscas/bia1/liberacoes/caio/lotes/0")));
+  // Admin lê tudo; ninguém grava pelo navegador (nem o liberado, nem o admin).
+  await assertSucceeds(getDoc(doc(admin(), "buscas/bia1/liberacoes/duda/lotes/0")));
+  await assertFails(updateDoc(doc(ana(), "buscas/bia1"), { liberada_para: ["ana", "edu"] }));
+  await assertFails(setDoc(doc(caio(), "buscas/bia1/liberacoes/caio/lotes/1"), { leads: [] }));
+  await assertFails(setDoc(doc(admin(), "buscas/bia1/liberacoes/edu/lotes/0"), { leads: [] }));
+  // Revogar (servidor tira o uid): acesso some.
+  await amb.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await updateDoc(doc(db, "buscas/bia1"), { liberada_para: ["caio", "duda"] });
+    await updateDoc(doc(db, "buscas/bia1/lotes/0"), { liberada_para: [] });
+  });
+  await assertFails(getDoc(doc(ana(), "buscas/bia1")));
+  await assertFails(getDoc(doc(ana(), "buscas/bia1/lotes/0")));
+});

@@ -400,3 +400,62 @@ export function decidirDespertar(buscas, agora = new Date(), vagas = VAGAS_MAX) 
   if (orfas) return { disparar: true, motivo: "busca_orfa", elegiveis, orfas };
   return { disparar: false, motivo: "fila_vazia", elegiveis, orfas };
 }
+
+// ------------------------------------------------------------ LIBERAR BUSCA PARA VENDEDOR (admin)
+// A cidade do lead é a do ENDEREÇO (nada inferido); sem cidade no endereço = "(sem cidade)".
+export const SEM_CIDADE = "(sem cidade)";
+export const cidadeDoLead = (l) => String(l?.cidade ?? "").trim() || SEM_CIDADE;
+
+/** [{cidade, leads}] dos leads da busca, da cidade com mais leads para a com menos (empate: nome). */
+export function contarPorCidade(leads) {
+  const n = new Map();
+  for (const l of leads) { const c = cidadeDoLead(l); n.set(c, (n.get(c) || 0) + 1); }
+  return [...n].map(([cidade, qtd]) => ({ cidade, leads: qtd }))
+    .sort((a, b) => b.leads - a.leads || a.cidade.localeCompare(b.cidade, "pt-BR"));
+}
+
+/**
+ * Divide as cidades entre os vendedores, cada cidade para UM só (nenhum lead repetido):
+ * da cidade com mais leads para a com menos, sempre para quem está com menos leads até ali
+ * (empate: a ordem em que os vendedores foram escolhidos). Devolve [{uid, cidades, leads}].
+ */
+export function dividirCidades(contagem, uids) {
+  const partes = uids.map((uid) => ({ uid, cidades: [], leads: 0 }));
+  if (!partes.length) return partes;
+  for (const { cidade, leads } of contagem) {
+    const alvo = partes.reduce((m, p) => (p.leads < m.leads ? p : m), partes[0]);
+    alvo.cidades.push(cidade); alvo.leads += leads;
+  }
+  for (const p of partes) p.cidades.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return partes;
+}
+
+/**
+ * Plano da liberação: quem recebe o quê.
+ * - modo "inteira" sem dividir: cada vendedor recebe a lista inteira (modo guardado "inteira": lê os lotes da busca);
+ * - "cidades" (só as escolhidas) e/ou "dividir": cada vendedor recebe um recorte (modo "recorte": cópia só com os
+ *   leads das cidades dele, em documentos separados por vendedor, para a regra do Firestore conseguir filtrar).
+ * Devolve { cidades: [{cidade, leads}], por_vendedor: [{uid, modo, cidades|null, leads}] } ou lança Error com a mensagem.
+ */
+export function planoLiberacao(leads, { vendedores = [], modo = "inteira", cidades = [], dividir = false } = {}) {
+  const contagem = contarPorCidade(leads);
+  if (!["inteira", "cidades"].includes(modo)) throw new Error("Escolha \"Lista inteira\" ou \"Só estas cidades/regiões\".");
+  let alvo = contagem;
+  if (modo === "cidades") {
+    const escolhidas = new Set(cidades);
+    alvo = contagem.filter((c) => escolhidas.has(c.cidade));
+    if (!alvo.length) throw new Error("Escolha pelo menos uma cidade com leads.");
+  }
+  const total = alvo.reduce((t, c) => t + c.leads, 0);
+  let por_vendedor;
+  if (dividir && vendedores.length > 1) {
+    if (alvo.length < vendedores.length) throw new Error(`Só há ${alvo.length} cidade(s) para dividir entre ${vendedores.length} vendedores: escolha menos vendedores ou mais cidades.`);
+    por_vendedor = dividirCidades(alvo, vendedores).map((p) => ({ ...p, modo: "recorte" }));
+  } else if (modo === "inteira") {
+    por_vendedor = vendedores.map((uid) => ({ uid, modo: "inteira", cidades: null, leads: total }));
+  } else {
+    const lista = alvo.map((c) => c.cidade).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    por_vendedor = vendedores.map((uid) => ({ uid, modo: "recorte", cidades: lista, leads: total }));
+  }
+  return { cidades: contagem, por_vendedor };
+}

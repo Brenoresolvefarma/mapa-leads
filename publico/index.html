@@ -397,6 +397,25 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .confirmacao .caixa h2 { font-size:17px; } .confirmacao .caixa p { margin:8px 0 16px; }
 .confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .btn-perigo-forte { background:var(--bad); color:#fff; }
+/* Liberar busca para vendedor (admin) */
+.caixa-buscas .linha-busca { flex-wrap:wrap; }
+.acoes-busca { display:flex; gap:6px; flex:none; flex-wrap:wrap; justify-content:flex-end; }
+.liberados { flex-basis:100%; display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:0 8px 6px; font-size:12px; }
+.liberados .chip button { width:28px; height:28px; }
+.etiqueta-liberada { margin-left:4px; vertical-align:1px; }
+.painel-rodape { padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); display:grid; gap:8px; background:var(--surface); }
+.painel-rodape .acoes { display:flex; gap:8px; justify-content:flex-end; }
+.lib-vendedores, .lib-cidades { display:grid; gap:6px; }
+.lib-cidades { max-height:44vh; overflow:auto; border:1px solid var(--line); border-radius:var(--r-sm); padding:6px; }
+.lib-regiao { border-bottom:1px solid var(--line); padding:4px 0 6px; }
+.lib-regiao:last-child { border-bottom:0; }
+.lib-regiao .cids { display:flex; flex-wrap:wrap; gap:6px; padding:4px 0 0 22px; }
+.lib-previa { font-size:13px; display:grid; gap:4px; max-height:26vh; overflow:auto; }
+.lib-previa .erro { color:var(--bad); }
+@media (max-width: 760px) {
+  .painel-rodape .acoes .btn { flex:1 1 0; min-height:48px; }
+  .lib-vendedores .alternar, .lib-cidades .alternar { min-height:44px; }
+}
 .caixa-buscas .linha-busca { display:flex; align-items:center; gap:6px; border-radius:var(--r-sm); }
 .caixa-buscas .linha-busca label { flex:1; min-width:0; }
 .caixa-buscas .linha-busca label.sem-leads { cursor:default; opacity:.85; }
@@ -437,7 +456,9 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   .tabela.vira-cartao td::before { content:attr(data-rot); color:var(--muted); font-size:12px; text-align:left; flex:none; max-width:50%; }
   .tabela.vira-cartao td[data-rot=""]::before, .tabela.vira-cartao td:not([data-rot])::before { content:none; }
   .tabela.vira-cartao td.principal-td { justify-content:flex-start; text-align:left; font-size:14px; }
-  .caixa-tabela:has(.vira-cartao) { max-height:none; overflow:visible; }
+  .caixa-tabela:has(.vira-cartao) { max-height:none !important; overflow:visible; } /* vence o max-height inline (senão a lista passa por cima dos cartões de baixo) */
+  #buscas-admin td { flex-wrap:wrap; justify-content:flex-end; }
+  #buscas-admin .liberados { justify-content:flex-end; padding:4px 0 0; }
   .caixa-buscas { position:fixed; left:16px; right:16px; width:auto; top:calc(var(--topo) + env(safe-area-inset-top) + 8px); max-height:70dvh; }
   .painel-acoes { grid-template-columns:1fr; }
   dl.dados { grid-template-columns:104px minmax(0,1fr); }
@@ -813,6 +834,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 <aside id="ficha" class="painel oculto" role="dialog" aria-modal="true" aria-labelledby="ficha-nome"></aside>
 <aside id="gaveta-filtros" class="gaveta oculto" role="dialog" aria-modal="true" aria-label="Mais filtros"></aside>
 <aside id="gaveta-colunas" class="gaveta oculto" role="dialog" aria-modal="true" aria-label="Colunas visíveis"></aside>
+<aside id="painel-liberar" class="painel oculto" role="dialog" aria-modal="true" aria-labelledby="lib-titulo"></aside>
 <div id="tour" class="tour oculto" role="dialog" aria-modal="true" aria-labelledby="tour-titulo"></div>
 <div id="confirmacao" class="tour confirmacao oculto" role="alertdialog" aria-modal="true" aria-labelledby="conf-titulo" aria-describedby="conf-texto">
   <div class="caixa"><h2 id="conf-titulo"></h2><p id="conf-texto" class="ink2"></p>
@@ -1135,8 +1157,8 @@ async function api(caminho, corpo) {
 let usuario = null, ehAdmin = false, buscas = [], estadoFila = null, cota = null, perfis = [];
 // Limites do vendedor (não admin), de config/geral (Admin › Configurações); o servidor confere de novo.
 let LIMV = { cidades: 40, consultas: 120, consultasDia: 300 };
-let pararBuscas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
-const pararOuvintes = () => { pararBuscas?.(); pararFila?.(); pararBuscas = pararFila = null; };
+let pararBuscas = null, pararLiberadas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
+const pararOuvintes = () => { pararBuscas?.(); pararLiberadas?.(); pararFila?.(); pararBuscas = pararLiberadas = pararFila = null; };
 
 $("#entrar").onclick = async () => {
   $("#msg-login").textContent = "Entrando…";
@@ -1223,19 +1245,32 @@ function ouvirDados() {
   // Até 50 buscas mais recentes (admin: de todos). Leads só são lidos quando a busca é aberta.
   const q = ehAdmin ? query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(50))
     : query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(50));
-  pararBuscas = onSnapshot(q, (s) => {
-    buscas = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (paginaAtual === "inicio") desenharInicio();
-    if (paginaAtual === "leads") abrirLeads();
-    // Mapa/Mercado abertos direto pelo link desenham antes das buscas chegarem: redesenha quando as buscas com
-    // leads mudam (não a cada progresso de busca rodando, para não mexer no zoom à toa).
-    const chave = buscas.filter(temLeads).map((b) => `${b.id}:${b.qtd_lotes || 0}:${b.cidades_prontas || 0}`).join(",");
-    if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
-    desenharCaixaBuscas();
-    if (paginaAtual === "admin") desenharBuscasAdmin();
-  }, (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
+  pararBuscas = onSnapshot(q, (s) => { buscasProprias = s.docs.map((d) => ({ id: d.id, ...d.data() })); juntarBuscas(); },
+    (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
+  // Vendedor: também as buscas que o admin LIBEROU para ele (etiqueta "Liberada por admin"; não apaga nem libera).
+  // Sem o índice/regras novos publicados, só não aparecem (as buscas dele continuam normais).
+  if (!ehAdmin) {
+    const ql = query(col, where("lista", "==", true), where("liberada_para", "array-contains", usuario.uid), orderBy("criada_em", "desc"), limit(50));
+    pararLiberadas = onSnapshot(ql, (s) => { buscasLiberadas = s.docs.map((d) => ({ id: d.id, ...d.data(), _liberada: true })); juntarBuscas(); },
+      (e) => console.warn("buscas liberadas indisponíveis:", e.code));
+  }
   pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...(d.data() || {}), lidoEm: Date.now() }; desenharStatus(); if (paginaAtual === "admin") desenharFilaViva(); });
   carregarCota();
+}
+let buscasProprias = [], buscasLiberadas = [];
+function juntarBuscas() {
+  const vistas = new Set();
+  const ms = (b) => b.criada_em?.toMillis?.() || 0;
+  buscas = [...buscasProprias, ...buscasLiberadas].filter((b) => !vistas.has(b.id) && vistas.add(b.id)).sort((a, b) => ms(b) - ms(a));
+  for (const b of buscas) if (b._liberada) delete b.dono_email; // vendedor não precisa do e-mail de quem buscou
+  if (paginaAtual === "inicio") desenharInicio();
+  if (paginaAtual === "leads") abrirLeads();
+  // Mapa/Mercado abertos direto pelo link desenham antes das buscas chegarem: redesenha quando as buscas com
+  // leads mudam (não a cada progresso de busca rodando, para não mexer no zoom à toa).
+  const chave = buscas.filter(temLeads).map((b) => `${b.id}:${lotesDaBusca(b).length}:${b.cidades_prontas || 0}`).join(",");
+  if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
+  desenharCaixaBuscas();
+  if (paginaAtual === "admin") desenharBuscasAdmin();
 }
 async function carregarCota() {
   try {
@@ -1295,11 +1330,17 @@ const lotesLidos = new Map(); // "busca:lotes" → leads (1 leitura por lote, gu
 // Onde estão os leads da busca: nos lotes finais ou, enquanto ela roda dividida em partes (várias máquinas),
 // nos lotes PARCIAIS de cada parte — gravados a cada cidade pronta (mapa "parciais": id da parte → nº de lotes).
 function lotesDaBusca(b) {
+  // Liberada para este vendedor em recorte (só algumas cidades / dividida): lê a cópia dele, não os lotes inteiros.
+  const lib = b._liberada ? b.liberacoes?.[usuario.uid] : null;
+  if (lib?.modo === "recorte") return Array.from({ length: lib.qtd_lotes || 0 }, (_, n) => `buscas/${b.id}/liberacoes/${usuario.uid}/lotes/${n}`);
   if ((b.qtd_lotes || 0) > 0) return Array.from({ length: b.qtd_lotes }, (_, n) => `buscas/${b.id}/lotes/${n}`);
   if (b.status !== "rodando" || !b.parciais) return [];
   return Object.entries(b.parciais).sort().flatMap(([parte, n]) => Array.from({ length: n || 0 }, (_, k) => `buscas/${parte}/lotes/${k}`));
 }
 const temLeads = (b) => lotesDaBusca(b).length > 0;
+// Quantos leads a busca tem PARA QUEM ESTÁ VENDO (liberada em recorte = só os das cidades do vendedor).
+const totalLeads = (b) => (b._liberada && b.liberacoes?.[usuario.uid]?.modo === "recorte" ? b.liberacoes[usuario.uid].qtd_leads : b.resumo?.total) || 0;
+const etiquetaLiberada = (b) => (b._liberada ? ' <span class="pilula azul etiqueta-liberada">Liberada por admin</span>' : "");
 const parcial = (b) => !(b.qtd_lotes > 0) && temLeads(b); // ainda rodando, com cidades prontas
 function leadsDaBusca(b) {
   const caminhos = lotesDaBusca(b);
@@ -1326,7 +1367,7 @@ async function desenharInicio() {
   for (const b of $$("#inicio-modo button")) b.setAttribute("aria-pressed", String((b.dataset.modo === "total") === INICIO.total));
   desenharUltimas();
   const ativas = buscas.filter((b) => ["na_fila", "rodando"].includes(b.status)).length;
-  const comLeads = buscas.filter(temLeads);
+  const comLeads = buscas.filter((b) => minha(b) && temLeads(b));
   const semana = comLeads.filter((b) => buscaNoPeriodo(b, { dias: 7 }));
   const inicio30 = diasAtras(29), porDia = new Map();
   for (const b of comLeads) { const d = diaDaBusca(b); if (d >= inicio30) porDia.set(d, [...(porDia.get(d) || []), b]); }
@@ -1399,7 +1440,8 @@ function itemBusca(b) {
     ${podeCancelar ? `<button class="btn btn-perigo btn-mini" data-cancelar="${txt(b.id)}">Cancelar</button>` : ""}</div></div>`;
 }
 function desenharUltimas() {
-  $("#ultimas").innerHTML = buscas.length ? buscas.slice(0, 5).map(itemBusca).join("")
+  const proprias = buscas.filter(minha);
+  $("#ultimas").innerHTML = proprias.length ? proprias.slice(0, 5).map(itemBusca).join("")
     : `<div class="vazio"><div class="ic">${icone("busca")}</div><h3>Você ainda não tem buscas</h3><p>Comece por uma microrregião: escolha o segmento, marque as cidades e acompanhe aqui.</p><a class="btn btn-primario" href="#nova">Começar →</a></div>`;
 }
 // Busca (Início): o item inteiro abre os leads dela; "Ver no mapa" abre o mapa só com ela; Cancelar não abre nada.
@@ -1416,17 +1458,19 @@ document.addEventListener("click", async (ev) => {
   const ver = ev.target.closest("[data-ver-busca]")?.dataset.verBusca;
   if (ver) { const b = buscas.find((x) => x.id === ver); detalharLeads({ ids: [ver], origem: { rot: "Início", href: "#inicio", item: b ? rotuloBusca(b) : "" } }); return; }
   const dia = ev.target.closest("[data-dia]")?.dataset.dia;
-  if (dia) { const p = { dia }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: `Leads de ${rotuloPeriodo(p).replace("Dia ", "")}` } }); return; }
+  if (dia) { const p = { dia }; detalharLeads({ ids: idsComLeads((b) => minha(b) && buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: `Leads de ${rotuloPeriodo(p).replace("Dia ", "")}` } }); return; }
   const det = ev.target.closest("[data-detalhe]")?.dataset.detalhe;
   if (det) { ev.preventDefault(); DETALHES[det]?.(); }
 });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.matches?.("[data-ver-busca], [data-dia]")) ev.target.click(); });
 // Cartões do Início → detalhe com o mesmo recorte do número (no segmento = filtros padrão; "Ver total" = filtros desligados).
 const modoInicio = () => (INICIO.total ? { segmento: false, pedida: false } : {});
+// O Início conta só as buscas do próprio vendedor; as liberadas pelo admin ficam em Meus leads, Mapa e Mercado.
+function minha(b) { return !b._liberada; }
 const DETALHES = {
-  total: () => detalharLeads({ ids: idsComLeads(), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
-  semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
-  whats: () => detalharLeads({ ids: idsComLeads(), filtros: { whats: true, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
+  total: () => detalharLeads({ ids: idsComLeads(minha), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
+  semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => minha(b) && buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
+  whats: () => detalharLeads({ ids: idsComLeads(minha), filtros: { whats: true, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
   ativas: () => $("#ultimas").scrollIntoView({ behavior: "smooth", block: "center" }),
   cota: () => { location.hash = "#nova"; },
 };
@@ -1910,7 +1954,7 @@ function desenharSegmentoInfo() {
 }
 // Gaveta "Mais filtros"
 function abrirGaveta(id) { $(id).classList.remove("oculto"); $("#painel-fundo").classList.remove("oculto"); }
-function fecharPaineis() { for (const id of ["#ficha", "#gaveta-filtros", "#gaveta-colunas"]) $(id).classList.add("oculto"); $("#painel-fundo").classList.add("oculto"); }
+function fecharPaineis() { for (const id of ["#ficha", "#gaveta-filtros", "#gaveta-colunas", "#painel-liberar"]) $(id).classList.add("oculto"); $("#painel-fundo").classList.add("oculto"); }
 $("#painel-fundo").onclick = fecharPaineis;
 $("#abrir-filtros").onclick = () => { desenharGavetaFiltros(); abrirGaveta("#gaveta-filtros"); };
 function desenharGavetaFiltros() {
@@ -1985,7 +2029,7 @@ async function salvarCategoriasPerfil() {
 const FINAIS = ["concluida", "erro", "cancelada"];
 // Terminada → "Apagar"; em andamento → "Cancelar" (apagar só depois); já pediu o cancelamento → aviso.
 function botaoApagar(b, classe = "btn-mini") {
-  if (b.tipo === "rn_filha") return "";
+  if (b.tipo === "rn_filha" || b._liberada) return ""; // liberada pelo admin: o vendedor não apaga
   if (FINAIS.includes(b.status)) return `<button class="btn btn-perigo ${classe}" data-apagar="${txt(b.id)}">Apagar busca</button>`;
   if (b.cancelar_solicitado) return `<span class="small muted" style="flex:none">cancelando…</span>`;
   return `<button class="btn btn-sec ${classe}" data-cancelar="${txt(b.id)}" title="Busca em andamento: cancele primeiro e depois apague">Cancelar</button>`;
@@ -2006,7 +2050,8 @@ function confirmar({ titulo, texto, sim }) {
 async function apagarBusca(id) {
   const b = buscas.find((x) => x.id === id);
   const nome = b ? rotuloBusca(b) : "selecionada", n = b?.resumo?.total || 0;
-  if (!(await confirmar({ titulo: "Apagar busca", texto: `Apagar a busca ${nome} com ${numero(n)} ${n === 1 ? "lead" : "leads"}? Isso não pode ser desfeito.`, sim: "Sim, apagar" }))) return;
+  const liberada = Object.keys(b?.liberacoes || {}).length;
+  if (!(await confirmar({ titulo: "Apagar busca", texto: `Apagar a busca ${nome} com ${numero(n)} ${n === 1 ? "lead" : "leads"}? Isso não pode ser desfeito.${liberada ? ` Ela some também para ${liberada === 1 ? "o vendedor" : `os ${liberada} vendedores`} que a receberam.` : ""}`, sim: "Sim, apagar" }))) return;
   try {
     await api("apagar-busca", { id });
     toast("Busca apagada.", "ok");
@@ -2026,19 +2071,149 @@ function desenharBuscasAdmin() {
   $("#buscas-admin").innerHTML = buscas.length ? `<thead><tr><th>Busca</th><th>Vendedor</th><th>Criada</th><th>Status</th><th>Leads</th><th></th></tr></thead><tbody>` +
     buscas.map((b) => { const [rot, cls] = STATUS[b.status] || [b.status, ""];
       return `<tr><td class="principal-td" data-rot=""><b>${txt(rotuloBusca(b))}</b></td><td data-rot="Vendedor">${txt(b.dono_email || "–")}</td><td data-rot="Criada">${b.criada_em ? dataHora(b.criada_em.toDate()) : "–"}</td>
-        <td data-rot="Status"><span class="pilula ${cls}">${txt(rot)}</span></td><td data-rot="Leads" class="num">${numero(b.resumo?.total || 0)}</td><td data-rot="">${botaoApagar(b)}</td></tr>`; }).join("") + "</tbody>"
+        <td data-rot="Status"><span class="pilula ${cls}">${txt(rot)}</span></td><td data-rot="Leads" class="num">${numero(b.resumo?.total || 0)}</td><td data-rot=""><div class="linha" style="gap:6px">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</td></tr>`; }).join("") + "</tbody>"
     : `<tbody><tr><td class="muted">Nenhuma busca ainda.</td></tr></tbody>`;
 }
+// ============================================================ LIBERAR BUSCA PARA VENDEDOR (só admin; pela Function)
+// O admin escolhe vendedores, lista inteira ou só algumas cidades/regiões e se divide entre eles (cada um com cidades
+// diferentes, sem repetir lead). A prévia (quantos leads cada um recebe) vem do servidor antes de confirmar.
+const podeLiberar = (b) => ehAdmin && FINAIS.includes(b.status) && (b.qtd_lotes || 0) > 0 && !["parte", "rn_filha"].includes(b.tipo);
+function botaoLiberar(b, classe = "btn-mini") {
+  return podeLiberar(b) ? `<button class="btn btn-sec ${classe}" data-liberar="${txt(b.id)}">Liberar para vendedor</button>` : "";
+}
+function liberadosDe(b) {
+  const libs = Object.entries(b.liberacoes || {});
+  if (!ehAdmin || !libs.length) return "";
+  return `<div class="liberados"><span class="muted">Liberada para:</span>${libs.map(([uid, l]) =>
+    `<span class="chip" title="${txt(l.modo === "inteira" ? "lista inteira" : `${(l.cidades || []).length} cidade(s)${l.dividida ? " (dividida)" : ""}`)} · ${numero(l.qtd_leads || 0)} leads">${txt(l.rotulo || "vendedor")} · ${numero(l.qtd_leads || 0)}<button data-revogar="${txt(b.id)}" data-uid="${txt(uid)}" aria-label="Revogar a liberação de ${txt(l.rotulo || "vendedor")}">${icone("fechar")}</button></span>`).join("")}</div>`;
+}
+const LB = { id: "", vendedores: [], cidades: [], escolhidos: new Set(), modo: "inteira", marcadas: new Set(), dividir: false, plano: null, erro: "", vez: 0 };
+async function abrirLiberar(id) {
+  const b = buscas.find((x) => x.id === id);
+  if (!b) return;
+  $("#caixa-buscas").classList.add("oculto");
+  Object.assign(LB, { id, vendedores: [], cidades: [], escolhidos: new Set(), modo: "inteira", marcadas: new Set(), dividir: false, plano: null, erro: "" });
+  $("#painel-liberar").innerHTML = `<div class="painel-cab"><div style="flex:1"><h2 id="lib-titulo">Liberar para vendedor</h2><div class="small muted">Carregando…</div></div>
+    <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>`;
+  abrirGaveta("#painel-liberar");
+  try {
+    const r = await api("liberar-busca", { acao: "simular", id });
+    LB.vendedores = r.vendedores; LB.cidades = r.cidades;
+    desenharLiberar();
+  } catch (e) { toast(e.message, "erro"); fecharPaineis(); }
+}
+// Cidades da busca agrupadas pela região escolhida (micro/imediata); fora do RN e sem cidade vão para "Outras".
+function gruposLiberar() {
+  const grupos = new Map();
+  for (const c of LB.cidades) {
+    const m = infoCidade(c.cidade), reg = m ? (NB.tipoRegiao === "micro" ? m.micro : m.imediata) : null;
+    const chave = reg ? reg.id : "_outras";
+    if (!grupos.has(chave)) grupos.set(chave, { nome: reg ? reg.nome : "Outras cidades / sem cidade", cidades: [] });
+    grupos.get(chave).cidades.push(c);
+  }
+  return [...grupos.entries()].sort(([a, x], [b, y]) => (a === "_outras") - (b === "_outras") || x.nome.localeCompare(y.nome, "pt-BR"));
+}
+function desenharLiberar() {
+  const b = buscas.find((x) => x.id === LB.id);
+  if (!b) return fecharPaineis();
+  const total = LB.cidades.reduce((t, c) => t + c.leads, 0);
+  const vend = LB.vendedores.length ? LB.vendedores.map((v) => `<label class="alternar"><input type="checkbox" data-lib-vend="${txt(v.uid)}" ${LB.escolhidos.has(v.uid) ? "checked" : ""}> ${txt(v.rotulo)}${b.liberacoes?.[v.uid] ? ' <span class="small muted">(já recebeu — será trocada)</span>' : ""}</label>`).join("")
+    : `<p class="small muted">Nenhum vendedor disponível (crie em Admin › Usuários).</p>`;
+  const cidades = LB.modo === "cidades" ? `<div class="entre" style="margin-top:8px"><span class="small muted">Marque regiões inteiras ou cidade a cidade.</span>
+      <div class="segmentado" id="lib-tipo-regiao"><button data-tipo="micro" aria-pressed="${NB.tipoRegiao === "micro"}">Microrregiões</button><button data-tipo="imediata" aria-pressed="${NB.tipoRegiao === "imediata"}">Regiões imediatas</button></div></div>
+    <div class="lib-cidades" id="lib-cidades">${gruposLiberar().map(([chave, g]) => {
+      const n = g.cidades.reduce((t, c) => t + c.leads, 0), todas = g.cidades.every((c) => LB.marcadas.has(c.cidade));
+      return `<div class="lib-regiao"><label class="alternar" style="border:0"><input type="checkbox" data-lib-regiao="${txt(chave)}" ${todas ? "checked" : ""}> <b>${txt(g.nome)}</b> <span class="muted">(${numero(n)} leads)</span></label>
+        <div class="cids">${g.cidades.map((c) => `<label class="alternar"><input type="checkbox" data-lib-cidade="${txt(c.cidade)}" ${LB.marcadas.has(c.cidade) ? "checked" : ""}> ${txt(c.cidade)} <span class="muted">(${numero(c.leads)})</span></label>`).join("")}</div></div>`; }).join("")}</div>` : "";
+  $("#painel-liberar").innerHTML = `<div class="painel-cab"><div style="flex:1;min-width:0"><h2 id="lib-titulo">Liberar para vendedor</h2>
+      <div class="small muted">${txt(rotuloBusca(b))} · ${numero(total)} leads em ${numero(LB.cidades.length)} cidade(s)</div></div>
+      <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>
+    <div class="painel-corpo pilha">
+      <div><label class="campo">1. Vendedores</label><div class="lib-vendedores" id="lib-vendedores">${vend}</div></div>
+      <div><label class="campo">2. O que liberar</label><div class="lib-vendedores">
+        <label class="alternar"><input type="radio" name="lib-modo" value="inteira" ${LB.modo === "inteira" ? "checked" : ""}> Lista inteira</label>
+        <label class="alternar"><input type="radio" name="lib-modo" value="cidades" ${LB.modo === "cidades" ? "checked" : ""}> Só estas cidades/regiões</label></div>${cidades}</div>
+      <div><label class="alternar"><input type="checkbox" id="lib-dividir" ${LB.dividir ? "checked" : ""}> Dividir entre os vendedores escolhidos ${aj("Cada vendedor recebe cidades diferentes (nenhum lead repetido). As cidades com mais leads são repartidas primeiro, sempre para quem está com menos.")}</label></div>
+      <p class="small muted">A lista aparece em Meus leads do vendedor com a etiqueta "Liberada por admin". Não conta na cota dele. Você pode revogar quando quiser.</p>
+    </div>
+    <div class="painel-rodape"><div class="lib-previa" id="lib-previa" aria-live="polite"></div>
+      <div class="acoes"><button class="btn btn-sec" data-fechar>Voltar</button><button class="btn btn-primario" id="lib-confirmar" disabled>Liberar</button></div></div>`;
+  desenharPreviaLiberar();
+}
+function desenharPreviaLiberar() {
+  const nome = new Map(LB.vendedores.map((v) => [v.uid, v.rotulo]));
+  const ok = LB.plano && !LB.erro && LB.escolhidos.size;
+  $("#lib-previa").innerHTML = !LB.escolhidos.size ? `<span class="muted">Escolha pelo menos um vendedor.</span>`
+    : LB.erro ? `<span class="erro" role="alert">${txt(LB.erro)}</span>`
+    : !LB.plano ? `<span class="muted">Calculando…</span>`
+    : `<b>Quantos leads cada um recebe:</b>${LB.plano.por_vendedor.map((p) => `<span data-previa-uid="${txt(p.uid)}">${txt(nome.get(p.uid) || "vendedor")}: <b class="num">${numero(p.leads)}</b> leads · ${p.modo === "inteira" ? "lista inteira" : `${numero(p.cidades.length)} cidade(s)`}</span>`).join("")}`;
+  $("#lib-confirmar").disabled = !ok;
+}
+let temporizadorLib = null;
+function simularLiberar() {
+  LB.plano = null; LB.erro = "";
+  desenharPreviaLiberar();
+  clearTimeout(temporizadorLib);
+  if (!LB.escolhidos.size) return;
+  if (LB.modo === "cidades" && !LB.marcadas.size) { LB.erro = "Marque pelo menos uma cidade ou região."; return desenharPreviaLiberar(); }
+  const vez = ++LB.vez;
+  temporizadorLib = setTimeout(async () => {
+    try {
+      const r = await api("liberar-busca", corpoLiberar("simular"));
+      if (vez === LB.vez) LB.plano = r;
+    } catch (e) { if (vez === LB.vez) LB.erro = e.message; }
+    if (vez === LB.vez && !$("#painel-liberar").classList.contains("oculto")) desenharPreviaLiberar();
+  }, 250);
+}
+const corpoLiberar = (acao) => ({ acao, id: LB.id, vendedores: [...LB.escolhidos], modo: LB.modo, cidades: [...LB.marcadas], dividir: LB.dividir });
+$("#painel-liberar").addEventListener("change", (ev) => {
+  const t = ev.target;
+  if (t.dataset.libVend) { t.checked ? LB.escolhidos.add(t.dataset.libVend) : LB.escolhidos.delete(t.dataset.libVend); return simularLiberar(); }
+  if (t.name === "lib-modo") { LB.modo = t.value; desenharLiberar(); return simularLiberar(); }
+  if (t.id === "lib-dividir") { LB.dividir = t.checked; return simularLiberar(); }
+  if (t.dataset.libCidade) { t.checked ? LB.marcadas.add(t.dataset.libCidade) : LB.marcadas.delete(t.dataset.libCidade); desenharLiberar(); return simularLiberar(); }
+  if (t.dataset.libRegiao) {
+    const g = gruposLiberar().find(([k]) => k === t.dataset.libRegiao)?.[1];
+    for (const c of g?.cidades || []) t.checked ? LB.marcadas.add(c.cidade) : LB.marcadas.delete(c.cidade);
+    desenharLiberar(); return simularLiberar();
+  }
+});
+$("#painel-liberar").addEventListener("click", async (ev) => {
+  if (ev.target.closest("[data-ajuda]")) return;
+  if (ev.target.closest("[data-fechar]")) return fecharPaineis();
+  const tipo = ev.target.closest("#lib-tipo-regiao [data-tipo]")?.dataset.tipo;
+  if (tipo) { NB.tipoRegiao = tipo; guardar("mapaleads.tipoRegiao", tipo); return desenharLiberar(); }
+  const botao = ev.target.closest("#lib-confirmar");
+  if (!botao || botao.disabled) return;
+  botao.disabled = true; botao.textContent = "Liberando…";
+  try {
+    const r = await api("liberar-busca", corpoLiberar("liberar"));
+    toast(`Lista liberada para ${r.por_vendedor.length} vendedor(es).`, "ok");
+    fecharPaineis();
+  } catch (e) { toast(e.message, "erro"); botao.disabled = false; botao.textContent = "Liberar"; }
+});
+async function revogarLiberacao(id, uid) {
+  const b = buscas.find((x) => x.id === id), rot = b?.liberacoes?.[uid]?.rotulo || "o vendedor";
+  if (!(await confirmar({ titulo: "Revogar liberação", texto: `Tirar esta lista de ${rot}? Ela some da tela dele na hora.`, sim: "Sim, revogar" }))) return;
+  try { await api("liberar-busca", { acao: "revogar", id, uid }); toast("Liberação revogada.", "ok"); } catch (e) { toast(e.message, "erro"); }
+}
+document.addEventListener("click", (ev) => {
+  const lib = ev.target.closest("[data-liberar]")?.dataset.liberar;
+  const rev = ev.target.closest("[data-revogar]");
+  if (!lib && !rev) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if (lib) abrirLiberar(lib); else revogarLiberacao(rev.dataset.revogar, rev.dataset.uid);
+}, true);
 // Seletor de buscas abertas (uma ou várias, juntas sem repetidos)
 function desenharCaixaBuscas() {
   const n = W.ids.length;
   $("#rot-buscas").textContent = n ? `${n} busca(s) aberta(s)` : "Escolher buscas";
   // Todas as buscas: com leads dá para abrir; terminada dá para apagar; em andamento, cancelar primeiro.
   const lista = buscas;
-  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>Suas buscas</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
+  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>${ehAdmin ? "Buscas" : "Suas buscas"}</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
     (lista.map((b) => { const comLeads = temLeads(b);
-      const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(b.resumo?.total)} leads` : txt((STATUS[b.status] || [b.status])[0]);
-      return `<div class="linha-busca"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b><br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label>${botaoApagar(b)}</div>`; }).join("") ||
+      const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(totalLeads(b))} leads` : txt((STATUS[b.status] || [b.status])[0]);
+      return `<div class="linha-busca" data-busca="${txt(b.id)}"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b>${etiquetaLiberada(b)}<br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label><div class="acoes-busca">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</div>`; }).join("") ||
       `<p class="small muted" style="padding:8px">Nenhuma busca ainda.</p>`) +
     `<div class="entre" style="padding:8px"><span class="small muted">Cada lote de 300 leads = 1 leitura no banco.</span><button class="btn btn-primario btn-mini" id="aplicar-buscas">Abrir</button></div>`;
 }

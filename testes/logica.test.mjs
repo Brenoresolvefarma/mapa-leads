@@ -189,3 +189,19 @@ test("paralelismo: partes por cidade, do mesmo tamanho, sem repetir nem perder c
   const plano = L.planoBuscaComum(p, {}, 4);
   assert.ok(plano.estimativa < plano.umMotor / 3.5, `${plano.estimativa} x ${plano.umMotor}`);
 });
+
+test("liberar busca: divisão entre vendedores sem repetir cidade (nem lead) e equilibrada", async () => {
+  const { planoLiberacao, dividirCidades, contarPorCidade } = await import("../netlify/lib/logica.mjs");
+  const leads = [...Array(6).fill("Natal"), ...Array(4).fill("Mossoró"), ...Array(3).fill("Caicó"), "Macau", "Macau", ""].map((cidade) => ({ cidade }));
+  assert.deepEqual(contarPorCidade(leads).map((c) => c.cidade), ["Natal", "Mossoró", "Caicó", "Macau", "(sem cidade)"]);
+  const partes = dividirCidades(contarPorCidade(leads), ["a", "b"]);
+  const todas = partes.flatMap((p) => p.cidades);
+  assert.equal(new Set(todas).size, todas.length); // nenhuma cidade em dois vendedores
+  assert.equal(todas.length, 5);
+  assert.deepEqual(partes.map((p) => p.leads), [8, 8]); // Natal+Macau(=8) x Mossoró+Caicó+sem cidade(=8)
+  // Lista inteira sem dividir: cada um recebe tudo; só cidades escolhidas: recorte igual para todos.
+  assert.deepEqual(planoLiberacao(leads, { vendedores: ["a", "b"] }).por_vendedor.map((p) => [p.modo, p.leads]), [["inteira", 16], ["inteira", 16]]);
+  const so = planoLiberacao(leads, { vendedores: ["a"], modo: "cidades", cidades: ["Natal", "Macau"] }).por_vendedor[0];
+  assert.deepEqual([so.modo, so.leads, so.cidades], ["recorte", 8, ["Macau", "Natal"]]);
+  assert.throws(() => planoLiberacao(leads, { vendedores: ["a", "b", "c"], modo: "cidades", cidades: ["Natal", "Macau"], dividir: true }), /Só há 2 cidade/);
+});

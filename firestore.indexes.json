@@ -16,6 +16,15 @@
         { "fieldPath": "lista", "order": "ASCENDING" },
         { "fieldPath": "criada_em", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "buscas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lista", "order": "ASCENDING" },
+        { "fieldPath": "liberada_para", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "criada_em", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -6,7 +6,7 @@ rules_version = '2';
 //  - O navegador NUNCA grava nada. Buscas, leads, usuários e fila são gravados
 //    só pelo servidor (Netlify Functions e motor no GitHub Actions, via Admin SDK,
 //    que ignora estas regras).
-//  - Usuário comum lê SOMENTE as próprias buscas e os próprios leads.
+//  - Usuário comum lê SOMENTE as próprias buscas e os próprios leads, mais as que o admin liberou para ele.
 //  - Admin (custom claim admin=true, gravada só pelo servidor) lê tudo.
 //  - O papel vem do token assinado pelo Firebase: o usuário não consegue alterá-lo.
 service cloud.firestore {
@@ -24,13 +24,25 @@ service cloud.firestore {
       return logado() && dados.dono_uid == request.auth.uid;
     }
 
+    // Busca liberada pelo admin para o vendedor (Function /api/liberar-busca).
+    function liberada(dados) {
+      return logado() && request.auth.uid in dados.get('liberada_para', []);
+    }
+
     match /buscas/{buscaId} {
-      allow read: if admin() || dono(resource.data);
+      allow read: if admin() || dono(resource.data) || liberada(resource.data);
       allow write: if false;
 
-      // Leads em lotes de até 300 por documento.
+      // Leads em lotes de até 300 por documento. "Lista inteira" liberada: o lote traz liberada_para.
       match /lotes/{lote} {
-        allow read: if admin() || dono(resource.data);
+        allow read: if admin() || dono(resource.data) || liberada(resource.data);
+        allow write: if false;
+      }
+
+      // Recorte liberado (só algumas cidades e/ou dividido entre vendedores): cópia SÓ com os leads
+      // das cidades daquele vendedor, num caminho com o uid dele — cada um lê só o seu.
+      match /liberacoes/{uid}/lotes/{lote} {
+        allow read: if admin() || (logado() && request.auth.uid == uid);
         allow write: if false;
       }
     }

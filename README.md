@@ -36,6 +36,19 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
   - máquinas: com **outro vendedor esperando** na fila, cada vendedor usa no máximo **2 das 4** ao mesmo tempo;
   - os números 40 / 120 / 300 ficam em **Admin › Configurações** (`config/geral`: `max_cidades_busca`,
     `max_consultas_busca`, `max_consultas_dia`).
+- **Liberar busca para vendedor** (só admin, Function `/api/liberar-busca`): em Meus leads (lista de buscas) e em
+  Admin › Buscas, "Liberar para vendedor" abre um painel:
+  - vendedores (um ou mais);
+  - "Lista inteira" ou "Só estas cidades/regiões" (por microrregião/região imediata e cidade a cidade, com contagem);
+  - "Dividir entre os vendedores escolhidos": cada um recebe cidades diferentes (nenhum lead repetido); antes de
+    confirmar aparece quantos leads cada um recebe.
+
+  O vendedor vê a lista em Meus leads com a etiqueta **"Liberada por admin"** (filtros, WhatsApp/Ligar, mapa e
+  exportação iguais), sem apagar nem liberar. O admin revoga pelo chip "Liberada para" (a lista some na hora).
+  Não conta na cota do vendedor; o Início dele continua contando só as buscas dele. Log só com ids e números.
+  - "Lista inteira": a busca e os lotes ganham `liberada_para` (uid).
+  - Recorte (algumas cidades ou dividida): cópia só com os leads das cidades do vendedor em
+    `buscas/{id}/liberacoes/{uid}/lotes/{n}` — a regra deixa cada um ler só o seu caminho.
 - **RN inteiro** (**só admin**, bloqueado no servidor): um segmento nos 167 municípios do RN.
   Não conta no limite diário. Detalhes abaixo.
 - **Fila sem perda e sem travar ninguém**: buscas comuns passam na frente dos lotes do RN
@@ -237,9 +250,10 @@ O log público mostra só números, ex.:
 
 ### 3. Firebase — regras e índices
 1. **Firestore › Regras**: cole o conteúdo de [`firestore.rules`](firestore.rules) › **Publicar**.
-2. **Firestore › Índices › Composto › Criar índice** (2 índices, coleção `buscas`, escopo Coleção):
+2. **Firestore › Índices › Composto › Criar índice** (3 índices, coleção `buscas`, escopo Coleção):
    - `lista` Crescente, `dono_uid` Crescente, `criada_em` Decrescente;
-   - `lista` Crescente, `criada_em` Decrescente.
+   - `lista` Crescente, `criada_em` Decrescente;
+   - `lista` Crescente, `liberada_para` Arrays (contém), `criada_em` Decrescente (buscas liberadas ao vendedor, PR 16).
    (Ou abra a página de teste: se faltar índice, o erro do Firebase traz um link que cria o índice.)
 3. **Configurações do projeto › Geral › Seus apps › `</>` (Web)** › registre o app "mapaleads-web"
    (sem Hosting) e copie o **apiKey** (não é segredo, mas fica em variável de ambiente).
@@ -269,6 +283,12 @@ O log público mostra só números, ex.:
 
 3. **Deploys › Trigger deploy › Deploy site** (as variáveis só valem após novo deploy).
 4. Volte ao passo 3.4 e autorize o domínio do Netlify no Firebase.
+
+## Configuração depois do merge do PR 16 (liberar busca para vendedor)
+**Obrigatório** (sem isso o vendedor não vê as listas liberadas; o resto continua funcionando):
+1. Firebase › Firestore › **Regras**: cole o conteúdo novo de [`firestore.rules`](firestore.rules) › **Publicar**.
+2. Firebase › Firestore › **Índices** › Composto › **Criar índice** (coleção `buscas`, escopo Coleção):
+   `lista` Crescente · `liberada_para` **Arrays** (contém) · `criada_em` Decrescente. Leva alguns minutos para ficar pronto.
 
 ## Configuração depois do merge do PR 15 (limites do vendedor)
 Nada a cadastrar: sem valores em `config/geral`, valem 40 cidades / 120 consultas por busca e 300 consultas por dia.

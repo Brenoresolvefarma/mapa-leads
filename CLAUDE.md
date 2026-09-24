@@ -31,7 +31,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 ## Arquitetura
 1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a v2** no ar; celular primeiro no PR 13).
 2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
-3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
+3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/liberar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
    `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
    Firebase; validam ID token (checkRevoked) — Fases 2 e 3a (feito).
 4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify;
@@ -326,6 +326,29 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - Testes: Functions (167 → 400, 30 passam, admin 167 passa, 429 por consultas/dia, Configurações), fila e emulador
   (2 máquinas por vendedor), tela 390 px (contador, botão travado, admin sem limite).
 
+### Liberar busca para vendedor (PR 16, pedido do Breno em 24/09)
+- **Function `/api/liberar-busca`** (claim admin): `simular` (vendedores disponíveis = contas sem claim admin, fora o dono;
+  leads por cidade; prévia por vendedor), `liberar`, `revogar`. Só busca principal terminada com `qtd_lotes` (parte/filha →
+  400; em andamento → 409). Cidade do lead = a do ENDEREÇO (`logica.cidadeDoLead`; vazia = "(sem cidade)").
+- **Divisão** (`logica.dividirCidades`): cada cidade para UM vendedor (sem repetir lead), da cidade com mais leads para a com
+  menos, sempre para quem está com menos; menos cidades que vendedores → 400.
+- **Firestore**: `buscas/{id}.liberada_para` (array de uid) + `liberacoes.{uid} = {modo, cidades, qtd_lotes, qtd_leads,
+  dividida, rotulo, liberada_em, liberada_por}`. Modo **"inteira"** → os lotes da busca ganham `liberada_para`; **"recorte"**
+  (só cidades escolhidas e/ou dividida) → cópia em `buscas/{id}/liberacoes/{uid}/lotes/{n}` (`vendedor_uid`), regra pelo
+  caminho. Regras: busca/lotes = admin || dono || uid em `liberada_para`; cópia = admin || o próprio uid. Write false.
+  Liberar de novo para o mesmo vendedor troca a anterior. Revogar: tira o uid, apaga a cópia / `arrayRemove` nos lotes.
+  Apagar a busca apaga as cópias. Índice novo: `lista` + `liberada_para` (CONTAINS) + `criada_em` desc.
+- **Tela**: vendedor ouve também `liberada_para array-contains uid` (erro → ignora; buscas dele continuam), marca
+  `_liberada`, lê a cópia se recorte (`lotesDaBusca`), mostra "Liberada por admin" e `totalLeads(b)`; sem Apagar/Liberar.
+  Início conta só as buscas dele (`minha(b)`); Meus leads, Mapa e Mercado incluem as liberadas. Admin: "Liberar para
+  vendedor" (caixa de buscas e Admin › Buscas), painel `#painel-liberar` com prévia do servidor, chips "Liberada para"
+  com revogar (`confirmar()`). Não conta na cota. Log só ids e números (`logPrivado`).
+- Correção junto: no celular, `.caixa-tabela:has(.vira-cartao)` agora vence o `max-height` inline (a lista de buscas do
+  Admin passava por cima dos cartões de baixo).
+- Testes: regras (liberado lê; não liberado negado; recorte só o dele; revogar tira), Functions (só admin, inteira,
+  cidades, divisão sem repetir, revogar, cota, apagar), lógica (divisão) e tela 390 px (admin divide com prévia,
+  vendedor vê etiqueta sem Apagar e só as cidades dele, revogar some na hora, sem rolagem lateral).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -343,6 +366,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **PR 14 (motor em paralelo)**: 4 vagas, partes por cidade, parciais, sinal de bloqueio, aviso de cidades pequenas.
   Mergeado; Verificar Functions e "Testar tela em produção" passaram.
 - **PR 15 (limites do vendedor)**: 40 cidades / 120 consultas por busca, 300 consultas/dia, 2 máquinas por vendedor.
+  Mergeado; Verificar Functions e "Testar tela em produção" passaram.
+- **PR 16 (liberar busca para vendedor)**: Function, regras, índice e tela. Depende do Breno publicar regras + índice.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 

@@ -22,6 +22,7 @@ const funcao = (nome) => EMPACOTADAS
 const { default: criarBusca } = await import(funcao("criar-busca"));
 const { default: cancelarBusca } = await import(funcao("cancelar-busca"));
 const { default: apagarBusca } = await import(funcao("apagar-busca"));
+const { default: liberarBusca } = await import(funcao("liberar-busca"));
 const { default: adminUsuarios } = await import(funcao("admin-usuarios"));
 const { default: configPublica } = await import(funcao("config-publica"));
 const { default: perfis } = await import(funcao("perfis"));
@@ -504,4 +505,107 @@ test("limites do vendedor: 167 cidades → 400; 30 cidades passam; admin com 167
   await pedido(adminUsuarios, { acao: "definir_limite_consultas", uid: uidCaio, limite_consultas_dia: null }, tokens.breno);
   const { FieldValue } = await import("firebase-admin/firestore");
   await db.doc("config/geral").set({ max_cidades_busca: FieldValue.delete(), max_consultas_busca: FieldValue.delete(), max_consultas_dia: FieldValue.delete() }, { merge: true });
+});
+
+test("liberar busca: só admin; lista inteira, recorte e divisão sem repetir lead; revogar; não mexe na cota; apagar leva as cópias", async () => {
+  const { auth, db } = firebase();
+  const vivi = await auth.createUser({ email: "vivi@x.example", password: "senha-forte-v", displayName: "Vivi" });
+  const davi = await auth.createUser({ email: "davi@x.example", password: "senha-forte-d", displayName: "Davi" });
+  const ana = await auth.getUserByEmail("ana@x.example");
+  const breno = await auth.getUserByEmail("breno@x.example");
+  tokens.vivi = await entrar("vivi@x.example", "senha-forte-v");
+  // Busca fictícia da Ana, terminada, com 12 leads em 2 lotes (5 Natal, 3 Mossoró, 2 Caicó, 1 Macau, 1 sem cidade).
+  const cidades = ["Natal", "Natal", "Natal", "Natal", "Natal", "Mossoró", "Mossoró", "Mossoró", "Caicó", "Caicó", "Macau", ""];
+  const leads = cidades.map((c, i) => ({ nome: `Lugar ${i}`, cidade: c, id_lugar: `L${i}` }));
+  const ref = db.doc("buscas/lib1");
+  await ref.set({ dono_uid: ana.uid, tipo: "comum", lista: true, status: "concluida", qtd_lotes: 2, criada_em: new Date(),
+    parametros: { termos: ["x"], cidades: ["Natal RN"] }, resumo: { total: 12 } });
+  await ref.collection("lotes").doc("0").set({ dono_uid: ana.uid, leads: leads.slice(0, 7) });
+  await ref.collection("lotes").doc("1").set({ dono_uid: ana.uid, leads: leads.slice(7) });
+
+  // Vendedor não libera nada.
+  assert.equal((await pedido(liberarBusca, { acao: "simular", id: "lib1" }, tokens.ana)).status, 403);
+  assert.equal((await pedido(liberarBusca, { acao: "revogar", id: "lib1", uid: vivi.uid }, tokens.vivi)).status, 403);
+
+  // Simular sem vendedores: lista de vendedores (sem admin e sem o dono) e leads por cidade.
+  const s0 = await pedido(liberarBusca, { acao: "simular", id: "lib1" }, tokens.breno);
+  assert.equal(s0.status, 200);
+  const uidsDisp = s0.corpo.vendedores.map((v) => v.uid);
+  assert.ok(uidsDisp.includes(vivi.uid) && uidsDisp.includes(davi.uid));
+  assert.ok(!uidsDisp.includes(ana.uid) && !uidsDisp.includes(breno.uid));
+  assert.equal(s0.corpo.total, 12);
+  assert.deepEqual(s0.corpo.cidades.slice(0, 2), [{ cidade: "Natal", leads: 5 }, { cidade: "Mossoró", leads: 3 }]);
+  assert.ok(s0.corpo.cidades.some((c) => c.cidade === "(sem cidade)" && c.leads === 1));
+
+  // Simular a divisão: cidades diferentes para cada um, soma = total, nada gravado.
+  const s1 = await pedido(liberarBusca, { acao: "simular", id: "lib1", vendedores: [vivi.uid, davi.uid], modo: "inteira", dividir: true }, tokens.breno);
+  const [pv, pd] = s1.corpo.por_vendedor;
+  assert.equal(pv.leads + pd.leads, 12);
+  assert.equal(pv.cidades.filter((c) => pd.cidades.includes(c)).length, 0);
+  assert.equal((await ref.get()).data().liberada_para, undefined);
+
+  // Validações.
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [breno.uid] }, tokens.breno)).status, 400);
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [ana.uid] }, tokens.breno)).status, 400);
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [] }, tokens.breno)).status, 400);
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [vivi.uid], modo: "cidades", cidades: [] }, tokens.breno)).status, 400);
+
+  // Liberar dividido: cada um recebe a cópia só das cidades dele, sem nenhum lead repetido.
+  const r1 = await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [vivi.uid, davi.uid], modo: "inteira", dividir: true }, tokens.breno);
+  assert.equal(r1.status, 200);
+  let b = (await ref.get()).data();
+  assert.deepEqual(b.liberada_para.sort(), [vivi.uid, davi.uid].sort());
+  assert.equal(b.liberacoes[vivi.uid].modo, "recorte");
+  assert.equal(b.liberacoes[vivi.uid].dividida, true);
+  assert.equal(b.liberacoes[vivi.uid].rotulo, "Vivi");
+  const copia = async (uid) => (await ref.collection("liberacoes").doc(uid).collection("lotes").doc("0").get()).data();
+  const cv = await copia(vivi.uid), cd = await copia(davi.uid);
+  assert.equal(cv.vendedor_uid, vivi.uid);
+  const idsV = cv.leads.map((l) => l.id_lugar), idsD = cd.leads.map((l) => l.id_lugar);
+  assert.equal(idsV.length + idsD.length, 12);
+  assert.equal(idsV.filter((x) => idsD.includes(x)).length, 0);
+  assert.ok(cv.leads.every((l) => b.liberacoes[vivi.uid].cidades.includes(l.cidade || "(sem cidade)")));
+  // Os lotes da busca não ganham os vendedores do recorte.
+  assert.equal((await ref.collection("lotes").doc("0").get()).data().liberada_para, undefined);
+
+  // Lista inteira para a Vivi (troca o recorte dela): lotes ganham o uid; a cópia antiga some.
+  const r2 = await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [vivi.uid], modo: "inteira" }, tokens.breno);
+  assert.equal(r2.status, 200);
+  b = (await ref.get()).data();
+  assert.equal(b.liberacoes[vivi.uid].modo, "inteira");
+  assert.equal(b.liberacoes[vivi.uid].qtd_leads, 12);
+  for (const n of ["0", "1"]) assert.deepEqual((await ref.collection("lotes").doc(n).get()).data().liberada_para, [vivi.uid]);
+  assert.equal((await ref.collection("liberacoes").doc(vivi.uid).collection("lotes").doc("0").get()).exists, false);
+
+  // Só estas cidades (sem dividir): Davi fica só com Natal + Caicó.
+  await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [davi.uid], modo: "cidades", cidades: ["Natal", "Caicó"] }, tokens.breno);
+  const cd2 = await copia(davi.uid);
+  assert.equal(cd2.leads.length, 7);
+  assert.ok(cd2.leads.every((l) => ["Natal", "Caicó"].includes(l.cidade)));
+
+  // Não conta na cota do vendedor.
+  assert.equal((await db.doc(`usuarios/${vivi.uid}`).get()).exists, false);
+
+  // Revogar: some da lista (liberada_para) e os leads saem (lotes e cópia).
+  assert.equal((await pedido(liberarBusca, { acao: "revogar", id: "lib1", uid: vivi.uid }, tokens.breno)).status, 200);
+  assert.equal((await pedido(liberarBusca, { acao: "revogar", id: "lib1", uid: davi.uid }, tokens.breno)).status, 200);
+  b = (await ref.get()).data();
+  assert.deepEqual(b.liberada_para, []);
+  assert.deepEqual(b.liberacoes, {});
+  assert.deepEqual((await ref.collection("lotes").doc("0").get()).data().liberada_para, []);
+  assert.equal((await ref.collection("liberacoes").doc(davi.uid).collection("lotes").doc("0").get()).exists, false);
+  assert.equal((await pedido(liberarBusca, { acao: "revogar", id: "lib1", uid: davi.uid }, tokens.breno)).status, 404);
+
+  // Busca em andamento ou parte: não libera.
+  await db.doc("buscas/lib2").set({ dono_uid: ana.uid, tipo: "comum", lista: true, status: "na_fila", criada_em: new Date() });
+  assert.equal((await pedido(liberarBusca, { acao: "simular", id: "lib2" }, tokens.breno)).status, 409);
+  await db.doc("buscas/lib3").set({ dono_uid: ana.uid, tipo: "parte", status: "concluida", qtd_lotes: 1, criada_em: new Date() });
+  assert.equal((await pedido(liberarBusca, { acao: "simular", id: "lib3" }, tokens.breno)).status, 400);
+
+  // Apagar a busca leva as cópias liberadas.
+  await pedido(liberarBusca, { acao: "liberar", id: "lib1", vendedores: [davi.uid, vivi.uid], modo: "inteira", dividir: true }, tokens.breno);
+  assert.equal((await pedido(apagarBusca, { id: "lib1" }, tokens.breno)).status, 200);
+  assert.equal((await ref.collection("liberacoes").doc(davi.uid).collection("lotes").doc("0").get()).exists, false);
+  assert.equal((await ref.collection("liberacoes").doc(vivi.uid).collection("lotes").doc("0").get()).exists, false);
+  for (const id of ["lib2", "lib3"]) await db.doc(`buscas/${id}`).delete();
 });
