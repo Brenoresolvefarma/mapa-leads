@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createPrivateKey, generateKeyPairSync } from "node:crypto";
 import { test } from "node:test";
 import { cert } from "firebase-admin/app";
-import { descreverFormatoDaChave, normalizarChavePrivada } from "../netlify/lib/servidor.mjs";
+import { descreverFormatoDaChave, logPrivado, normalizarChavePrivada } from "../netlify/lib/servidor.mjs";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const PEM = privateKey.export({ type: "pkcs8", format: "pem" }); // com quebras reais e "\n" no fim
@@ -44,4 +44,20 @@ test("formato descrito sem expor a chave", () => {
   const ok = descreverFormatoDaChave(`"${literal}"`);
   assert.match(ok, /BEGIN PRIVATE KEY: sim.*END PRIVATE KEY: sim.*válida após normalizar: sim/);
   assert.ok(!ok.includes(literal.slice(40, 80)));
+});
+
+test("log de auditoria (uid de quem apagou) nunca vai para o log público do GitHub Actions", () => {
+  const antes = process.env.GITHUB_ACTIONS, original = console.log, linhas = [];
+  console.log = (m) => linhas.push(m);
+  try {
+    process.env.GITHUB_ACTIONS = "true";
+    logPrivado("apagar-busca: busca x apagada por uid-falso");
+    assert.deepEqual(linhas, []);
+    delete process.env.GITHUB_ACTIONS; // Netlify
+    logPrivado("apagar-busca: busca x apagada por uid-falso");
+    assert.deepEqual(linhas, ["apagar-busca: busca x apagada por uid-falso"]);
+  } finally {
+    console.log = original;
+    if (antes === undefined) delete process.env.GITHUB_ACTIONS; else process.env.GITHUB_ACTIONS = antes;
+  }
 });

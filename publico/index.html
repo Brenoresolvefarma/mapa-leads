@@ -938,11 +938,15 @@ const AJ = { alvo: null, fixo: false };
 function abrirAjuda(b, fixo) {
   const balao = $("#balao");
   if (AJ.alvo && AJ.alvo !== b) AJ.alvo.setAttribute("aria-expanded", "false");
-  AJ.alvo = b; AJ.fixo = fixo; AJ.desde = Date.now();
+  AJ.alvo = b; AJ.fixo = fixo;
   b.setAttribute("aria-expanded", "true"); b.setAttribute("aria-describedby", "balao");
   balao.textContent = b.dataset.ajuda;
-  balao.style.left = "0px"; balao.style.top = "0px";
   balao.classList.remove("oculto");
+  posicionarAjuda();
+}
+function posicionarAjuda() {
+  const b = AJ.alvo, balao = $("#balao");
+  balao.style.left = "0px"; balao.style.top = "0px";
   // posição: centrado no ícone, embaixo; se não couber embaixo (barra de menu do celular), em cima
   const r = b.getBoundingClientRect(), w = balao.offsetWidth, h = balao.offsetHeight, m = 8;
   const barra = $("#barra-inferior"), limiteBaixo = barra && barra.offsetHeight && getComputedStyle(barra).display !== "none" ? barra.getBoundingClientRect().top : innerHeight;
@@ -951,6 +955,8 @@ function abrirAjuda(b, fixo) {
   if (topo + h > limiteBaixo - m) topo = Math.max(m, r.top - h - 6);
   balao.style.left = `${esq}px`; balao.style.top = `${topo}px`;
 }
+// O (i) aberto pode ter sido redesenhado (dados chegando): o novo botão com o mesmo texto conta como o mesmo.
+const mesmoIcone = (b) => AJ.alvo && (AJ.alvo === b || (!AJ.alvo.isConnected && AJ.alvo.dataset.ajuda === b.dataset.ajuda));
 function fecharAjuda() {
   if (!AJ.alvo) return;
   AJ.alvo.setAttribute("aria-expanded", "false");
@@ -965,7 +971,7 @@ document.addEventListener("click", (ev) => {
     return;
   }
   ev.preventDefault(); ev.stopPropagation();
-  if (AJ.alvo === b && AJ.fixo) fecharAjuda(); else abrirAjuda(b, true);
+  if (mesmoIcone(b) && AJ.fixo) fecharAjuda(); else abrirAjuda(b, true);
 }, true);
 const temMouse = matchMedia("(hover: hover) and (pointer: fine)");
 document.addEventListener("pointerover", (ev) => {
@@ -978,8 +984,19 @@ document.addEventListener("pointerout", (ev) => {
   if (ev.target.closest("[data-ajuda]") === AJ.alvo && !AJ.alvo.contains(ev.relatedTarget)) fecharAjuda();
 });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && AJ.alvo) { ev.stopPropagation(); fecharAjuda(); } }, true);
-// rolar fecha o balão (menos a rolagem que o próprio toque causa para mostrar o ícone)
-addEventListener("scroll", () => { if (AJ.alvo && Date.now() - AJ.desde > 400) fecharAjuda(); }, { capture: true, passive: true });
+// ao rolar, o balão acompanha o ícone; fecha só se o ícone sumir ou sair da tela
+let rolandoAjuda = false;
+addEventListener("scroll", () => {
+  if (!AJ.alvo || rolandoAjuda) return;
+  rolandoAjuda = true;
+  requestAnimationFrame(() => {
+    rolandoAjuda = false;
+    if (!AJ.alvo) return;
+    if (!AJ.alvo.isConnected) return; // redesenhado: fica onde está até o próximo toque
+    const r = AJ.alvo.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight || !r.width) fecharAjuda(); else posicionarAjuda();
+  });
+}, { capture: true, passive: true });
 addEventListener("resize", fecharAjuda);
 addEventListener("hashchange", fecharAjuda);
 const scripts = {};

@@ -5,11 +5,11 @@
 // - Em andamento (na fila / rodando): recusa com 409 — cancelar primeiro, apagar depois.
 // - Busca-mãe do Estado inteiro: apaga também os lotes (filhas) e os leads de cada uma.
 // - NÃO devolve a cota do dia (o contador em usuarios/{uid} não é mexido).
-// - Log: só o id da busca e o uid de quem apagou (nada de leads).
+// - Log: só o id da busca e o uid de quem apagou (nada de leads), e só no log privado do Netlify.
 // As regras do Firestore continuam com write false para o navegador: só o servidor apaga.
 
 import { FieldValue } from "firebase-admin/firestore";
-import { ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
+import { ErroHttp, firebase, handler, json, lerCorpo, logPrivado, usuarioDoToken } from "../lib/servidor.mjs";
 
 const FINAIS = ["concluida", "erro", "cancelada"];
 
@@ -34,7 +34,7 @@ export default handler(async (req) => {
   let lotes = 0;
   for (const alvo of [...filhas.map((f) => f.ref), ref]) lotes += await apagarComLotes(db, alvo);
   await removerDaFila(db, [id, ...filhas.map((f) => f.id)]);
-  console.log(`apagar-busca: busca ${id} apagada por ${usuario.uid}`);
+  logPrivado(`apagar-busca: busca ${id} apagada por ${usuario.uid}`);
   return json(200, { resultado: "apagada", lotes, buscas: filhas.length + 1 });
 });
 

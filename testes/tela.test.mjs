@@ -579,6 +579,7 @@ test("tema: abre claro mesmo com o aparelho em modo escuro; no celular o botão 
   await p.fill("#le", "ana@x.example"); await p.fill("#ls", "senha-forte-2"); await p.tap("#entrar");
   await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
   // Menu fixo embaixo: Início, Nova busca, Leads e Mapa
+  await p.waitForFunction(() => document.querySelectorAll("#barra-inferior a").length === 4);
   assert.deepEqual((await p.locator("#barra-inferior a").allTextContents()).map((t) => t.trim()), ["Início", "Nova busca", "Leads", "Mapa"]);
   // Botão do topo troca o tema no celular (toque)
   await p.tap("#tema-btn");
@@ -601,7 +602,9 @@ test("tema: abre claro mesmo com o aparelho em modo escuro; no celular o botão 
   await p.tap("#tema-btn");
   assert.equal(await p.evaluate(() => document.documentElement.dataset.tema), "claro");
   assert.ok(await fundo() > 600);
-  assert.deepEqual(erros, []);
+  // WebKit: ao recarregar, a conexão de escuta do Firestore (emulador) é cortada e o navegador registra
+  // "Firestore/Listen/channel ... due to access control checks". É ruído do recarregamento, não erro da tela.
+  assert.deepEqual(erros.filter((e) => !/Firestore\/Listen\/channel.*access control checks/.test(e)), []);
   await ctx.close();
 });
 
@@ -682,6 +685,14 @@ test("ícones (i) em 390 px: cada um abre com um toque, mostra o texto dentro da
   const total = {};
   await p.waitForSelector("#kpis .kpi");
   total.inicio = await conferirAjudas(p, "Início");
+  // Os dados chegam depois e o Início se redesenha com o balão aberto: o 2º toque ainda fecha.
+  await p.locator("#kpis .kpi [data-ajuda]").first().tap();
+  await p.waitForSelector("#balao:not(.oculto)");
+  await firebase().db.doc("buscas/b1").update({ toque_teste: Date.now() });
+  await p.waitForFunction(() => !document.querySelector('#kpis [aria-expanded="true"]'), null, { timeout: 5000 }); // cartões redesenhados
+  assert.ok(await p.isVisible("#balao"), "balão continua aberto depois do redesenho");
+  await p.locator("#kpis .kpi [data-ajuda]").first().tap();
+  await p.waitForSelector("#balao.oculto", { state: "attached", timeout: 3000 });
   await p.tap("#barra-inferior a[data-ir=nova]");
   await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
   total.nova1 = await conferirAjudas(p, "Nova busca 1");

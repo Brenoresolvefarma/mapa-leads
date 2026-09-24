@@ -244,17 +244,17 @@ try {
   });
   await etapa("celular: cada (i) do Início abre com um toque, fica dentro da tela e some ao tocar de novo", async () => {
     await c.evaluate(() => { location.hash = "#inicio"; });
-    await c.waitForSelector("#kpis .kpi [data-ajuda]"); await c.waitForTimeout(1500);
+    await c.waitForSelector("#kpis .kpi [data-ajuda]"); await c.waitForTimeout(3000); // buscas e lotes chegando redesenham o Início
     const n = await c.locator("[data-ajuda]:visible").count();
     confere(n > 0, "nenhum (i) visível");
     for (let i = 0; i < n; i++) {
       const b = c.locator("[data-ajuda]:visible").nth(i);
       await b.scrollIntoViewIfNeeded(); await b.tap();
-      await c.waitForSelector("#balao:not(.oculto)", { timeout: 3000 });
+      await c.waitForSelector("#balao:not(.oculto)", { timeout: 3000 }).catch(() => { throw new Error(`(i) nº ${i} de ${n}: não abriu com o toque`); });
       const r = await c.$eval("#balao", (e) => { const q = e.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth && q.top >= 0 && q.bottom <= innerHeight && e.textContent.length > 10; });
       confere(r, `(i) nº ${i}: balão fora da tela ou sem texto`);
       await b.tap();
-      await c.waitForSelector("#balao.oculto", { state: "attached", timeout: 3000 });
+      await c.waitForSelector("#balao.oculto", { state: "attached", timeout: 3000 }).catch(() => { throw new Error(`(i) nº ${i} de ${n}: não fechou no 2º toque`); });
     }
   });
   await etapa("celular: vendedor apaga a própria busca em dois passos (Apagar → Sim, apagar)", async () => {

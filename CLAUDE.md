@@ -228,7 +228,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Apagar busca** (`/api/apagar-busca`): vendedor só as dele (`dono_uid` = uid do token), senão **403**; admin
   qualquer uma. Filha do Estado inteiro → 400 (apaga pela mãe, que leva as filhas e os lotes delas). Em andamento
   (na_fila/rodando) → 409 "cancele primeiro". Apaga lotes + documento, tira da `fila/estado`. **Não devolve a cota**;
-  `estatisticas` não mudam (histórico). Log só `busca <id> apagada por <uid>` (log do Netlify, não é público).
+  `estatisticas` não mudam (histórico). Log só `busca <id> apagada por <uid>` via `logPrivado()`: vai para o log privado do Netlify e NÃO escreve nada no GitHub Actions (`GITHUB_ACTIONS=true`), porque lá o log é público (visto no teste do preview com api_local, que chegou a imprimir o uid de logins temporários — corrigido).
   Tela: "Apagar busca" na lista de buscas de Meus leads (`#caixa-buscas`, agora com todas as buscas; em andamento
   mostra "Cancelar") e no card "Buscas de todos os vendedores" do Admin (`#buscas-admin`). Confirmação em dois passos
   (`confirmar()`, gaveta de baixo no celular): "Apagar a busca X com N leads? Isso não pode ser desfeito." →
