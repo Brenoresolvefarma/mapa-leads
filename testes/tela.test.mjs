@@ -1333,15 +1333,17 @@ test("mini-CRM e carteira (390 px): status em um toque, 'Como foi?', histórico,
 test("PB (390 px): Nova busca na Paraíba manda as cidades com 'PB'; Mapa PB com aprofundamento até os leads; Mercado PB; Estado inteiro PB estima", async () => {
   const { db } = firebase();
   const breno = (await firebase().auth.getUserByEmail("breno@x.example")).uid;
+  // Vendedora só deste teste (a Ana já gastou a cota do dia nos testes anteriores).
+  const paula = (await firebase().auth.createUser({ email: "paula@x.example", password: "senha-forte-p", displayName: "Paula" })).uid;
   // Uma busca fictícia em João Pessoa (PB) com um lead
-  await db.doc("buscas/pbA").set({ tipo: "comum", lista: true, dono_uid: uids.ana, status: "concluida", criada_em: new Date(), finalizada_em: new Date(),
+  await db.doc("buscas/pbA").set({ tipo: "comum", lista: true, dono_uid: paula, status: "concluida", criada_em: new Date(), finalizada_em: new Date(),
     parametros: { termos: ["clínica"], cidades: ["João Pessoa PB"] }, qtd_lotes: 1, resumo: { total: 1 } });
-  await db.doc("buscas/pbA/lotes/0").set({ dono_uid: uids.ana, leads: [lead({ nome: "Clínica Paraibana", cidade: "João Pessoa", uf: "PB", cidade_buscada: "João Pessoa PB", id_lugar: "pb1",
+  await db.doc("buscas/pbA/lotes/0").set({ dono_uid: paula, leads: [lead({ nome: "Clínica Paraibana", cidade: "João Pessoa", uf: "PB", cidade_buscada: "João Pessoa PB", id_lugar: "pb1",
     latitude: -7.115, longitude: -34.86 })] });
   const tel = { width: 390, height: 844 };
   const esperarPB = (pg, fn) => pg.waitForFunction(fn, null, { timeout: 15000 }).catch(async (e) => {
     throw new Error(`${e.message} [${String(fn).slice(6, 70)}] — hash ${await pg.evaluate(() => location.hash)} · painel: ${await pg.evaluate(() => (document.querySelector("#mapa-painel")?.innerText || "").replace(/\s+/g, " ").slice(0, 400))} · erros: ${erros.join(" | ")}`); });
-  const p = await abrir("ana@x.example", "senha-forte-2", tel);
+  const p = await abrir("paula@x.example", "senha-forte-p", tel);
   // ---- Nova busca: seletor de estado com RN e PB; ao trocar, regiões e cidades da PB
   await p.tap("#barra-inferior a[data-ir=nova]");
   assert.deepEqual(await p.$$eval("#uf option", (o) => o.map((x) => x.textContent)), ["Rio Grande do Norte", "Paraíba"]);
@@ -1364,6 +1366,7 @@ test("PB (390 px): Nova busca na Paraíba manda as cidades com 'PB'; Mapa PB com
   // O servidor recebe e grava as consultas com "PB"
   const [resp] = await Promise.all([p.waitForResponse((r) => r.url().includes("/api/criar-busca") && JSON.parse(r.request().postData() || "{}").simular !== true), p.tap("#buscar")]);
   const criada = await resp.json();
+  assert.equal(resp.status(), 201, JSON.stringify(criada));
   const b = (await db.doc(`buscas/${criada.id}`).get()).data();
   assert.ok(b.parametros.cidades.every((c) => / PB$/.test(c)));
   // ---- Mapa da PB: estado › microrregião › município › leads

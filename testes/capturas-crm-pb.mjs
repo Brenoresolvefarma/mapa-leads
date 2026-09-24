@@ -73,8 +73,8 @@ async function abrirSo(p, id) {
   await p.tap("#barra-inferior a[data-ir=leads]");
   await p.tap("#abrir-buscas");
   await p.waitForSelector(`#caixa-buscas [data-abrir=${id}]`);
-  for (const c of await p.$$("#caixa-buscas [data-abrir]:checked")) await c.uncheck();
-  await p.check(`#caixa-buscas [data-abrir=${id}]`);
+  await p.waitForTimeout(500); // a lista redesenha quando as buscas chegam
+  await p.$$eval("#caixa-buscas [data-abrir]", (xs, alvo) => xs.forEach((x) => { x.checked = x.dataset.abrir === alvo; }), id);
   await p.tap("#aplicar-buscas");
   await p.waitForSelector("#cartoes .cartao-lead .status-lead, #cartoes .cartao-lead .na-carteira");
   await p.waitForTimeout(600);

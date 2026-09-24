@@ -398,8 +398,8 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .btn-perigo-forte { background:var(--bad); color:#fff; }
 /* Mini-CRM */
-.status-lead { display:grid; grid-template-columns:repeat(auto-fit, minmax(64px, 1fr)); gap:4px; }
-.status-lead button { min-height:40px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-2); font-size:12px; font-weight:600; cursor:pointer; padding:0 4px; overflow-wrap:anywhere; }
+.status-lead { display:grid; grid-template-columns:repeat(auto-fit, minmax(84px, 1fr)); gap:4px; }
+.status-lead button { min-height:40px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-2); font-size:12px; font-weight:600; cursor:pointer; padding:0 4px; white-space:nowrap; }
 .status-lead button[aria-pressed="true"] { background:var(--brand); border-color:var(--brand); color:#fff; }
 .status-lead button[data-status="descartado"][aria-pressed="true"], .status-lead [data-folha-status="descartado"][aria-pressed="true"] { background:var(--bad); border-color:var(--bad); }
 .status-lead.motivos, .status-lead.folha-status { grid-template-columns:repeat(2, minmax(0,1fr)); }
@@ -412,7 +412,11 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .historico { margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-2); display:grid; gap:2px; }
 .para-hoje { display:block; margin-bottom:12px; border-left:4px solid var(--brand); position:relative; text-decoration:none; color:inherit; }
 .para-hoje .val { font-size:22px; font-weight:700; }
-@media (max-width: 760px) { .status-lead button { min-height:44px; } }
+@media (max-width: 760px) {
+  /* celular: 3 por linha (Novo · Contatado · Negociando / Cliente · Descartado), palavra inteira, toque de 44 px */
+  .status-lead { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .status-lead button { min-height:44px; font-size:13px; overflow-wrap:normal; word-break:keep-all; white-space:nowrap; }
+}
 /* Liberar busca para vendedor (admin) */
 .caixa-buscas .linha-busca { flex-wrap:wrap; }
 .acoes-busca { display:flex; gap:6px; flex:none; flex-wrap:wrap; justify-content:flex-end; }
