@@ -204,6 +204,18 @@ test("Mapa: aprofunda RN › microrregião › município pelo painel; categoria
   // Esc volta um nível
   await p.keyboard.press("Escape");
   await esperarHash(p, "#mapa/natal");
+  // "← Voltar" na microrregião volta ao RN inteiro (bug visto pelo Breno em "RN › Seridó Oriental")
+  await p.click("#mapa-voltar");
+  await esperarHash(p, "#mapa");
+  await esperarTexto(p, "#migalhas", /^RN$/);
+  assert.match(await texto(p, "#mapa-painel"), /Estado\s*Rio Grande do Norte/);
+  // E "RN" na trilha também
+  await p.click(`#mapa-painel [data-ir-micro="${MICRO_NATAL}"]`);
+  await esperarHash(p, "#mapa/natal");
+  await p.click("#migalhas a[href='#mapa']");
+  await esperarTexto(p, "#migalhas", /^RN$/);
+  await p.click(`#mapa-painel [data-ir-micro="${MICRO_NATAL}"]`);
+  await esperarHash(p, "#mapa/natal");
   await p.click(`#mapa-painel [data-ir-mun="${EXTREMOZ}"]`);
   await esperarHash(p, "#mapa/natal/extremoz");
   // Categoria do painel → exatamente esses leads na tabela
@@ -459,7 +471,7 @@ test("celular (360/390/414 px): nada passa da largura da tela, toques ≥ 44 px 
 
 test("admin: Admin com saúde do motor, usuários e Estado inteiro; sair e entrar como comum na mesma aba não vaza nada", async () => {
   const p = await abrir("breno@x.example", "senha-forte-1");
-  assert.ok(await p.isVisible("#selo"));
+  await p.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
   await esperarTexto(p, "#saudacao", /^Olá!$/); // sem nome no cadastro: nunca o começo do e-mail
   await p.click("#menu [data-ir=admin]");
   await esperarTexto(p, "#saude", /Últimas execuções|Token do GitHub/);

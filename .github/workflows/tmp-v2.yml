@@ -43,6 +43,18 @@ jobs:
                    "https://mapaleads-rn.netlify.app/" "https://mapaleads-rn.netlify.app/api/config-publica"; do
             echo "$(curl -s -o /dev/null -w '%{http_code}' "$u")  $u"
           done
+          # Preview x produção: só "presente/ausente" de cada campo público e o texto de erro das Functions
+          # do preview (que não recebem a credencial secreta). Nenhum valor é impresso.
+          for base in "$PREVIEW" "https://mapaleads-rn.netlify.app"; do
+            curl -s "$base/api/config-publica" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d||"{}");console.log(process.argv[1],Object.fromEntries(["apiKey","authDomain","projectId"].map(k=>[k,j[k]?"presente":"ausente"])))})' "$base"
+          done
+          # Token falso: com credencial a Function responde 401 (token inválido); sem credencial, 500 "sem credenciais".
+          for base in "$PREVIEW" "https://mapaleads-rn.netlify.app"; do
+            for fn in admin-usuarios criar-busca cancelar-busca; do
+              r=$(curl -s -w '\n%{http_code}' -X POST "$base/api/$fn" -H 'content-type: application/json' -H 'authorization: Bearer token-falso-de-teste' -d '{}')
+              echo "$(echo "$r" | tail -1) $base/api/$fn  $(echo "$r" | head -1 | cut -c1-120)"
+            done
+          done
           # config-publica da produção 15 vezes: código, tempo e, se não for 200, o começo do texto do erro
           # (a resposta 200 não é impressa; o erro nunca tem dados).
           for i in $(seq 1 15); do

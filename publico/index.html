@@ -1049,7 +1049,7 @@ function irPara() {
   if (p.id === "inicio") desenharInicio();
   if (p.id === "nova") mostrarPasso(NB.passo);
   if (p.id === "leads") { if (mudou && !W.origemNova) W.origem = null; W.origemNova = false; abrirLeads(); }
-  if (p.id === "mapa") abrirMapa(resto);
+  if (p.id === "mapa") abrirMapa(resto, mudou);
   if (p.id === "mercado") abrirMercado();
   if (p.id === "admin") carregarAdmin();
   if (mudou) scrollTo(0, 0);
@@ -1980,13 +1980,13 @@ const M = { mapa: null, mun: null, micro: null, pontos: null, nivel: { micro: ""
 const urlTiles = () => "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const CREDITO_MAPA = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 $("#mapa-metrica").innerHTML = Object.entries(METRICAS).map(([k, v]) => `<option value="${k}">${v.rot}</option>`).join("");
-async function abrirMapa(resto) {
+async function abrirMapa(resto, entrando = false) {
   try { await prepararLeads(); } catch { /* sem buscas: mapa só com IBGE */ }
   try { await carregarLeaflet(); } catch { $("#mapa-leaflet").innerHTML = `<div class="vazio"><h3>Não foi possível carregar o mapa agora</h3><p>Verifique a internet e tente de novo.</p></div>`; return; }
   if (!M.mapa) criarMapa();
   const abertas = buscasAbertas();
   $("#mapa-origem").textContent = abertas.length ? `Segmento: ${W.segmento.termos.join(", ")} · ${abertas.length} busca(s)` : "Sem buscas abertas: só dados do IBGE";
-  aplicarRota(resto);
+  aplicarRota(resto, entrando);
   setTimeout(() => M.mapa.invalidateSize(), 50);
 }
 function criarMapa() {
@@ -2020,11 +2020,12 @@ function irNivel(micro, cod) {
   if (cod) partes.push(slug(porCodigo.get(cod).nome));
   if (location.hash !== partes.join("/")) location.hash = partes.join("/"); else aplicarRota(rota().resto);
 }
-function aplicarRota(resto) {
+function aplicarRota(resto, entrando = false) {
   const micro = REGIOES.micro.find((r) => slug(r.nome) === resto[0]);
   const mun = micro && MUNS.find((m) => m.micro.id === micro.id && slug(m.nome) === resto[1]);
-  // Sem nível na URL: usa o recorte da tabela (sincronizado).
-  if (!resto.length && (F.micro || F.cidade)) {
+  // Chegando ao Mapa de outra tela sem nível na URL: usa o recorte da tabela (sincronizado).
+  // Dentro do Mapa (Voltar, Esc, "RN" na trilha), "#mapa" é o RN inteiro — não volta para a microrregião.
+  if (!resto.length && entrando && (F.micro || F.cidade)) {
     const c = infoCidade(F.cidade);
     if (c) return irNivel(c.micro.id, c.codigo);
     if (F.micro) return irNivel(F.micro, "");
