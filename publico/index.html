@@ -827,7 +827,8 @@ const CDN = {
   leaflet: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js",
   cluster: "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js",
   chart: "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js",
-  xlsx: "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs",
+  // .xlsx com estilo (cabeçalho, filtro, links, larguras): ExcelJS, carregado só no clique de exportar.
+  exceljs: "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
 };
 
 // <relevancia> ------------------------------------------------ RELEVÂNCIA DO SEGMENTO (bloco puro)
@@ -2147,20 +2148,32 @@ const CAMPOS_EXPORTAR = ["nome", "categoria", "telefone", "whatsapp_link", "emai
   "regiao_imediata", "nota", "qtd_avaliacoes", "link_maps", "termo_que_encontrou", "cidade_buscada", "cidade_confere", "categorias", "no_segmento"];
 const camposExportados = () => CAMPOS_EXPORTAR;
 const linhasExportar = (lista) => { const campos = camposExportados(); return { campos, linhas: lista.map((l) => Object.fromEntries(campos.map((c) => [c, c === "categorias" ? (l.categorias || []).join("; ") : l[c] ?? ""]))) }; };
-function nomeArquivo(lista) {
-  const segmento = slug(W.segmento.termos.slice(0, 3).join("-")) || "leads", dia = diaFortaleza();
-  if (F.cidade) return `${segmento}-${slug(F.cidade)}-${dia}`;
-  if (F.micro) return `${segmento}-${slug(microPorId.get(F.micro)?.nome)}-${dia}`;
+// Lugar do arquivo: filtro de cidade → cidade; microrregião do filtro → ela; RN inteiro → RN; 1 cidade pedida → ela;
+// cidades pedidas = uma região inteira → a região; senão "varias-cidades".
+function lugarDoArquivo() {
+  if (F.cidade) return F.cidade;
+  if (F.micro) return microPorId.get(F.micro)?.nome || "varias-cidades";
   const abertas = buscasAbertas();
-  if (abertas.some((b) => b.tipo === "rn_mae")) return `${segmento}-RN-${dia}`;
+  if (abertas.some((b) => b.tipo === "rn_mae")) return "RN";
   const cidades = [...new Set(abertas.flatMap((b) => (b.parametros?.cidades || []).map((c) => infoCidade(c)?.nome || c)))];
-  if (cidades.length === 1) return `${segmento}-${slug(cidades[0])}-${dia}`;
+  if (cidades.length === 1) return cidades[0];
   const conj = new Set(cidades);
   for (const tipo of ["micro", "imediata"]) {
     const r = REGIOES[tipo].find((x) => x.municipios.length === conj.size && x.municipios.every((c) => conj.has(porCodigo.get(c).nome)));
-    if (r) return `${segmento}-${slug(r.nome)}-${dia}`;
+    if (r) return r.nome;
   }
-  return `${segmento}-varias-cidades-${dia}`;
+  return "varias-cidades";
+}
+// .csv (formato de sempre): segmento-lugar-AAAA-MM-DD
+function nomeArquivo() {
+  const segmento = slug(W.segmento.termos.slice(0, 3).join("-")) || "leads", lugar = lugarDoArquivo();
+  return `${segmento}-${lugar === "RN" ? "RN" : slug(lugar)}-${diaFortaleza()}`;
+}
+// .xlsx: MapaLeads_<termo>_<cidade ou região>_<dd-mm-aaaa>.xlsx (sem acento nem espaço: abre certo em qualquer celular)
+const trechoNome = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+function nomeArquivoXlsx() {
+  const [a, m, d] = diaFortaleza().split("-");
+  return `MapaLeads_${trechoNome(W.segmento.termos.slice(0, 3).join("-").toLowerCase()) || "leads"}_${trechoNome(lugarDoArquivo())}_${d}-${m}-${a}.xlsx`;
 }
 function baixar(blob, nome) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nome;
@@ -2170,22 +2183,110 @@ function baixarCsv(lista) {
   // Separador ";" e BOM UTF-8: abre certo no Excel em português. Sem assinatura (não quebra importações).
   const { campos, linhas } = linhasExportar(lista);
   const cel = (v) => { const s = typeof v === "number" ? String(v).replace(".", ",") : String(v ?? ""); return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  baixar(new Blob(["﻿" + [campos.join(";"), ...linhas.map((l) => campos.map((c) => cel(l[c])).join(";"))].join("\r\n")], { type: "text/csv;charset=utf-8" }), `${nomeArquivo(lista)}.csv`);
+  baixar(new Blob(["﻿" + [campos.join(";"), ...linhas.map((l) => campos.map((c) => cel(l[c])).join(";"))].join("\r\n")], { type: "text/csv;charset=utf-8" }), `${nomeArquivo()}.csv`);
+}
+// ---- Planilha .xlsx pronta para usar (pedido do Breno, 24/09): aba "Leads" formatada + aba "Resumo".
+// Só dados do Google Maps (nada de sócios nem outros dados pessoais — LGPD). O .csv continua simples.
+const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+const LARGURA_MAX = { "Endereço": 45, "Categoria": 32, "Nome": 42 }; // o resto: até 30
+const AZUL_MARCA = "FF1F5FD6", ZEBRA = "FFF3F6FB", AZUL_LINK = "FF1F5FD6";
+/** Telefone limpo: (84) 99999-9999 (celular) ou (84) 3333-3333 (fixo); outro formato fica como veio. */
+function telefonePadrao(t) {
+  let n = String(t || "").replace(/\D/g, "");
+  if (n.length > 11 && n.startsWith("55")) n = n.slice(2);
+  if (n.length === 11) return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+  if (n.length === 10) return `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}`;
+  return String(t || "");
+}
+/** Data da coleta = dia em que a busca do lead terminou (horário de Natal), como data do Excel. */
+function dataDaColeta(l) {
+  const b = buscas.find((x) => x.id === l._busca);
+  const quando = b?.finalizada_em?.toDate?.() || b?.criada_em?.toDate?.() || new Date();
+  const [a, m, d] = diaFortaleza(quando).split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d));
+}
+/** Linhas da aba "Leads": sem duplicados, ordenadas por Cidade e Nome, só as colunas pedidas. */
+function linhasXlsx(lista) {
+  const vistos = new Set(), unicos = lista.filter((l) => { const k = chaveLead(l); if (vistos.has(k)) return false; vistos.add(k); return true; });
+  const pt = (a, b) => (a || "").localeCompare(b || "", "pt-BR", { sensitivity: "base" });
+  unicos.sort((a, b) => (!a.cidade - !b.cidade) || pt(a.cidade, b.cidade) || pt(a.nome, b.nome)); // sem cidade vai para o fim
+  const link = (url, texto) => (url ? { text: texto, hyperlink: url } : "");
+  return unicos.map((l) => [
+    l.nome || "", l.categoria || "", l.cidade || "", l.microrregiao || "", l.bairro || "", l.endereco || "",
+    telefonePadrao(l.telefone), link(l.whatsapp_link, "Abrir WhatsApp"), link(l.site || l.instagram, "Abrir site"), l.email || "",
+    typeof l.nota === "number" && l.nota > 0 ? l.nota : "", typeof l.qtd_avaliacoes === "number" ? l.qtd_avaliacoes : "",
+    l.no_segmento === "sim" ? "Sim" : "Não", link(l.link_maps, "Ver no mapa"), l.termo_que_encontrou || "", dataDaColeta(l),
+  ]);
+}
+function estiloCabecalho(linha) {
+  linha.eachCell((c) => {
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: AZUL_MARCA } };
+    c.alignment = { vertical: "middle" };
+  });
+  linha.height = 20;
+}
+async function montarXlsx(lista) {
+  await carregarScript(CDN.exceljs);
+  const livro = new window.ExcelJS.Workbook();
+  livro.creator = "MapaLeads";
+  const linhas = linhasXlsx(lista);
+  // ---- aba Leads
+  const ws = livro.addWorksheet("Leads", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.addRow(COLUNAS_XLSX);
+  estiloCabecalho(ws.getRow(1));
+  linhas.forEach((valores, i) => {
+    const r = ws.addRow(valores);
+    if (i % 2 === 1) r.eachCell({ includeEmpty: true }, (c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } }; });
+    for (const col of [8, 9, 14]) { const c = r.getCell(col); if (c.value?.hyperlink) c.font = { color: { argb: AZUL_LINK }, underline: true }; }
+  });
+  ws.getColumn(11).numFmt = "0.0";
+  ws.getColumn(12).numFmt = "0";
+  ws.getColumn(16).numFmt = "dd/mm/yyyy";
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, linhas.length + 1), column: COLUNAS_XLSX.length } };
+  // O Excel, quando salva uma planilha com filtro, grava também o nome interno _xlnm._FilterDatabase (da aba 1).
+  // O ExcelJS não grava; sem ele o LibreOffice (e alguns apps) não mostram as setas do filtro. Mesmo formato do Excel.
+  const modeloNomes = livro._definedNames;
+  livro._definedNames = { get model() { return [...modeloNomes.model,
+    { name: "_xlnm._FilterDatabase", localSheetId: 0, ranges: [`'Leads'!$A$1:$P$${Math.max(1, linhas.length + 1)}`] }]; } };
+  // largura pelo conteúdo (o texto do link conta pelo que aparece), com limite
+  COLUNAS_XLSX.forEach((nome, i) => {
+    // cabeçalho: +4 para a seta do filtro não cobrir o texto
+    const maior = Math.max(nome.length + 2, ...linhas.map((v) => { const x = v[i]; return x instanceof Date ? 10 : String(x?.text ?? x ?? "").length; }));
+    ws.getColumn(i + 1).width = Math.min(LARGURA_MAX[nome] || 30, Math.max(10, maior + 2));
+  });
+  // ---- aba Resumo
+  const rs = livro.addWorksheet("Resumo");
+  const [a, m, d] = diaFortaleza().split("-");
+  const noSeg = linhas.filter((v) => v[12] === "Sim").length, comWhats = linhas.filter((v) => v[7]).length;
+  [["Termo buscado", W.segmento.termos.join(", ") || "–"], ["Data", `${d}/${m}/${a}`], ["Total de leads", linhas.length],
+    ["No segmento", noSeg], ["Com WhatsApp", comWhats]].forEach(([k, v]) => { const r = rs.addRow([k, v]); r.getCell(1).font = { bold: true }; });
+  rs.addRow([]);
+  const cab = rs.addRow(["Cidade", "Leads", "No segmento", "Com WhatsApp"]);
+  estiloCabecalho(cab);
+  const porCidade = new Map();
+  for (const v of linhas) {
+    const k = v[2] || "(sem cidade)", x = porCidade.get(k) || [0, 0, 0];
+    x[0]++; if (v[12] === "Sim") x[1]++; if (v[7]) x[2]++; porCidade.set(k, x);
+  }
+  [...porCidade].sort((p, q) => q[1][0] - p[1][0] || p[0].localeCompare(q[0], "pt-BR")).forEach(([k, x]) => rs.addRow([k, ...x]));
+  if (ASSINATURA.locais.xlsx) { rs.addRow([]); rs.addRow([`Gerado pelo MapaLeads – ${ASSINATURA.empresa}`]); }
+  rs.getColumn(1).width = Math.min(40, Math.max(16, ...[...porCidade.keys()].map((k) => k.length + 2)));
+  rs.getColumn(2).width = Math.max(14, Math.min(50, (W.segmento.termos.join(", ").length || 0) + 2));
+  rs.getColumn(3).width = 14; rs.getColumn(4).width = 15;
+  return { livro, linhas: linhas.length };
 }
 async function baixarXlsx(lista) {
+  const n = new Set(lista.map(chaveLead)).size;
+  if (!n) return toast("Nenhum lead para exportar com os filtros atuais.", "erro");
+  if (!(await confirmar({ titulo: "Exportar planilha", sim: "Baixar .xlsx",
+    texto: `Vão sair ${numero(n)} ${n === 1 ? "lead" : "leads"} — os que os filtros da tela mostram agora. A planilha abre direto no Excel ou no Planilhas.` }))) return;
   try {
-    const XLSX = await import(CDN.xlsx);
-    const { campos, linhas } = linhasExportar(lista);
-    const livro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(livro, XLSX.utils.json_to_sheet(linhas, { header: campos }), "Leads");
-    // Aba "Resumo": totais por microrregião e por cidade, com a assinatura no rodapé.
-    const por = (chave) => [...lista.reduce((m, l) => { const k = chave(l) || "(sem)"; const x = m.get(k) || [0, 0]; x[0]++; if (l.whatsapp_link) x[1]++; m.set(k, x); return m; }, new Map())].sort((a, b) => b[1][0] - a[1][0]);
-    const resumo = [["Resumo dos leads exportados"], [`Segmento: ${W.segmento.termos.join(", ")}`], [`Total: ${lista.length} leads`], [],
-      ["Microrregião", "Leads", "Com WhatsApp"], ...por((l) => l.microrregiao).map(([k, [n, w]]) => [k, n, w]), [],
-      ["Cidade", "Leads", "Com WhatsApp"], ...por((l) => l.cidade).map(([k, [n, w]]) => [k, n, w]), []];
-    if (ASSINATURA.locais.xlsx) resumo.push([`Gerado pelo MapaLeads – ${ASSINATURA.empresa} – ${new Date().toLocaleString("pt-BR", FUSO)}`]);
-    XLSX.utils.book_append_sheet(livro, XLSX.utils.aoa_to_sheet(resumo), "Resumo");
-    XLSX.writeFile(livro, `${nomeArquivo(lista)}.xlsx`, { compression: true });
+    const { livro } = await montarXlsx(lista);
+    const dados = await livro.xlsx.writeBuffer();
+    baixar(new Blob([dados], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nomeArquivoXlsx());
+    toast(`Planilha com ${numero(n)} leads baixada.`, "ok");
   } catch { toast("Não foi possível gerar o .xlsx agora. Tente o .csv.", "erro"); }
 }
 const selecionados = () => visiveis.filter((l) => F.sel.has(chaveLead(l)));
@@ -2650,7 +2751,7 @@ const PASSOS_TOUR = [
   ["Bem-vindo ao MapaLeads", "Aqui você encontra empresas por cidade, microrregião e segmento, com WhatsApp, mapa e dados do IBGE."],
   ["Como buscar", "Em “Nova busca”: escolha o segmento (ex.: home care), marque as cidades no mapa ou na lista e confira o tempo estimado antes de buscar."],
   ["Como ler os leads", "Em “Meus leads” você filtra por cidade, segmento e categoria. “Só do segmento” esconde o que o Google devolveu parecido mas não é do ramo. Clique num lead para a ficha com WhatsApp e Google Maps."],
-  ["Como exportar", `Baixe .xlsx (com aba “Resumo”) ou .csv com os leads que os filtros mostram. ${ASSINATURA.locais.tour ? `${ASSINATURA.texto} ${ASSINATURA.empresa}.` : ""}`],
+  ["Como exportar", `Baixe a planilha .xlsx pronta (cabeçalho com filtro, links de WhatsApp e mapa, aba “Resumo”) ou o .csv, com os leads que os filtros mostram. ${ASSINATURA.locais.tour ? `${ASSINATURA.texto} ${ASSINATURA.empresa}.` : ""}`],
 ];
 function abrirTour(i = 0) {
   const [t, d] = PASSOS_TOUR[i];

@@ -199,7 +199,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   alternância "No segmento | Ver total" (guardada no navegador); calculados dos lotes das buscas (cache `lotesLidos`,
   compartilhado com Meus leads; 1 leitura por lote por visita — o Início não lê mais `estatisticas`), cada recorte com
   o segmento das suas buscas, igual ao detalhe. Gráfico: até 7 dias com busca nos últimos 30 → só esses dias.
-- **Exportação**: colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
+- **Exportação** (.csv): colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
+  **.xlsx refeito em 24/09 (pedido do Breno, PR 14)** — ver "Planilha .xlsx pronta para usar" abaixo.
   **Aprovado pelo Breno (23/09)**, junto com: "Sair" volta o endereço ao Início (sem #leads/#mapa do usuário anterior)
   e ranking do Mercado só com indicadores lado a lado (sem nota/índice calculado).
 - **Duplicados**: o mesmo lugar em outra busca completa os campos vazios (dado real do Google).
@@ -242,6 +243,23 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   continua SEM `maximum-scale`/`user-scalable=no` (o usuário pode ampliar). Teste em 390 px confere a fonte calculada de
   todos os campos visíveis em login, Nova busca (3 passos), Meus leads (lista de buscas e "Mais filtros"), Mapa, Mercado
   e Admin — sem a correção ele acusa 34 campos com 13,5 px.
+- **Planilha .xlsx pronta para usar** (PR 14): ExcelJS 4.4.0 do cdnjs, carregado só no clique (`CDN.exceljs`; nos testes
+  vem do `node_modules`, devDependency fixada). Aba **Leads** com as colunas, nesta ordem: Nome, Categoria, Cidade,
+  Microrregião, Bairro, Endereço, Telefone, WhatsApp, Site, E-mail, Nota, Avaliações, No segmento (Sim/Não), Link do
+  Google Maps, Busca (termo), Data da coleta (= dia em que a busca do lead terminou, horário de Natal).
+  - Formatação: cabeçalho negrito branco sobre o azul da marca (#1F5FD6), primeira linha congelada e filtro automático
+    em A1:P(n+1), mais o nome interno `_xlnm._FilterDatabase` (o Excel grava; o ExcelJS não; sem ele o LibreOffice não
+    mostra as setas); largura pelo conteúdo com limite (Endereço 45, Nome 42, Categoria 32, demais 30); zebra leve.
+  - Conteúdo: telefone `(84) 99999-9999` / `(84) 3333-3333`; WhatsApp = link "Abrir WhatsApp" só para celular;
+    Site/Maps = "Abrir site"/"Ver no mapa"; nota `0.0`; avaliações número; data `dd/mm/yyyy`; ordem Cidade → Nome
+    (sem cidade no fim); sem duplicados e sem colunas técnicas (id_lugar, coordenadas).
+  - Aba **Resumo**: termo, data, total, no segmento, com WhatsApp e tabela Cidade | Leads | No segmento | Com WhatsApp.
+  - Nome: `MapaLeads_<termo>_<cidade ou região>_<dd-mm-aaaa>.xlsx` (sem acento/espaço; lugar pela mesma regra de
+    sempre, `lugarDoArquivo()`). O .csv continua simples e com o nome antigo.
+  - Respeita os filtros da tela (exporta os leads visíveis) e **confirma antes**: "Vão sair N leads — os que os
+    filtros da tela mostram agora" → "Baixar .xlsx". Só dados do Google Maps (LGPD; nada de sócios).
+  - Teste: gera pela tela e lê com o ExcelJS (colunas, ordem, cabeçalho, travado, filtro, links, formatos, Resumo).
+    Captura conferida no LibreOffice Calc (tela virtual): abre sem erro, com setas do filtro.
 - **Workflow "Capturas da tela"** (manual): capturas do celular em produção (login temporário + busca fictícia) na
   branch `capturas-tela`; a criação da busca nas capturas dos logos é **simulada** (rota interceptada, nada na fila).
 

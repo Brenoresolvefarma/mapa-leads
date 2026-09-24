@@ -1,6 +1,6 @@
 // Nos testes, as bibliotecas do CDN vêm do node_modules (mesmas versões fixadas na tela), sem depender da rede:
-// SDK do Firebase, Leaflet, MarkerCluster e Chart.js. Fontes e mapas de fundo (OpenStreetMap) são respondidos vazios.
-// O SheetJS (.xlsx) só é testado no CI, que tem internet (TESTAR_XLSX=1).
+// SDK do Firebase, Leaflet, MarkerCluster, Chart.js e ExcelJS (.xlsx). Fontes e mapas de fundo (OpenStreetMap)
+// são respondidos vazios.
 const ARQUIVOS = {
   "leaflet.min.js": "node_modules/leaflet/dist/leaflet.js",
   "leaflet.min.css": "node_modules/leaflet/dist/leaflet.css",
@@ -8,6 +8,7 @@ const ARQUIVOS = {
   "MarkerCluster.min.css": "node_modules/leaflet.markercluster/dist/MarkerCluster.css",
   "MarkerCluster.Default.min.css": "node_modules/leaflet.markercluster/dist/MarkerCluster.Default.css",
   "chart.umd.min.js": "node_modules/chart.js/dist/chart.umd.js",
+  "exceljs.min.js": "node_modules/exceljs/dist/exceljs.min.js",
 };
 // PNG transparente de 1×1 (mosaico do mapa de fundo).
 const PNG_VAZIO = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");

@@ -71,10 +71,15 @@ quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e 
   "Mais filtros": WhatsApp, fixo, site, sem site, Instagram, sem cidade, nota, avaliações, bairro, termo, busca de
   origem, **categorias do Google** (guardar no perfil). Chips com "limpar tudo", colunas escolhíveis, compacto/
   confortável, visões salvas (neste navegador), seleção, ficha lateral com mini-mapa. No celular a tabela vira cartões.
-  **Exportar** .xlsx (com aba "Resumo" e a assinatura) e .csv (`;` + BOM, sem assinatura) com os leads filtrados;
-  colunas fixas: nome, categoria, telefone, whatsapp_link, email, site, instagram, endereco, bairro, cidade,
-  microrregiao, regiao_imediata, nota, qtd_avaliacoes, link_maps, termo_que_encontrou, cidade_buscada,
-  cidade_confere, categorias, no_segmento (sem `id_lugar`).
+  **Exportar** com os leads filtrados (a tela avisa quantos vão sair):
+  - **.xlsx pronto para usar** (ExcelJS, carregado só no clique): aba "Leads" com Nome, Categoria, Cidade, Microrregião,
+    Bairro, Endereço, Telefone, WhatsApp, Site, E-mail, Nota, Avaliações, No segmento, Link do Google Maps, Busca (termo)
+    e Data da coleta; cabeçalho azul travado com filtro, larguras ajustadas, zebra, telefone padronizado, links
+    "Abrir WhatsApp"/"Abrir site"/"Ver no mapa", ordem Cidade → Nome; aba "Resumo" com totais e tabela por cidade.
+    Nome: `MapaLeads_<termo>_<cidade ou região>_<dd-mm-aaaa>.xlsx`. Abre direto no Excel ou no Planilhas do celular;
+  - **.csv** (`;` + BOM, sem assinatura), colunas fixas: nome, categoria, telefone, whatsapp_link, email, site, instagram,
+    endereco, bairro, cidade, microrregiao, regiao_imediata, nota, qtd_avaliacoes, link_maps, termo_que_encontrou,
+    cidade_buscada, cidade_confere, categorias, no_segmento (sem `id_lugar`).
 - **Mapa** (Leaflet + mapa de fundo OpenStreetMap, gratuito e sem chave; escurecido no tema escuro): cores por município (leads do segmento, por 10 mil hab., população,
   PIB per capita 2022, empresas CEMPRE), pontos dos leads, contornos de microrregião, legenda. **Aprofundamento**:
   RN › microrregião › município (trilha, "Voltar" e Esc; estado na URL, ex.: `#mapa/serido-oriental/currais-novos`).

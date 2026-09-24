@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium, webkit } from "playwright-core";
 import { medirLargura, rotearCdn } from "./rotas-cdn.mjs";
+import ExcelJS from "exceljs";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 process.env.FIREBASE_PROJECT_ID = "demo-mapaleads";
@@ -31,6 +32,8 @@ let navegador, local, erros = [];
 const uids = {};
 
 const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+// Dia (Fortaleza) em que as buscas b1/b2 de exemplo terminam: 1–2 min antes do teste.
+const diaDasBuscas = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() - 90000));
 const EXTREMOZ = "2403608", NATAL = "2408102", MICRO_NATAL = "24018";
 const lead = (x) => ({
   nome: "", categoria: "Clínica", telefone: "", whatsapp_link: "", email: "", site: "", instagram: "", endereco: "Rua Fictícia, 1",
@@ -49,7 +52,7 @@ before(async () => {
   const agora = Date.now();
   // Duas buscas concluídas hoje (com um lead repetido entre elas, id_lugar "p1") e uma de 10 dias atrás.
   await db.doc("buscas/b1").set({ tipo: "comum", lista: true, dono_uid: ana.uid, dono_email: "ana@x.example", status: "concluida",
-    criada_em: new Date(agora - 3600000), finalizada_em: new Date(agora - 3500000), parametros: { termos: ["clínica"], cidades: ["Natal RN"] }, qtd_lotes: 1,
+    criada_em: new Date(agora - 3600000), finalizada_em: new Date(agora - 120000), parametros: { termos: ["clínica"], cidades: ["Natal RN"] }, qtd_lotes: 1,
     resumo: { total: 3, com_telefone: 2, com_email: 0, com_site: 1, com_whatsapp: 1, na_cidade_buscada: 2 } });
   await db.doc("buscas/b1/lotes/0").set({ dono_uid: ana.uid, leads: [
     lead({ nome: "Clínica Alfa", telefone: "(84) 99999-0001", whatsapp_link: "https://wa.me/5584999990001", bairro: "Tirol", cidade: "Natal", nota: 4.8, qtd_avaliacoes: 120, id_lugar: "p1", latitude: -5.79, longitude: -35.2 }),
@@ -57,7 +60,7 @@ before(async () => {
     lead({ nome: "Clínica Gama", cidade: "Parnamirim", cidade_confere: "nao", id_lugar: "p3" }),
   ] });
   await db.doc("buscas/b2").set({ tipo: "comum", lista: true, dono_uid: ana.uid, dono_email: "ana@x.example", status: "concluida",
-    criada_em: new Date(agora - 1800000), finalizada_em: new Date(agora - 1700000), parametros: { termos: ["clínica"], cidades: ["Extremoz RN"] }, qtd_lotes: 1,
+    criada_em: new Date(agora - 1800000), finalizada_em: new Date(agora - 60000), parametros: { termos: ["clínica"], cidades: ["Extremoz RN"] }, qtd_lotes: 1,
     resumo: { total: 4, com_telefone: 2, com_email: 0, com_site: 1, com_whatsapp: 2, na_cidade_buscada: 2 } });
   await db.doc("buscas/b2/lotes/0").set({ dono_uid: ana.uid, leads: [
     lead({ nome: "Clínica Alfa", telefone: "(84) 99999-0001", whatsapp_link: "https://wa.me/5584999990001", cidade: "Natal", id_lugar: "p1", termo_que_encontrou: "consultório", cidade_buscada: "Extremoz RN", cidade_confere: "nao" }),
@@ -151,7 +154,8 @@ test("Início: cartões, barra do gráfico e busca levam ao detalhe filtrado", a
   await esperarTexto(p, "#conta", /^2 de 7 leads$/);
   assert.match(await texto(p, "#chips"), /Tem WhatsApp/);
 
-  // Barra do dia de hoje no gráfico → leads das buscas que terminaram hoje (mesmo número da barra)
+  // Barra do dia em que as buscas terminaram (1–2 min antes do teste; perto da meia-noite pode ser "ontem")
+  const hoje = diaDasBuscas;
   await p.click("[data-ir=inicio]");
   await p.waitForSelector(`#grafico-dias [data-dia="${hoje}"]`);
   assert.equal((await p.locator(`#grafico-dias [data-dia="${hoje}"] .valor-barra`).textContent()).trim(), "3");
@@ -439,15 +443,7 @@ test("Nova busca (assistente) + Meus leads: sinônimos, regiões, perfil, filtro
   await p.selectOption("#f-cidade", "");
   const [csv2] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-csv")]);
   assert.equal(csv2.suggestedFilename(), `clinica-varias-cidades-${hoje}.csv`);
-  if (process.env.TESTAR_XLSX === "1") {
-    const [xlsx] = await Promise.all([p.waitForEvent("download"), p.click("#baixar-xlsx")]);
-    assert.equal(xlsx.suggestedFilename(), `clinica-varias-cidades-${hoje}.xlsx`);
-    const destino = join(pasta, "planilha.xlsx");
-    await xlsx.saveAs(destino);
-    const xml = execFileSync("unzip", ["-p", destino], { encoding: "utf8" });
-    assert.ok(xml.includes("cidade_confere") && xml.includes("regiao_imediata") && !xml.includes("id_lugar"));
-    assert.ok(xml.includes("Clínica Alfa") && xml.includes("Resolve Farma")); // assinatura na aba Resumo
-  }
+  await conferirPlanilha(p);
   assert.deepEqual(erros, []);
   await p.context().close();
 });
@@ -940,3 +936,79 @@ test("iPhone (390 px): todo campo de digitação visível tem fonte de 16 px ou 
   for (const onde of ["login", "nova-1", "nova-2", "leads", "leads-mais-filtros", "mapa", "mercado", "admin"]) assert.ok(contagem[onde] > 0, `${onde}: nenhum campo visível`);
   assert.deepEqual(erros, []);
 });
+
+// Planilha .xlsx pronta para usar (pedido do Breno, 24/09): gera pela tela e confere o arquivo de verdade.
+const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+async function conferirPlanilha(p) {
+  const visiveis = Number((await texto(p, "#conta")).match(/^([\d.]+)/)[1].replace(".", ""));
+  await p.click("#baixar-xlsx");
+  await p.waitForSelector("#confirmacao:not(.oculto)");
+  assert.match(await texto(p, "#conf-texto"), new RegExp(`^Vão sair ${visiveis} leads? — os que os filtros da tela mostram agora`));
+  const [arquivo] = await Promise.all([p.waitForEvent("download"), p.click("#conf-sim")]);
+  const [a, m, d] = hoje.split("-");
+  assert.equal(arquivo.suggestedFilename(), `MapaLeads_clinica_varias-cidades_${d}-${m}-${a}.xlsx`);
+  const destino = join(pasta, "planilha.xlsx");
+  await arquivo.saveAs(destino);
+  const livro = new ExcelJS.Workbook();
+  await livro.xlsx.readFile(destino);
+  assert.deepEqual(livro.worksheets.map((w) => w.name), ["Leads", "Resumo"]);
+  const ws = livro.getWorksheet("Leads");
+  // Colunas na ordem pedida; cabeçalho negrito, branco sobre o azul da marca
+  assert.deepEqual(ws.getRow(1).values.slice(1), COLUNAS_XLSX);
+  const h = ws.getCell("A1");
+  assert.equal(h.font.bold, true);
+  assert.equal(h.font.color.argb, "FFFFFFFF");
+  assert.equal(h.fill.fgColor.argb, "FF1F5FD6");
+  // Cabeçalho travado e filtro automático em todas as colunas
+  assert.equal(ws.views[0].state, "frozen");
+  assert.equal(ws.views[0].ySplit, 1);
+  assert.equal(ws.autoFilter, `A1:P${visiveis + 1}`);
+  // Nome interno do filtro (o Excel grava; sem ele o LibreOffice não mostra as setas)
+  assert.match(execFileSync("unzip", ["-p", destino, "xl/workbook.xml"], { encoding: "utf8" }),
+    new RegExp(`<definedName name="_xlnm._FilterDatabase" localSheetId="0">&apos;Leads&apos;!\\$A\\$1:\\$P\\$${visiveis + 1}</definedName>`));
+  // Uma linha por lead (os mesmos da tela), sem duplicados, ordenadas por Cidade e depois Nome
+  const linhas = [];
+  for (let r = 2; r <= ws.rowCount; r++) linhas.push(ws.getRow(r));
+  assert.equal(linhas.length, visiveis);
+  const chave = (r) => [String(r.getCell(3).value || "\uffff"), String(r.getCell(1).value)];
+  const ordenadas = [...linhas].sort((x, y) => chave(x)[0].localeCompare(chave(y)[0], "pt-BR") || chave(x)[1].localeCompare(chave(y)[1], "pt-BR"));
+  assert.deepEqual(linhas.map((r) => r.getCell(1).value), ordenadas.map((r) => r.getCell(1).value));
+  assert.equal(new Set(linhas.map((r) => `${r.getCell(1).value}|${r.getCell(7).value}`)).size, linhas.length);
+  // Links curtos e clicáveis; telefone padronizado; WhatsApp só para celular
+  const alfa = linhas.find((r) => r.getCell(1).value === "Clínica Alfa");
+  assert.equal(alfa.getCell(7).value, "(84) 99999-0001");
+  assert.deepEqual(alfa.getCell(8).value, { text: "Abrir WhatsApp", hyperlink: "https://wa.me/5584999990001" });
+  assert.equal(alfa.getCell(14).value.text, "Ver no mapa");
+  assert.match(alfa.getCell(14).value.hyperlink, /^https:\/\/maps\.google\.com/);
+  assert.equal(alfa.getCell(11).value, 4.8);
+  assert.equal(ws.getColumn(11).numFmt, "0.0");
+  assert.equal(alfa.getCell(12).value, 120);
+  assert.ok(alfa.getCell(16).value instanceof Date);
+  assert.equal(ws.getColumn(16).numFmt, "dd/mm/yyyy");
+  assert.equal(alfa.getCell(13).value, "Sim");
+  const beta = linhas.find((r) => r.getCell(1).value === "Clínica Beta");
+  if (beta) {
+    assert.equal(beta.getCell(7).value, "(84) 3333-0002");
+    assert.ok(!beta.getCell(8).value, "fixo não tem WhatsApp");
+    assert.deepEqual(beta.getCell(9).value, { text: "Abrir site", hyperlink: "https://beta.example" });
+  }
+  // Nada técnico: sem id do lugar, coordenadas ou place_id; larguras com limite
+  const tudo = linhas.flatMap((r) => r.values.map((v) => JSON.stringify(v ?? ""))).join(" ");
+  assert.ok(!/"p\d"|-5\.79|place_id|id_lugar/.test(tudo));
+  assert.ok(ws.getColumn(6).width <= 45);
+  // Aba Resumo: termo, data, totais e tabela por cidade
+  const rs = livro.getWorksheet("Resumo");
+  const valores = [];
+  rs.eachRow((r) => valores.push(r.values.slice(1)));
+  assert.deepEqual(valores[0], ["Termo buscado", "clínica"]);
+  assert.deepEqual(valores[1], ["Data", `${d}/${m}/${a}`]);
+  assert.deepEqual(valores[2], ["Total de leads", visiveis]);
+  assert.equal(valores[3][0], "No segmento");
+  assert.equal(valores[4][0], "Com WhatsApp");
+  const cab = valores.findIndex((v) => v[0] === "Cidade");
+  assert.deepEqual(valores[cab], ["Cidade", "Leads", "No segmento", "Com WhatsApp"]);
+  const soma = valores.slice(cab + 1).filter((v) => typeof v[1] === "number").reduce((t, v) => t + v[1], 0);
+  assert.equal(soma, visiveis);
+  return destino;
+}
