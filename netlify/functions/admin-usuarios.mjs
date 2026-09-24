@@ -1,10 +1,10 @@
 // POST /api/admin-usuarios  — SÓ admin (conferido pela claim do token, no servidor).
-// Ações: listar | criar | remover | definir_limite | definir_nome
+// Ações: listar | criar | remover | definir_limite | definir_nome | definir_limite_consultas | definir_config
 // Não existe cadastro público e não existe "promover a admin" por aqui:
 // o admin é definido só pelo workflow "Definir admin" no GitHub.
 
 import { FieldValue } from "firebase-admin/firestore";
-import { LIMITE_DIARIO_PADRAO, diaFortaleza } from "../lib/logica.mjs";
+import { LIMITE_DIARIO_PADRAO, LIMITES_VENDEDOR_PADRAO, diaFortaleza, limitesVendedor } from "../lib/logica.mjs";
 import { ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
 
 export default handler(async (req) => {
@@ -24,6 +24,10 @@ export default handler(async (req) => {
       return json(200, await definirLimite(auth, db, corpo));
     case "definir_nome":
       return json(200, await definirNome(auth, db, corpo));
+    case "definir_limite_consultas":
+      return json(200, await definirLimiteConsultas(auth, db, corpo));
+    case "definir_config":
+      return json(200, await definirConfig(db, corpo));
     default:
       throw new ErroHttp(400, "Ação inválida.");
   }
@@ -59,7 +63,9 @@ async function listar(auth, db) {
       nome: p.nome || u.displayName || "",
       admin: u.customClaims?.admin === true,
       limite_diario: Number.isInteger(p.limite_diario) ? p.limite_diario : null,
+      limite_consultas_dia: Number.isInteger(p.limite_consultas_dia) ? p.limite_consultas_dia : null,
       buscas_hoje: p.dia === hoje ? p.contagem_dia || 0 : 0,
+      consultas_hoje: p.dia === hoje ? p.consultas_dia || 0 : 0,
       semana: semana.get(u.uid) || { buscas: 0, leads: 0, com_whatsapp: 0 },
       removido: false,
     };
@@ -69,7 +75,38 @@ async function listar(auth, db) {
     if (p.removido) usuarios.push({ uid, email: p.email || "", nome: p.nome || "", admin: false, removido: true });
   }
   const limitePadrao = Number.isInteger(geral.data()?.limite_padrao) ? geral.data().limite_padrao : LIMITE_DIARIO_PADRAO;
-  return { usuarios, limite_padrao: limitePadrao };
+  return { usuarios, limite_padrao: limitePadrao, config: limitesVendedor(geral.data() || {}) };
+}
+
+// Consultas por dia de um vendedor (null = volta ao padrão de Admin › Configurações).
+async function definirLimiteConsultas(auth, db, { uid, limite_consultas_dia }) {
+  if (!uid) throw new ErroHttp(400, "Informe o usuário.");
+  const usarPadrao = limite_consultas_dia === null;
+  if (!usarPadrao && !(Number.isInteger(limite_consultas_dia) && limite_consultas_dia >= 0)) {
+    throw new ErroHttp(400, "O limite de consultas precisa ser um número inteiro maior ou igual a zero.");
+  }
+  try {
+    await auth.getUser(uid);
+  } catch {
+    throw new ErroHttp(404, "Usuário não encontrado.");
+  }
+  await db.doc(`usuarios/${uid}`).set(
+    { limite_consultas_dia: usarPadrao ? FieldValue.delete() : limite_consultas_dia }, { merge: true });
+  return { limite_consultas_dia: usarPadrao ? null : limite_consultas_dia };
+}
+
+// Admin › Configurações: limites do vendedor por busca e por dia (inteiros de 1 a 10.000).
+async function definirConfig(db, corpo) {
+  const novos = {};
+  for (const chave of Object.keys(LIMITES_VENDEDOR_PADRAO)) {
+    const v = corpo?.[chave];
+    if (v === undefined) continue;
+    if (!(Number.isInteger(v) && v >= 1 && v <= 10000)) throw new ErroHttp(400, "Cada limite precisa ser um número inteiro de 1 a 10.000.");
+    novos[chave] = v;
+  }
+  if (!Object.keys(novos).length) throw new ErroHttp(400, "Nada para salvar.");
+  await db.doc("config/geral").set(novos, { merge: true });
+  return { config: limitesVendedor({ ...((await db.doc("config/geral").get()).data() || {}) }) };
 }
 
 // Nome mostrado na saudação ("Olá, Breno"): até 60 caracteres, sem espaços sobrando.

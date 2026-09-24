@@ -450,3 +450,58 @@ test("aviso de cidades pequenas: simular diz quantas têm menos de 5 mil hab. (I
   assert.equal(sem.corpo.pequenas, 0);
   assert.equal(sem.corpo.sem_pequenas, undefined);
 });
+
+test("limites do vendedor: 167 cidades → 400; 30 cidades passam; admin com 167 passa; consultas por dia; Configurações", async () => {
+  const { auth, db } = firebase();
+  await auth.createUser({ email: "caio@x.example", password: "senha-forte-3" });
+  const caio = await entrar("caio@x.example", "senha-forte-3");
+  const cidades = (n) => Array.from({ length: n }, (_, i) => `Cidade ${i} RN`).join(",");
+
+  // Vendedor com as 167 cidades do RN: 400 com a mensagem combinada (também na simulação)
+  for (const simular of [true, false]) {
+    const r = await pedido(criarBusca, { termos: "farmácia", cidades: cidades(167), profundidade: "rapida", simular }, caio);
+    assert.equal(r.status, 400);
+    assert.equal(r.corpo.erro, "Busca grande demais para vendedor (167 cidades / 167 consultas). Máximo: 40 cidades ou 120 consultas. Divida por região ou peça ao admin.");
+  }
+  // 41 cidades (passa das 40) e 30 cidades × 5 termos = 150 consultas (passa das 120): 400
+  assert.equal((await pedido(criarBusca, { termos: "a", cidades: cidades(41), profundidade: "rapida", simular: true }, caio)).status, 400);
+  const muitas = await pedido(criarBusca, { termos: "a,b,c,d,e", cidades: cidades(30), profundidade: "rapida", simular: true }, caio);
+  assert.match(muitas.corpo.erro, /\(30 cidades \/ 150 consultas\)/);
+  // 30 cidades passam (30 × 4 termos = 120 consultas, no limite)
+  const ok = await pedido(criarBusca, { termos: "a,b,c,d", cidades: cidades(30), profundidade: "rapida" }, caio);
+  assert.equal(ok.status, 201, JSON.stringify(ok.corpo));
+  const perfil = (await db.doc(`usuarios/${(await auth.getUserByEmail("caio@x.example")).uid}`).get()).data();
+  assert.equal(perfil.consultas_dia, 120);
+  // Consultas por dia (300): +120 = 240 passa; +120 = 360 não
+  assert.equal((await pedido(criarBusca, { termos: "e,f,g,h", cidades: cidades(30), profundidade: "rapida" }, caio)).status, 201);
+  const dia = await pedido(criarBusca, { termos: "i,j,k,l", cidades: cidades(30), profundidade: "rapida" }, caio);
+  assert.equal(dia.status, 429);
+  assert.match(dia.corpo.erro, /Limite diário de consultas atingido: 240 de 300 usadas hoje e esta busca tem 120/);
+
+  // Admin: sem esses limites (167 cidades passa)
+  const adm = await pedido(criarBusca, { termos: "farmácia", cidades: cidades(167), profundidade: "rapida" }, tokens.breno);
+  assert.equal(adm.status, 201, JSON.stringify(adm.corpo));
+
+  // Admin › Configurações: só admin; os números valem na hora
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_config", max_cidades_busca: 999 }, caio)).status, 403);
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_config", max_cidades_busca: 0 }, tokens.breno)).status, 400);
+  const cfg = await pedido(adminUsuarios, { acao: "definir_config", max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400 }, tokens.breno);
+  assert.deepEqual(cfg.corpo.config, { max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400 });
+  const r10 = await pedido(criarBusca, { termos: "a", cidades: cidades(11), profundidade: "rapida", simular: true }, caio);
+  assert.match(r10.corpo.erro, /Máximo: 10 cidades ou 50 consultas/);
+  // com 400 por dia, a 3ª busca de 120 passa (240 + 120 = 360)
+  assert.equal((await pedido(criarBusca, { termos: "i,j", cidades: cidades(10), profundidade: "rapida" }, caio)).status, 201);
+  const lista = await pedido(adminUsuarios, { acao: "listar" }, tokens.breno);
+  assert.deepEqual(lista.corpo.config, { max_cidades_busca: 10, max_consultas_busca: 50, max_consultas_dia: 400 });
+  const linhaCaio = lista.corpo.usuarios.find((u) => u.email === "caio@x.example");
+  assert.equal(linhaCaio.consultas_hoje, 260);
+
+  // Consultas por dia do vendedor (na tabela de usuários): 250 → a próxima de 10 não passa (260 + 10)
+  const uidCaio = linhaCaio.uid;
+  const lc = await pedido(adminUsuarios, { acao: "definir_limite_consultas", uid: uidCaio, limite_consultas_dia: 250 }, tokens.breno);
+  assert.deepEqual(lc.corpo, { limite_consultas_dia: 250 });
+  assert.equal((await pedido(criarBusca, { termos: "z", cidades: cidades(10), profundidade: "rapida" }, caio)).status, 429);
+  await pedido(adminUsuarios, { acao: "definir_limite_consultas", uid: uidCaio, limite_consultas_dia: null }, tokens.breno);
+  const { FieldValue } = await import("firebase-admin/firestore");
+  await db.doc("config/geral").set({ max_cidades_busca: FieldValue.delete(), max_consultas_busca: FieldValue.delete(), max_consultas_dia: FieldValue.delete() }, { merge: true });
+});

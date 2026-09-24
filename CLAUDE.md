@@ -308,6 +308,24 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   pequenas, despertador), Functions (criar com partes, cancelar, apagar, pequenas) e tela (cidades prontas, leads
   parciais, aviso de pequenas).
 
+### Limites do vendedor (PR 15, pedido do Breno em 24/09)
+- **Motivo**: vendedor marcava as 167 cidades ("Selecionar todas"), ocupava as 4 máquinas por horas e contava 1 busca.
+- **Por busca** (`logica.conferirTamanhoVendedor`, em `criar-busca`, também no `simular`): > 40 cidades OU > 120
+  consultas → 400 "Busca grande demais para vendedor (X cidades / Y consultas). Máximo: 40 cidades ou 120 consultas.
+  Divida por região ou peça ao admin." (cidades = RN + de fora; consultas = termos (+ sinônimos se marcado) × cidades).
+- **Por dia**: 300 consultas (`logica.conferirConsultasDia`), `usuarios/{uid}.consultas_dia` gravado junto com
+  `contagem_dia` na transação; passou → 429. Por usuário: `limite_consultas_dia` (`admin-usuarios` ação
+  `definir_limite_consultas`; `null` = padrão). Cancelar/apagar não devolve.
+- **Configurações** (Admin › Configurações, `admin-usuarios` ação `definir_config`, inteiros 1–10000):
+  `config/geral.max_cidades_busca` / `max_consultas_busca` / `max_consultas_dia`; sem valor = 40/120/300.
+- **Máquinas por vendedor** (`fila.limitar_por_vendedor`, na transação de reserva): dono com ≥ 2 comuns/partes rodando
+  não pega outra vaga se houver unidade de OUTRO dono na fila; admin isento (`motor.eh_admin`).
+- **Tela** (vendedor): `#marcar-filtradas` oculto sem procura; `#qtd-cidades` "X de 40 cidades" (classe
+  `passou-limite`, vermelho); `#buscar` travado + `#aviso-limite`; cota mostra "N de 300 consultas hoje".
+  Objeto `LIMV` (o nome `LIM` já é dos limites do mapa). Admin sem nada disso.
+- Testes: Functions (167 → 400, 30 passam, admin 167 passa, 429 por consultas/dia, Configurações), fila e emulador
+  (2 máquinas por vendedor), tela 390 px (contador, botão travado, admin sem limite).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -323,6 +341,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   ícones (i), apagar busca e comemoração — um commit só; merge após CI verde + teste real em produção.
   Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
 - **PR 14 (motor em paralelo)**: 4 vagas, partes por cidade, parciais, sinal de bloqueio, aviso de cidades pequenas.
+  Mergeado; Verificar Functions e "Testar tela em produção" passaram.
+- **PR 15 (limites do vendedor)**: 40 cidades / 120 consultas por busca, 300 consultas/dia, 2 máquinas por vendedor.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 

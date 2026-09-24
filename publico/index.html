@@ -383,6 +383,10 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 
 /* ============================================================ TOUR */
 .tour { position:fixed; inset:0; z-index:2500; background:rgba(8,12,24,.55); display:grid; place-items:center; padding:16px; }
+.passou-limite { color:var(--bad) !important; font-weight:700; }
+.grade-cfg { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
+@media (max-width: 760px) { .grade-cfg { grid-template-columns:minmax(0,1fr); } }
+.aviso-limite { margin:10px 0 0; padding:10px 12px; border-radius:var(--r); background:var(--bad-soft); color:var(--bad); font-size:13px; font-weight:600; }
 .aviso-pequenas { margin-top:10px; padding:10px 12px; border-radius:var(--r); background:var(--warn-soft, var(--surface-2)); border:1px solid var(--line-2);
   display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .aviso-pequenas p { margin:0; flex:1 1 220px; font-size:13px; }
@@ -630,6 +634,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <div class="cartao kpi"><div class="rot">Tempo estimado <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Estimativa pela média real das últimas buscas, com as cidades divididas entre até 4 máquinas trabalhando ao mesmo tempo (cada uma no ritmo seguro de sempre). Se outras buscas estiverem rodando, as máquinas se dividem e pode demorar mais.">i</button></div><div class="val num" id="r-tempo">–</div><div class="ctx" id="r-tempo-ctx">depois de começar</div></div>
             <div class="cartao kpi"><div class="rot">Cota de hoje <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Cada busca usa 1 da sua cota diária, não importa o tamanho. Zera à meia-noite (horário de Natal).">i</button></div><div class="val num" id="r-cota">–</div><div class="ctx" id="r-cota-ctx"></div></div>
           </div>
+          <p class="aviso-limite oculto" id="aviso-limite" role="alert"></p>
           <div class="aviso-pequenas oculto" id="aviso-pequenas" role="status">
             <p id="aviso-pequenas-txt"></p>
             <button class="btn btn-sec btn-mini" id="remover-pequenas">Remover as pequenas</button>
@@ -767,6 +772,14 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
                 <div class="linha" style="margin-top:8px"><label class="alternar"><input type="checkbox" id="rn-email"> Extrair e-mail</label><label class="alternar"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label></div>
                 <div class="linha" style="margin-top:8px"><button class="btn btn-sec" id="rn-estimar">Estimar</button><button class="btn btn-primario" id="rn-confirmar" disabled>Confirmar Estado inteiro (RN)</button></div>
                 <p class="small" id="msg-rn" role="status" style="margin-top:6px"></p></div>
+              <div class="cartao" id="cartao-config"><h2>Configurações <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Limites dos vendedores (o admin não tem): tamanho máximo de cada busca e consultas por dia. Uma consulta = 1 termo em 1 cidade. O servidor confere esses números em toda busca.">i</button></h2>
+                <div class="grade-cfg">
+                  <div><label class="campo" for="cfg-cidades">Cidades por busca</label><input id="cfg-cidades" type="number" min="1" max="10000"></div>
+                  <div><label class="campo" for="cfg-consultas">Consultas por busca</label><input id="cfg-consultas" type="number" min="1" max="10000"></div>
+                  <div><label class="campo" for="cfg-consultas-dia">Consultas por dia (padrão)</label><input id="cfg-consultas-dia" type="number" min="1" max="10000"></div>
+                </div>
+                <p class="small ink2" style="margin:6px 0">Vendedor: no máximo X cidades OU Y consultas por busca (o que vier primeiro). Consultas por dia: dá para mudar por vendedor na tabela de usuários.</p>
+                <button class="btn btn-primario" id="cfg-salvar">Salvar configurações</button></div>
               <div class="cartao"><h2>Estados ativos <button type="button" class="info" data-ajuda="Estados que aparecem para os vendedores. Por enquanto só o RN." aria-label="O que é isso?">i</button></h2><p class="small ink2" style="margin:6px 0">Por enquanto só o RN tem dados carregados (decisão do Breno). Os outros estados do Nordeste ficam prontos para ativar depois.</p><div id="estados" class="chips"></div></div>
             </div>
           </div>
@@ -1120,6 +1133,8 @@ async function api(caminho, corpo) {
   return dados;
 }
 let usuario = null, ehAdmin = false, buscas = [], estadoFila = null, cota = null, perfis = [];
+// Limites do vendedor (não admin), de config/geral (Admin › Configurações); o servidor confere de novo.
+let LIMV = { cidades: 40, consultas: 120, consultasDia: 300 };
 let pararBuscas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
 const pararOuvintes = () => { pararBuscas?.(); pararFila?.(); pararBuscas = pararFila = null; };
 
@@ -1229,7 +1244,10 @@ async function carregarCota() {
     mostrarSaudacao(perfil.nome || usuario.displayName);
     const usadas = perfil.dia === diaFortaleza() ? perfil.contagem_dia || 0 : 0;
     const limite = Number.isInteger(perfil.limite_diario) ? perfil.limite_diario : (g.data()?.limite_padrao ?? 20);
-    cota = { usadas, limite };
+    const cfg = g.data() || {}, int = (v, p) => (Number.isInteger(v) && v >= 1 ? v : p);
+    LIMV = { cidades: int(cfg.max_cidades_busca, 40), consultas: int(cfg.max_consultas_busca, 120),
+      consultasDia: Number.isInteger(perfil.limite_consultas_dia) ? perfil.limite_consultas_dia : int(cfg.max_consultas_dia, 300) };
+    cota = { usadas, limite, consultasHoje: perfil.dia === diaFortaleza() ? perfil.consultas_dia || 0 : 0 };
     $("#cota-txt").textContent = `${usadas} de ${limite}`;
     $("#cota-barra").setAttribute("aria-valuemax", limite); $("#cota-barra").setAttribute("aria-valuenow", usadas);
     $("#cota-barra i").style.width = `${Math.min(100, (100 * usadas) / Math.max(1, limite))}%`;
@@ -1472,7 +1490,16 @@ function desenharCidades() {
   $("#lista-cidades").innerHTML = MUNS.filter((m) => !procura || normalizar(m.nome).includes(procura)).map((m) =>
     `<label><input type="checkbox" data-cidade="${txt(m.nome)}" ${NB.cidades.get(m.nome) ? "checked" : ""}><span class="nome-cid">${txt(m.nome)}</span><span class="guia" aria-hidden="true"></span><span class="hab">${numero(m.ind.populacao)} hab.</span></label>`).join("");
   const n = [...NB.cidades.values()].filter(Boolean).length;
-  $("#qtd-cidades").textContent = `${n} ${n === 1 ? "cidade" : "cidades"} marcada(s)`;
+  if (ehAdmin) $("#qtd-cidades").textContent = `${n} ${n === 1 ? "cidade" : "cidades"} marcada(s)`;
+  else {
+    // Vendedor: "X de 40 cidades", vermelho ao passar do limite (conta também as de fora do RN)
+    const total = cidadesDoPedido().length;
+    $("#qtd-cidades").textContent = `${total} de ${LIMV.cidades} cidades`;
+    $("#qtd-cidades").classList.toggle("passou-limite", total > LIMV.cidades);
+  }
+  // Vendedor: sem "Selecionar todas" no estado inteiro (com a procura filtrando, continua valendo)
+  $("#marcar-filtradas").classList.toggle("oculto", !ehAdmin && !procura);
+  atualizarTravaBuscar();
   desenharSvg($("#mapa-escolha"), {
     cor: (c) => (NB.cidades.get(porCodigo.get(c).nome) ? "var(--brand)" : "var(--surface-3)"),
     dica: (c) => `${porCodigo.get(c).nome} · ${numero(porCodigo.get(c).ind.populacao)} hab. · ${porCodigo.get(c).micro.nome}`,
@@ -1497,6 +1524,22 @@ $("#lista-cidades").onchange = (ev) => { const n = ev.target.dataset.cidade; if 
 $("#busca-cidade").oninput = desenharCidades;
 $("#marcar-filtradas").onclick = () => { const p = normalizar($("#busca-cidade").value); for (const m of MUNS) if (!p || normalizar(m.nome).includes(p)) NB.cidades.set(m.nome, true); desenharCidades(); desenharRegioes(); };
 $("#limpar-cidades").onclick = () => { NB.cidades.clear(); desenharCidades(); desenharRegioes(); };
+/** Vendedor: a busca passa do limite (40 cidades OU 120 consultas)? Devolve a mensagem (ou ""). O servidor confere de novo. */
+function passaDoLimite() {
+  if (ehAdmin) return "";
+  const cidades = cidadesDoPedido().length;
+  const termos = NB.termos.length + ($("#sin-buscar").checked ? sinonimosAtuais.length : 0);
+  const consultas = cidades * Math.max(1, termos);
+  if (cidades <= LIMV.cidades && consultas <= LIMV.consultas) return "";
+  return `Busca grande demais para vendedor (${cidades} cidades / ${consultas} consultas). Máximo: ${LIMV.cidades} cidades ou ${LIMV.consultas} consultas. Divida por região ou peça ao admin.`;
+}
+function atualizarTravaBuscar() {
+  const msg = passaDoLimite();
+  $("#buscar").disabled = !!msg;
+  $("#aviso-limite").textContent = msg;
+  $("#aviso-limite").classList.toggle("oculto", !msg);
+}
+$("#outras").addEventListener("input", () => desenharCidades());
 function cidadesDoPedido() {
   const rn = [...NB.cidades].filter(([, v]) => v).map(([n]) => n).sort((a, b) => a.localeCompare(b, "pt-BR")).map((n) => `${n} RN`);
   const outras = $("#outras").value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -1522,8 +1565,10 @@ function estimar() {
     const cid = cidadesDoPedido().length || 1;
     $("#sin-custo").textContent = sinonimosAtuais.length ? `(+${sinonimosAtuais.length * cid} consultas)` : "";
     $("#r-cota").textContent = cota ? `1 de ${Math.max(0, cota.limite - cota.usadas)}` : "–";
-    $("#r-cota-ctx").textContent = cota ? `restam ${Math.max(0, cota.limite - cota.usadas - 1)} depois desta` : "";
-    if (!NB.termos.length || !cidadesDoPedido().length) return;
+    $("#r-cota-ctx").textContent = cota ? `restam ${Math.max(0, cota.limite - cota.usadas - 1)} depois desta` +
+      (ehAdmin ? "" : ` · ${Math.max(0, LIMV.consultasDia - (cota.consultasHoje || 0))} de ${LIMV.consultasDia} consultas hoje`) : "";
+    atualizarTravaBuscar();
+    if (!NB.termos.length || !cidadesDoPedido().length || passaDoLimite()) return;
     try {
       const r = await api("criar-busca", pedidoComum(true));
       $("#r-consultas").textContent = numero(r.consultas);
@@ -1554,6 +1599,7 @@ $("#remover-pequenas").onclick = () => {
 $("#outras").addEventListener("input", () => { if (NB.passo === 3) estimar(); });
 $("#buscar").onclick = async () => {
   if (!NB.termos.length || !cidadesDoPedido().length) return irParaPasso(1);
+  if (passaDoLimite()) return atualizarTravaBuscar();
   $("#buscar").disabled = true;
   try {
     const r = await api("criar-busca", pedidoComum(false));
@@ -2665,17 +2711,29 @@ async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); ca
 async function carregarUsuarios() {
   $("#u-tabela").innerHTML = `<tr><td><div class="esq" style="height:14px"></div></td></tr>`;
   try {
-    const { usuarios, limite_padrao } = await api("admin-usuarios", { acao: "listar" });
-    $("#u-tabela").innerHTML = `<thead><tr><th>Usuário</th><th>Nome</th><th>Buscas hoje</th><th>Buscas (7 dias)</th><th>Leads (7 dias)</th><th>% WhatsApp</th><th>Limite/dia (padrão ${limite_padrao})</th><th></th></tr></thead><tbody>` +
+    const { usuarios, limite_padrao, config } = await api("admin-usuarios", { acao: "listar" });
+    if (config) { $("#cfg-cidades").value = config.max_cidades_busca; $("#cfg-consultas").value = config.max_consultas_busca; $("#cfg-consultas-dia").value = config.max_consultas_dia; }
+    const padraoConsultas = config?.max_consultas_dia ?? 300;
+    $("#u-tabela").innerHTML = `<thead><tr><th>Usuário</th><th>Nome</th><th>Buscas hoje</th><th>Buscas (7 dias)</th><th>Leads (7 dias)</th><th>% WhatsApp</th><th>Limite/dia (padrão ${limite_padrao})</th><th>Consultas/dia (padrão ${padraoConsultas})</th><th></th></tr></thead><tbody>` +
       usuarios.map((u) => `<tr><td class="principal-td" data-rot=""><span style="overflow-wrap:anywhere">${txt(u.email)}</span> ${u.admin ? '<span class="pilula azul">admin</span>' : ""} ${u.removido ? '<span class="pilula bad">removido</span>' : ""}</td>
         <td data-rot="Nome">${u.removido ? txt(u.nome) : `<input type="text" maxlength="60" style="min-width:140px" data-nome="${txt(u.uid)}" value="${txt(u.nome || "")}" placeholder="ex.: Breno" aria-label="Nome de ${txt(u.email)}">`}</td>
         <td class="num" data-rot="Buscas hoje">${u.removido ? "–" : u.buscas_hoje}</td><td class="num" data-rot="Buscas (7 dias)">${u.semana ? numero(u.semana.buscas) : "–"}</td><td class="num" data-rot="Leads (7 dias)">${u.semana ? numero(u.semana.leads) : "–"}</td>
         <td class="num" data-rot="% WhatsApp">${u.semana?.leads ? `${Math.round((100 * u.semana.com_whatsapp) / u.semana.leads)}%` : "–"}</td>
         <td data-rot="Limite/dia">${u.removido || u.admin ? "–" : `<input type="number" min="0" style="width:90px" data-limite="${txt(u.uid)}" placeholder="${limite_padrao}" value="${u.limite_diario ?? ""}" aria-label="Limite diário de ${txt(u.email)}">`}</td>
+        <td data-rot="Consultas/dia">${u.removido || u.admin ? "–" : `<span class="small muted">${numero(u.consultas_hoje || 0)} hoje</span> <input type="number" min="0" style="width:90px" data-limite-consultas="${txt(u.uid)}" placeholder="${padraoConsultas}" value="${u.limite_consultas_dia ?? ""}" aria-label="Consultas por dia de ${txt(u.email)}">`}</td>
         <td data-rot="">${u.removido || u.admin ? "" : `<button class="btn btn-perigo btn-mini" data-remover="${txt(u.uid)}">Remover</button>`}</td></tr>`).join("") + "</tbody>";
   } catch (e) { toast(e.message, "erro"); }
 }
 $("#u-atualizar").onclick = carregarUsuarios;
+$("#cfg-salvar").onclick = async () => {
+  const n = (id) => Number($(id).value);
+  try {
+    const { config } = await api("admin-usuarios", { acao: "definir_config", max_cidades_busca: n("#cfg-cidades"),
+      max_consultas_busca: n("#cfg-consultas"), max_consultas_dia: n("#cfg-consultas-dia") });
+    toast(`Configurações salvas: ${config.max_cidades_busca} cidades ou ${config.max_consultas_busca} consultas por busca; ${config.max_consultas_dia} consultas por dia.`, "ok");
+    carregarUsuarios();
+  } catch (e) { toast(e.message, "erro"); }
+};
 $("#u-criar").onclick = async () => {
   const limite = $("#u-limite").value === "" ? undefined : Number($("#u-limite").value);
   try { await api("admin-usuarios", { acao: "criar", email: $("#u-email").value, senha: $("#u-senha").value, nome: $("#u-nome").value, limite_diario: limite }); toast("Usuário criado.", "ok"); carregarUsuarios(); }
@@ -2689,6 +2747,12 @@ $("#u-tabela").onchange = async (ev) => {
       ev.target.value = r.nome; toast("Nome atualizado.", "ok");
       if (uidNome === usuario.uid) mostrarSaudacao(r.nome);
     } catch (e) { toast(e.message, "erro"); }
+    return;
+  }
+  const uidConsultas = ev.target?.dataset?.limiteConsultas;
+  if (uidConsultas) {
+    try { await api("admin-usuarios", { acao: "definir_limite_consultas", uid: uidConsultas, limite_consultas_dia: ev.target.value === "" ? null : Number(ev.target.value) }); toast("Consultas por dia atualizadas.", "ok"); }
+    catch (e) { toast(e.message, "erro"); }
     return;
   }
   const uid = ev.target?.dataset?.limite; if (!uid) return;

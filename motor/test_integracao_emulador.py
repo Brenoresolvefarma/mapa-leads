@@ -357,3 +357,15 @@ def test_estado_inteiro_ocupa_no_maximo_2_vagas(db, monkeypatch):
     motor.Motor(db, paralelo=True, vaga=3).rodar()
     assert chamadas == []  # 2 lotes do Estado inteiro já rodando: a vaga 3 não pega o terceiro
     assert ler(db, "F2")["status"] == "na_fila"
+
+
+def test_vendedor_com_2_maquinas_cede_a_vez_para_outro_vendedor(db, monkeypatch):
+    busca_em_partes(db, "ana", ["x"], [["Natal RN"], ["Macaíba RN"], ["Extremoz RN"]], id_="A")
+    busca_em_partes(db, "bia", ["y"], [["Caicó RN"]], id_="B", minuto=5)
+    agora = datetime.now(timezone.utc)
+    for p in ("Ap0", "Ap1"):  # a Ana já está usando 2 máquinas
+        db.collection("buscas").document(p).update({"status": "rodando", "batimento_em": agora, "iniciada_em": agora})
+    chamadas = instalar_scraper_falso(monkeypatch, lambda c: [lugar(len(c["texto"]))])
+    motor.Motor(db, paralelo=True, vaga=3).rodar()
+    # A Bia (esperando) passa na frente da 3ª parte da Ana; depois, sem ninguém esperando, a Ana segue
+    assert chamadas == ["y Caicó RN", "x Extremoz RN"]

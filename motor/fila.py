@@ -9,6 +9,8 @@ Regras (aprovadas pelo Breno):
   - partes entram no rodízio por dono junto com as buscas comuns: buscas de
     vendedores diferentes andam ao mesmo tempo;
   - o Estado inteiro ocupa no máximo 2 vagas (paralelismo.VAGAS_RN_MAX);
+  - com outro vendedor esperando, cada vendedor usa no máximo 2 máquinas ao mesmo tempo
+    (MAQUINAS_POR_VENDEDOR; o admin não tem esse limite) — valor do Breno, 24/09;
   - entre as buscas comuns, a fila alterna por dono (quem disparou 5 buscas
     não passa na frente de quem disparou 1);
   - lotes do RN respeitam o agendamento ("agendar para a noite") e a pausa
@@ -115,6 +117,32 @@ def ordenar_fila(buscas, agora):
     return comuns_ordenadas + filhas
 
 
+MAQUINAS_POR_VENDEDOR = 2
+
+
+def limitar_por_vendedor(ordem, rodando, isento=lambda uid: False, limite=MAQUINAS_POR_VENDEDOR):
+    """Tira da vez as buscas/partes de quem já usa `limite` máquinas, se OUTRO dono estiver esperando.
+
+    ordem: elegíveis na ordem da fila; rodando: buscas/partes rodando agora; isento(uid): admin.
+    """
+    def de_vendedor(b):
+        return b.get("tipo", TIPO_COMUM) in (TIPO_COMUM, TIPO_PARTE)
+
+    por_dono = {}
+    for b in rodando:
+        if de_vendedor(b) and not eh_mae(b):
+            por_dono[b.get("dono_uid")] = por_dono.get(b.get("dono_uid"), 0) + 1
+    esperando = {b.get("dono_uid") for b in ordem if de_vendedor(b)}
+    saida = []
+    for b in ordem:
+        dono = b.get("dono_uid")
+        if (de_vendedor(b) and por_dono.get(dono, 0) >= limite and (esperando - {dono})
+                and not isento(dono)):
+            continue
+        saida.append(b)
+    return saida
+
+
 def consultas_da_busca(dados):
     """Lista de consultas de uma busca (comum: termo × cidade; filha e parte: já vem pronta)."""
     if dados.get("tipo") in (TIPO_FILHA, TIPO_PARTE):
@@ -219,10 +247,11 @@ def carregar_pendentes(db, limite=200):
     return [_com_id(d) for d in na_fila] + [_com_id(d) for d in rodando]
 
 
-def reservar_proxima(db, agora, somente_comum=False, vagas_rn=None):
+def reservar_proxima(db, agora, somente_comum=False, vagas_rn=None, isento=lambda uid: False):
     """Pega a próxima busca pela regra de prioridade e marca como "rodando" (transação).
 
     vagas_rn: quantos lotes do Estado inteiro podem rodar ao mesmo tempo (None = sem limite).
+    isento(uid): dono sem o limite de máquinas por vendedor (admin).
     """
     from firebase_admin import firestore
 
@@ -233,13 +262,12 @@ def reservar_proxima(db, agora, somente_comum=False, vagas_rn=None):
     def reservar(transacao):
         docs = list(consulta.stream(transaction=transacao))
         buscas = [_com_id(d) for d in docs]
-        ordem = ordenar_fila(buscas, agora)
+        ativos = [_com_id(d) for d in rodando.stream(transaction=transacao)]
+        ordem = limitar_por_vendedor(ordenar_fila(buscas, agora), ativos, isento)
         if somente_comum:
             ordem = [b for b in ordem if b.get("tipo", TIPO_COMUM) in (TIPO_COMUM, TIPO_PARTE)]
         elif vagas_rn is not None:
-            filhas_rodando = sum(1 for d in rodando.stream(transaction=transacao)
-                                 if (d.to_dict() or {}).get("tipo") == TIPO_FILHA)
-            if filhas_rodando >= vagas_rn:
+            if sum(1 for b in ativos if b.get("tipo") == TIPO_FILHA) >= vagas_rn:
                 ordem = [b for b in ordem if b.get("tipo") != TIPO_FILHA]
         if not ordem:
             return None

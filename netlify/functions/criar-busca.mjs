@@ -33,6 +33,12 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
   if (plano.maiorParte > L.LIMITE_BUSCA_COMUM_SEG) {
     throw new ErroHttp(400, "Busca grande demais para uma execução (mais de 5 h estimadas). Divida em buscas menores.");
   }
+  // Vendedor (não admin): no máximo 40 cidades OU 120 consultas por busca (valores em Admin › Configurações).
+  const geral = (await db.doc("config/geral").get()).data() || {};
+  if (!usuario.admin) {
+    const erro = L.conferirTamanhoVendedor(parametros.cidades.length, consultas.length, L.limitesVendedor(geral));
+    if (erro) throw new ErroHttp(400, erro);
+  }
   const resumoPlano = {
     consultas: consultas.length,
     estimativa_seg: estimativa,
@@ -54,7 +60,14 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
     if (!situacao.permitido) {
       throw new ErroHttp(429, `Limite diário atingido (${situacao.limite} buscas por dia). Tente novamente amanhã.`);
     }
-    t.set(refUsuario, { email: usuario.email, dia: situacao.dia, contagem_dia: situacao.contagem + 1 }, { merge: true });
+    // Vendedor: também no máximo 300 consultas por dia (por usuário ou o padrão de config/geral). Admin não tem.
+    const doDia = L.conferirConsultasDia(docUsuario.data() || {}, docGeral.data() || {}, consultas.length);
+    if (!usuario.admin && !doDia.permitido) {
+      throw new ErroHttp(429, `Limite diário de consultas atingido: ${doDia.usadas} de ${doDia.limite} usadas hoje e esta busca tem ` +
+        `${consultas.length}. Diminua a busca ou tente amanhã.`);
+    }
+    t.set(refUsuario, { email: usuario.email, dia: situacao.dia, contagem_dia: situacao.contagem + 1,
+      consultas_dia: doDia.usadas + consultas.length }, { merge: true });
     t.set(ref, {
       tipo: "comum",
       lista: true, // aparece em "Minhas buscas" (filhas do RN e partes não aparecem)
