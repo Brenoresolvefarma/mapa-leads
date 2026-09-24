@@ -4,6 +4,7 @@
 // - Admin: qualquer busca, de qualquer vendedor.
 // - Em andamento (na fila / rodando): recusa com 409 — cancelar primeiro, apagar depois.
 // - Busca-mãe do Estado inteiro: apaga também os lotes (filhas) e os leads de cada uma.
+// - Liberada para vendedores: apaga também as cópias por vendedor (a lista some para eles).
 // - NÃO devolve a cota do dia (o contador em usuarios/{uid} não é mexido).
 // - Log: só o id da busca e o uid de quem apagou (nada de leads), e só no log privado do Netlify.
 // As regras do Firestore continuam com write false para o navegador: só o servidor apaga.
@@ -35,6 +36,10 @@ export default handler(async (req) => {
   if (filhas.some((f) => !FINAIS.includes(f.data().status))) throw new ErroHttp(409, "Busca em andamento: cancele primeiro e depois apague.");
 
   let lotes = 0;
+  // Cópias liberadas para vendedores (recorte por cidades): buscas/{id}/liberacoes/{uid}/lotes/{n}.
+  for (const [uid, lib] of Object.entries(dados.liberacoes || {})) {
+    for (let n = 0; n < (Number(lib?.qtd_lotes) || 0); n++) await ref.collection("liberacoes").doc(uid).collection("lotes").doc(String(n)).delete();
+  }
   for (const alvo of [...filhas.map((f) => f.ref), ref]) lotes += await apagarComLotes(db, alvo);
   await removerDaFila(db, [id, ...filhas.map((f) => f.id)]);
   logPrivado(`apagar-busca: busca ${id} apagada por ${usuario.uid}`);

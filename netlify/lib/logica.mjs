@@ -3,6 +3,17 @@
 
 import municipiosRN from "../../dados/municipios_rn.json" with { type: "json" };
 import bairrosRN from "../../dados/bairros_rn.json" with { type: "json" };
+import municipiosPB from "../../dados/municipios_pb.json" with { type: "json" };
+import bairrosPB from "../../dados/bairros_pb.json" with { type: "json" };
+
+// Estados com dados carregados e ATIVOS (decisão do Breno: RN; PB ativada em 24/09). Os outros do Nordeste: "em breve".
+// Cidades grandes por bairro (malha de bairros do IBGE, Censo 2022): RN = Natal, Mossoró, Parnamirim;
+// PB = João Pessoa e Campina Grande (aprovado pelo Breno em 24/09). Mesmas faixas de profundidade nos dois.
+export const ESTADOS = {
+  RN: { nome: "Rio Grande do Norte", municipios: municipiosRN.municipios, bairros: bairrosRN.cidades },
+  PB: { nome: "Paraíba", municipios: municipiosPB.municipios, bairros: bairrosPB.cidades },
+};
+export const UFS_ATIVAS = Object.keys(ESTADOS);
 
 export const PROFUNDIDADES = ["rapida", "normal", "completa"];
 export const FUSO = "America/Fortaleza";
@@ -151,14 +162,18 @@ export function estimarComPartes(consultas, partes, extrairEmail, metricas = {})
 }
 
 const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-const POPULACAO_RN = new Map(municipiosRN.municipios.map((m) => [semAcento(m.nome), m.populacao_2022]));
+const POPULACAO = new Map(Object.entries(ESTADOS).map(([uf, e]) => [uf, new Map(e.municipios.map((m) => [semAcento(m.nome), m.populacao_2022]))]));
 
-/** Cidades do RN com menos de 5 mil hab. (Censo 2022) entre as pedidas ("Nome RN"); cidades de fora ficam de fora. */
+/**
+ * Cidades pequenas (menos de 5 mil hab., Censo 2022) entre as pedidas ("Nome RN" / "Nome PB"), nos estados ativos.
+ * Sem sigla conta como RN (buscas antigas); cidade de outro estado fica de fora.
+ */
 export function cidadesPequenas(cidades, abaixoDe = CIDADE_PEQUENA_ABAIXO_DE) {
   return cidades.filter((c) => {
-    const nome = semAcento(c).replace(/\s+rn$/, "");
-    const pop = POPULACAO_RN.get(nome);
-    return pop !== undefined && pop < abaixoDe;
+    const m = semAcento(c).match(/^(.*?)(?:\s+([a-z]{2}))?$/);
+    const uf = (m[2] || "rn").toUpperCase(), nome = m[2] ? m[1] : semAcento(c);
+    const pop = POPULACAO.get(uf)?.get(nome);
+    return pop !== undefined && pop !== null && pop < abaixoDe;
   });
 }
 
@@ -241,7 +256,7 @@ export function profundidadePorPopulacao(populacao) {
  * - Natal, Mossoró e Parnamirim: uma consulta por bairro (normal);
  * - demais acima de 100 mil (São Gonçalo do Amarante): cidade inteira, completa.
  */
-export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bairros = bairrosRN.cidades) {
+export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bairros = bairrosRN.cidades, uf = "RN") {
   const bairrosPorCidade = new Map(bairros.map((c) => [c.nome, c.bairros]));
   const consultas = [];
   for (const termo of termos) {
@@ -254,9 +269,10 @@ export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bai
             termo,
             cidade: m.nome,
             bairro,
-            texto: `${termo} ${bairro} ${m.nome} RN`,
+            texto: `${termo} ${bairro} ${m.nome} ${uf}`,
             profundidade: "normal",
             criterio: "uf",
+            uf,
           });
         }
       } else {
@@ -264,14 +280,22 @@ export function planoRnInteiro(termos, municipios = municipiosRN.municipios, bai
           id: `c${consultas.length}`,
           termo,
           cidade: m.nome,
-          texto: `${termo} ${m.nome} RN`,
+          texto: `${termo} ${m.nome} ${uf}`,
           profundidade: profundidadePorPopulacao(m.populacao_2022),
           criterio: "uf",
+          uf,
         });
       }
     }
   }
   return consultas;
+}
+
+/** Plano do Estado inteiro de um estado ativo (mesmas regras do RN: faixas de população e cidades grandes por bairro). */
+export function planoEstadoInteiro(termos, uf = "RN") {
+  const e = ESTADOS[uf];
+  if (!e) throw new Error("Estado não ativo.");
+  return planoRnInteiro(termos, e.municipios, e.bairros, uf);
 }
 
 /** Divide as consultas em lotes de ~40 min estimados (cada lote vira uma busca-filha). */
@@ -298,14 +322,16 @@ export function prepararRnInteiro(corpo, metricas = {}) {
     throw new Error(`Cada termo pode ter no máximo ${MAX_TAMANHO_TEXTO} caracteres.`);
   }
   const extrairEmail = corpo?.extrair_email === true;
-  const consultas = planoRnInteiro(termos);
+  const uf = String(corpo?.uf || "RN").toUpperCase();
+  if (!UFS_ATIVAS.includes(uf)) throw new Error("Estado não ativo: escolha um dos estados liberados.");
+  const consultas = planoEstadoInteiro(termos, uf);
   const lotes = dividirEmLotes(consultas, extrairEmail, metricas);
   const soConsultas = estimarConsultasSeg(consultas, extrairEmail, metricas);
   // Cada execução do motor dura até ~5h20; cada uma tem ~1 min de partida.
   const execucoes = Math.max(1, Math.ceil(soConsultas / LIMITE_BUSCA_COMUM_SEG));
   const estimativa = soConsultas + PARTIDA_EXECUCAO_SEG * execucoes;
   return {
-    parametros: { termos, extrair_email: extrairEmail, agendar_noite: corpo?.agendar_noite === true },
+    parametros: { termos, extrair_email: extrairEmail, agendar_noite: corpo?.agendar_noite === true, uf },
     consultas,
     lotes,
     estimativa_seg: estimativa,
@@ -346,7 +372,7 @@ export function inserirNaFila(estado, novos) {
 // Limites técnicos (proteção contra abuso, não são regra de negócio).
 export const MAX_PERFIS_POR_USUARIO = 50;
 const MAX_NOME_PERFIL = 60;
-const MAX_CIDADES_PERFIL = 167; // todos os municípios do RN
+const MAX_CIDADES_PERFIL = Math.max(...Object.values(ESTADOS).map((e) => e.municipios.length)); // todos os municípios do maior estado ativo (PB: 223)
 
 /** Valida um perfil salvo: nome + os mesmos campos de uma busca comum. */
 export function validarPerfil(corpo) {
@@ -399,4 +425,115 @@ export function decidirDespertar(buscas, agora = new Date(), vagas = VAGAS_MAX) 
   if (elegiveis) return { disparar: true, motivo: "fila_com_trabalho", elegiveis, orfas };
   if (orfas) return { disparar: true, motivo: "busca_orfa", elegiveis, orfas };
   return { disparar: false, motivo: "fila_vazia", elegiveis, orfas };
+}
+
+// ------------------------------------------------------------ LIBERAR BUSCA PARA VENDEDOR (admin)
+// A cidade do lead é a do ENDEREÇO (nada inferido); sem cidade no endereço = "(sem cidade)".
+export const SEM_CIDADE = "(sem cidade)";
+export const cidadeDoLead = (l) => String(l?.cidade ?? "").trim() || SEM_CIDADE;
+
+/** [{cidade, leads}] dos leads da busca, da cidade com mais leads para a com menos (empate: nome). */
+export function contarPorCidade(leads) {
+  const n = new Map();
+  for (const l of leads) { const c = cidadeDoLead(l); n.set(c, (n.get(c) || 0) + 1); }
+  return [...n].map(([cidade, qtd]) => ({ cidade, leads: qtd }))
+    .sort((a, b) => b.leads - a.leads || a.cidade.localeCompare(b.cidade, "pt-BR"));
+}
+
+/**
+ * Divide as cidades entre os vendedores, cada cidade para UM só (nenhum lead repetido):
+ * da cidade com mais leads para a com menos, sempre para quem está com menos leads até ali
+ * (empate: a ordem em que os vendedores foram escolhidos). Devolve [{uid, cidades, leads}].
+ */
+export function dividirCidades(contagem, uids) {
+  const partes = uids.map((uid) => ({ uid, cidades: [], leads: 0 }));
+  if (!partes.length) return partes;
+  for (const { cidade, leads } of contagem) {
+    const alvo = partes.reduce((m, p) => (p.leads < m.leads ? p : m), partes[0]);
+    alvo.cidades.push(cidade); alvo.leads += leads;
+  }
+  for (const p of partes) p.cidades.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return partes;
+}
+
+/**
+ * Plano da liberação: quem recebe o quê.
+ * - modo "inteira" sem dividir: cada vendedor recebe a lista inteira (modo guardado "inteira": lê os lotes da busca);
+ * - "cidades" (só as escolhidas) e/ou "dividir": cada vendedor recebe um recorte (modo "recorte": cópia só com os
+ *   leads das cidades dele, em documentos separados por vendedor, para a regra do Firestore conseguir filtrar).
+ * Devolve { cidades: [{cidade, leads}], por_vendedor: [{uid, modo, cidades|null, leads}] } ou lança Error com a mensagem.
+ */
+export function planoLiberacao(leads, { vendedores = [], modo = "inteira", cidades = [], dividir = false, donoDe = () => null } = {}) {
+  const contagem = contarPorCidade(leads);
+  // Dividir respeita a carteira: lead que já é de um vendedor vai só para ele (se ele estiver entre os escolhidos);
+  // se não estiver, não vai para ninguém. Os outros são divididos por cidade.
+  if (dividir && vendedores.length > 1) {
+    const escolhidas = modo === "cidades" ? new Set(cidades) : null;
+    const noRecorte = leads.filter((l) => !escolhidas || escolhidas.has(cidadeDoLead(l)));
+    if (!noRecorte.length) throw new Error("Escolha pelo menos uma cidade com leads.");
+    const livres = noRecorte.filter((l) => !donoDe(l));
+    const alvoLivre = contarPorCidade(livres);
+    if (alvoLivre.length < vendedores.length) throw new Error(`Só há ${alvoLivre.length} cidade(s) com leads livres para dividir entre ${vendedores.length} vendedores: escolha menos vendedores ou mais cidades.`);
+    const partes = dividirCidades(alvoLivre, vendedores);
+    let fora = 0;
+    for (const l of noRecorte) {
+      const dono = donoDe(l);
+      if (!dono) continue;
+      const p = partes.find((x) => x.uid === dono);
+      if (p) { p.leads++; p.carteira = (p.carteira || 0) + 1; } else fora++;
+    }
+    return { cidades: contagem, cidades_recorte: escolhidas ? [...escolhidas] : null, na_carteira_de_outros: fora, por_vendedor: partes.map((p) => ({ ...p, carteira: p.carteira || 0, modo: "recorte" })) };
+  }
+  if (!["inteira", "cidades"].includes(modo)) throw new Error("Escolha \"Lista inteira\" ou \"Só estas cidades/regiões\".");
+  let alvo = contagem;
+  if (modo === "cidades") {
+    const escolhidas = new Set(cidades);
+    alvo = contagem.filter((c) => escolhidas.has(c.cidade));
+    if (!alvo.length) throw new Error("Escolha pelo menos uma cidade com leads.");
+  }
+  const total = alvo.reduce((t, c) => t + c.leads, 0);
+  let por_vendedor;
+  if (dividir && vendedores.length > 1) {
+    if (alvo.length < vendedores.length) throw new Error(`Só há ${alvo.length} cidade(s) para dividir entre ${vendedores.length} vendedores: escolha menos vendedores ou mais cidades.`);
+    por_vendedor = dividirCidades(alvo, vendedores).map((p) => ({ ...p, modo: "recorte" }));
+  } else if (modo === "inteira") {
+    por_vendedor = vendedores.map((uid) => ({ uid, modo: "inteira", cidades: null, leads: total }));
+  } else {
+    const lista = alvo.map((c) => c.cidade).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    por_vendedor = vendedores.map((uid) => ({ uid, modo: "recorte", cidades: lista, leads: total }));
+  }
+  return { cidades: contagem, por_vendedor };
+}
+
+// ------------------------------------------------------------ MINI-CRM E CARTEIRA (espelho do bloco <crm> do index.html;
+// testes/crm.test.mjs confere que os dois dão o mesmo resultado)
+export const STATUS_CRM = ["novo", "contatado", "negociando", "cliente", "descartado"];
+export const MOTIVOS_DESCARTE = ["sem_interesse", "fechou", "numero_errado", "outro"];
+export const STATUS_DA_CARTEIRA = ["contatado", "negociando", "cliente"]; // marcar um destes põe o lead na carteira
+export const CARTEIRA_DIAS_PADRAO = 60;
+export const HISTORICO_MAX = 10;
+export const FATIAS_CRM = 16;
+const slugCrm = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+/** Mesmo estabelecimento em buscas diferentes: place_id do Google; sem ele, telefone + nome; sem telefone, nome + cidade. */
+export function chaveLead(l) {
+  const id = String(l?.id_lugar ?? "").trim();
+  if (id) return `p_${id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)}`;
+  const tel = String(l?.telefone ?? "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+  if (tel) return `t_${tel}_${slugCrm(l?.nome)}`;
+  return `n_${slugCrm(l?.nome)}_${slugCrm(l?.cidade)}`;
+}
+/** Em qual documento (fatia 00–15) a chave fica: carteira/{fatia} e crm/{uid}__{fatia}. */
+export function fatiaDe(chave) {
+  let h = 0;
+  for (const c of String(chave)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return String(h % FATIAS_CRM).padStart(2, "0");
+}
+/** A entrada da carteira ainda vale? Descartado sai na hora; sem contato há mais de `dias` volta a ficar livre. */
+export function carteiraAtiva(entrada, agoraMs, dias = CARTEIRA_DIAS_PADRAO) {
+  if (!entrada || !entrada.uid || !STATUS_DA_CARTEIRA.includes(entrada.s)) return false;
+  return agoraMs - Number(entrada.ultimo || 0) <= dias * 86400000;
+}
+export function diasCarteira(geral = {}) {
+  const v = geral?.carteira_dias;
+  return Number.isInteger(v) && v >= 1 && v <= 3650 ? v : CARTEIRA_DIAS_PADRAO;
 }

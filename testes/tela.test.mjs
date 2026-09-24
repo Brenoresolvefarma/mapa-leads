@@ -940,7 +940,7 @@ test("iPhone (390 px): todo campo de digitação visível tem fonte de 16 px ou 
 
 // Planilha .xlsx pronta para usar (pedido do Breno, 24/09): gera pela tela e confere o arquivo de verdade.
 const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
-  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta", "Status", "Próximo contato", "Última anotação", "Vendedor"];
 async function conferirPlanilha(p) {
   const visiveis = Number((await texto(p, "#conta")).match(/^([\d.]+)/)[1].replace(".", ""));
   await p.click("#baixar-xlsx");
@@ -964,10 +964,10 @@ async function conferirPlanilha(p) {
   // Cabeçalho travado e filtro automático em todas as colunas
   assert.equal(ws.views[0].state, "frozen");
   assert.equal(ws.views[0].ySplit, 1);
-  assert.equal(ws.autoFilter, `A1:P${visiveis + 1}`);
+  assert.equal(ws.autoFilter, `A1:T${visiveis + 1}`);
   // Nome interno do filtro (o Excel grava; sem ele o LibreOffice não mostra as setas)
   assert.match(execFileSync("unzip", ["-p", destino, "xl/workbook.xml"], { encoding: "utf8" }),
-    new RegExp(`<definedName name="_xlnm._FilterDatabase" localSheetId="0">&apos;Leads&apos;!\\$A\\$1:\\$P\\$${visiveis + 1}</definedName>`));
+    new RegExp(`<definedName name="_xlnm._FilterDatabase" localSheetId="0">&apos;Leads&apos;!\\$A\\$1:\\$T\\$${visiveis + 1}</definedName>`));
   // Uma linha por lead (os mesmos da tela), sem duplicados, ordenadas por Cidade e depois Nome
   const linhas = [];
   for (let r = 2; r <= ws.rowCount; r++) linhas.push(ws.getRow(r));
@@ -1072,4 +1072,348 @@ test("limite do vendedor (390 px): sem 'Selecionar todas' no estado, contador 'X
   assert.equal(await a.inputValue("#cfg-consultas-dia"), "300");
   assert.deepEqual(erros, []);
   await a.context().close();
+});
+
+test("liberar busca (390 px): admin libera dividindo sem repetir; vendedor vê 'Liberada por admin' sem Apagar; revogar tira na hora", async () => {
+  const { auth, db } = firebase();
+  const lia = await auth.createUser({ email: "lia@x.example", password: "senha-forte-l", displayName: "Lia" });
+  const rui = await auth.createUser({ email: "rui@x.example", password: "senha-forte-r", displayName: "Rui" });
+  const breno = await auth.getUserByEmail("breno@x.example");
+  // Lista do admin: 3 leads em Natal, 2 em Mossoró e 1 em Caicó.
+  await db.doc("buscas/lib").set({ tipo: "comum", lista: true, dono_uid: breno.uid, dono_email: "breno@x.example", status: "concluida",
+    criada_em: new Date(Date.now() - 5000), finalizada_em: new Date(), parametros: { termos: ["clínica"], cidades: ["Natal RN", "Mossoró RN", "Caicó RN"] }, qtd_lotes: 1,
+    resumo: { total: 6 } });
+  await db.doc("buscas/lib/lotes/0").set({ dono_uid: breno.uid, leads: [
+    lead({ nome: "Lib Natal 1", cidade: "Natal", id_lugar: "q1", telefone: "(84) 99999-1001", whatsapp_link: "https://wa.me/5584999991001" }),
+    lead({ nome: "Lib Natal 2", cidade: "Natal", id_lugar: "q2" }), lead({ nome: "Lib Natal 3", cidade: "Natal", id_lugar: "q3" }),
+    lead({ nome: "Lib Mossoró 1", cidade: "Mossoró", cidade_buscada: "Mossoró RN", id_lugar: "q4" }), lead({ nome: "Lib Mossoró 2", cidade: "Mossoró", cidade_buscada: "Mossoró RN", id_lugar: "q5" }),
+    lead({ nome: "Lib Caicó 1", cidade: "Caicó", cidade_buscada: "Caicó RN", id_lugar: "q6" }),
+  ] });
+  const tel = { width: 390, height: 844 };
+
+  // ---- Admin (celular): Meus leads › Liberar para vendedor › Lia + Rui, dividir
+  const a = await abrir("breno@x.example", "senha-forte-1", tel);
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.tap("#barra-inferior a[data-ir=leads]");
+  await a.tap("#abrir-buscas");
+  await a.locator("#caixa-buscas [data-liberar=lib]").tap();
+  await a.waitForSelector(`#painel-liberar:not(.oculto) [data-lib-vend="${lia.uid}"]`);
+  // O dono (admin) não aparece como vendedor; a Ana, a Lia e o Rui sim.
+  assert.equal(await a.locator(`[data-lib-vend="${breno.uid}"]`).count(), 0);
+  assert.equal(await a.locator(`[data-lib-vend="${uids.ana}"]`).count(), 1);
+  assert.equal(await a.locator("#lib-confirmar").isDisabled(), true);
+  await a.locator(`[data-lib-vend="${lia.uid}"]`).check();
+  await a.locator(`[data-lib-vend="${rui.uid}"]`).check();
+  await a.locator("#lib-dividir").check();
+  // Prévia antes de confirmar: quantos leads cada um recebe (3 + 3, cidades diferentes).
+  await esperarTexto(a, "#lib-previa", /Lia: 3 leads · 1 cidade/);
+  assert.match(await a.textContent("#lib-previa"), /Rui: 3 leads · 2 cidade/);
+  let m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `painel: ${m.fora.join(", ")}`);
+  const conf = a.locator("#lib-confirmar");
+  assert.ok((await conf.boundingBox()).height >= 44);
+  // "Só estas cidades/regiões": regiões e cidades com contagem (prévia muda; volta para a lista inteira depois)
+  await a.locator("input[name=lib-modo][value=cidades]").check();
+  await a.waitForSelector("#lib-cidades [data-lib-cidade='Mossoró']");
+  await esperarTexto(a, "#lib-previa", /Marque pelo menos uma cidade/);
+  await a.locator("#lib-cidades [data-lib-cidade='Mossoró']").check();
+  await a.locator("#lib-cidades [data-lib-cidade='Caicó']").check();
+  await esperarTexto(a, "#lib-previa", /Lia: 2 leads · 1 cidade/);
+  m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `painel (cidades): ${m.fora.join(", ")}`);
+  await a.locator("input[name=lib-modo][value=inteira]").check();
+  await esperarTexto(a, "#lib-previa", /Lia: 3 leads · 1 cidade/);
+  await conf.tap();
+  await esperarTexto(a, "#toasts", /liberada para 2 vendedor/);
+  let b = (await db.doc("buscas/lib").get()).data();
+  assert.deepEqual([...b.liberada_para].sort(), [lia.uid, rui.uid].sort());
+  const copia = async (uid) => (await db.doc(`buscas/lib/liberacoes/${uid}/lotes/0`).get()).data().leads.map((l) => l.id_lugar);
+  const [il, ir] = [await copia(lia.uid), await copia(rui.uid)];
+  assert.deepEqual([...il, ...ir].sort(), ["q1", "q2", "q3", "q4", "q5", "q6"]); // todos, nenhum repetido
+  // Lista inteira para a Ana também.
+  await a.tap("#abrir-buscas");
+  await a.locator("#caixa-buscas [data-liberar=lib]").tap();
+  await a.locator(`[data-lib-vend="${uids.ana}"]`).check();
+  await esperarTexto(a, "#lib-previa", /: 6 leads · lista inteira/);
+  await a.locator("#lib-confirmar").tap();
+  await esperarTexto(a, "#toasts", /liberada para 1 vendedor/);
+  // Chips "Liberada para" com revogar
+  await a.tap("#abrir-buscas");
+  await a.waitForSelector(`#caixa-buscas [data-revogar=lib][data-uid="${lia.uid}"]`);
+  await a.keyboard.press("Escape");
+  assert.deepEqual(erros, []);
+
+  // ---- Lia (celular): vê a lista com a etiqueta, só os leads das cidades dela, sem Apagar/Liberar
+  const l = await abrir("lia@x.example", "senha-forte-l", tel);
+  await l.tap("#barra-inferior a[data-ir=leads]");
+  await l.tap("#abrir-buscas");
+  const linha = l.locator("#caixa-buscas .linha-busca[data-busca=lib]");
+  await linha.waitFor();
+  assert.match(await linha.textContent(), /Liberada por admin/);
+  assert.match(await linha.textContent(), /3 leads/);
+  assert.equal(await linha.locator("[data-apagar], [data-liberar], [data-cancelar]").count(), 0);
+  await linha.locator("[data-abrir=lib]").check();
+  await l.tap("#aplicar-buscas");
+  await l.locator("#cartoes .cartao-lead", { hasText: "Lib Natal 1" }).waitFor();
+  const nomes = await l.$$eval("#cartoes .cartao-lead .nome-lead", (xs) => xs.map((x) => x.textContent.trim()));
+  assert.deepEqual(nomes.filter((n) => n.startsWith("Lib")).sort(), ["Lib Natal 1", "Lib Natal 2", "Lib Natal 3"]);
+  const cartao = l.locator("#cartoes .cartao-lead", { hasText: "Lib Natal 1" });
+  assert.equal(await cartao.locator("a.btn-whats").getAttribute("href"), "https://wa.me/5584999991001");
+  assert.equal(await cartao.locator("a[href^='tel:']").getAttribute("href"), "tel:84999991001");
+  m = await medirLargura(l); assert.equal(m.rolagem, m.largura, `Meus leads (liberada): ${m.fora.join(", ")}`);
+  // Não conta na cota: o documento de uso da Lia nem existe.
+  assert.equal((await db.doc(`usuarios/${lia.uid}`).get()).exists, false);
+
+  // ---- Admin revoga a Lia (no Admin); a lista some da tela dela na hora
+  await a.evaluate(() => { location.hash = "#admin"; });
+  const rev = a.locator(`#buscas-admin [data-revogar=lib][data-uid="${lia.uid}"]`);
+  await rev.waitFor();
+  m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `Admin: ${m.fora.join(", ")}`);
+  assert.ok((await rev.boundingBox()).height >= 28);
+  await rev.tap();
+  await a.waitForSelector("#confirmacao:not(.oculto)");
+  assert.match(await a.textContent("#conf-texto"), /Tirar esta lista de Lia\?/);
+  await a.tap("#conf-sim");
+  await esperarTexto(a, "#toasts", /Liberação revogada/);
+  b = (await db.doc("buscas/lib").get()).data();
+  assert.ok(!b.liberada_para.includes(lia.uid));
+  assert.equal((await db.doc(`buscas/lib/liberacoes/${lia.uid}/lotes/0`).get()).exists, false);
+  await l.waitForFunction(() => !document.querySelector("#caixa-buscas [data-busca=lib]"), null, { timeout: 15000 });
+  await l.waitForFunction(() => ![...document.querySelectorAll("#cartoes .cartao-lead .nome-lead")].some((e) => e.offsetParent && e.textContent.startsWith("Lib")), null, { timeout: 15000 })
+    .catch(async (e) => { throw new Error(`${e.message} — ${await l.evaluate(() => document.querySelector("#leads-painel")?.innerText.slice(0, 300))}`); });
+  assert.deepEqual(erros, []);
+  await l.context().close();
+  await a.context().close();
+
+  // Ana (lista inteira) continua vendo os 6.
+  const n = await abrir("ana@x.example", "senha-forte-2", tel);
+  await n.tap("#barra-inferior a[data-ir=leads]");
+  await n.tap("#abrir-buscas");
+  const la = n.locator("#caixa-buscas .linha-busca[data-busca=lib]");
+  await la.waitFor();
+  assert.match(await la.textContent(), /Liberada por admin[\s\S]*6 leads/);
+  await n.context().close();
+  // Limpeza: a busca de teste sai (para não mexer nos outros testes).
+  await db.doc("buscas/lib/lotes/0").delete();
+  for (const uid of [rui.uid]) await db.doc(`buscas/lib/liberacoes/${uid}/lotes/0`).delete();
+  await db.doc("buscas/lib").delete();
+});
+
+test("mini-CRM e carteira (390 px): status em um toque, 'Como foi?', histórico, Para hoje; B vê 'Na carteira de A' sem botões; prazo; admin transfere; exportação", async () => {
+  const { auth, db } = firebase();
+  const beto = await auth.createUser({ email: "beto@x.example", password: "senha-forte-b", displayName: "Beto" });
+  const breno = await auth.getUserByEmail("breno@x.example");
+  const agora = Date.now();
+  const alfa = lead({ nome: "CRM Alfa", cidade: "Natal", id_lugar: "cr1", telefone: "(84) 99999-2001", whatsapp_link: "https://wa.me/5584999992001" });
+  const beta = lead({ nome: "CRM Beta", cidade: "Natal", id_lugar: "cr2", telefone: "(84) 99999-2002", whatsapp_link: "https://wa.me/5584999992002" });
+  for (const [id, dono, leads, idade] of [["crmA", uids.ana, [alfa, beta], 1000], ["crmB", beto.uid, [alfa], 2000]]) {
+    await db.doc(`buscas/${id}`).set({ tipo: "comum", lista: true, dono_uid: dono, status: "concluida", criada_em: new Date(agora - idade), finalizada_em: new Date(agora - idade),
+      parametros: { termos: ["clínica"], cidades: ["Natal RN"] }, qtd_lotes: 1, resumo: { total: leads.length } });
+    await db.doc(`buscas/${id}/lotes/0`).set({ dono_uid: dono, leads });
+  }
+  const tel = { width: 390, height: 844 };
+  const abrirSo = async (p, id) => {
+    await p.tap("#barra-inferior a[data-ir=leads]");
+    await p.tap("#abrir-buscas");
+    await p.waitForSelector(`#caixa-buscas [data-abrir=${id}]`);
+    for (const c of await p.$$("#caixa-buscas [data-abrir]:checked")) await c.uncheck();
+    await p.check(`#caixa-buscas [data-abrir=${id}]`);
+    await p.tap("#aplicar-buscas");
+  };
+  const cartaoDe = (p, nome) => p.locator("#cartoes .cartao-lead", { hasText: nome }).first();
+
+  // ---- Ana (vendedora A): Contatado em um toque
+  const a = await abrir("ana@x.example", "senha-forte-2", tel);
+  await a.context().route("https://wa.me/**", (r) => r.fulfill({ body: "ok" }));
+  await abrirSo(a, "crmA");
+  let c = cartaoDe(a, "CRM Alfa");
+  await c.waitFor();
+  const botoes = c.locator(".status-lead button");
+  assert.deepEqual(await botoes.allTextContents(), ["Novo", "Contatado", "Negociando", "Cliente", "Descartado"]);
+  for (const b of await botoes.all()) assert.ok((await b.boundingBox()).height >= 44, "status com 44 px ou mais");
+  await c.locator("[data-status=contatado]").tap();
+  await esperarTexto(a, "#toasts", /Contatado — salvo/);
+  await a.waitForFunction(() => document.querySelector("#cartoes .cartao-lead [data-status=contatado][aria-pressed=true]"));
+  const { fatiaDe } = await import("../netlify/lib/logica.mjs");
+  const refCrm = db.doc(`crm/${uids.ana}__${fatiaDe("p_cr1")}`);
+  assert.equal((await refCrm.get()).data().leads.p_cr1.s, "contatado");
+  // WhatsApp → "Como foi?" com os status em botões; anotação + próximo contato (hoje) → Negociando
+  c = cartaoDe(a, "CRM Alfa");
+  await c.locator("a.btn-whats").tap();
+  await a.waitForSelector("#folha-crm:not(.oculto)");
+  assert.match(await a.textContent("#folha-titulo"), /Como foi\?/);
+  assert.deepEqual(await a.locator("#folha-crm [data-folha-status]").allTextContents(), ["Contatado", "Negociando", "Cliente", "Descartado"]);
+  let m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `Como foi?: ${m.fora.join(", ")}`);
+  await a.fill("#folha-nota", "ligar sexta");
+  await a.fill("#folha-proximo", hoje);
+  await a.locator("#folha-crm [data-folha-status=negociando]").tap();
+  await esperarTexto(a, "#toasts", /Negociando — salvo/);
+  const reg = (await refCrm.get()).data().leads.p_cr1;
+  assert.deepEqual([reg.s, reg.n, reg.p], ["negociando", "ligar sexta", hoje]);
+  assert.deepEqual(reg.h.map((h) => h.s), ["negociando", "contatado"]);
+  // Descartado pede o motivo (CRM Beta)
+  await cartaoDe(a, "CRM Beta").locator("[data-status=descartado]").tap();
+  await a.waitForSelector("#folha-crm:not(.oculto) [data-motivo=numero_errado]");
+  await a.locator("#folha-crm [data-motivo=numero_errado]").tap();
+  await esperarTexto(a, "#toasts", /Descartado · Número errado — salvo/);
+  // Contador por status + aba "Para hoje" (só o Alfa: próximo contato hoje)
+  await a.waitForFunction(() => /Negociando\s*1/.test(document.querySelector("#crm-barra").textContent) && /Descartado\s*1/.test(document.querySelector("#crm-barra").textContent));
+  await a.tap("#crm-barra [data-crm-hoje]");
+  await a.waitForFunction(() => [...document.querySelectorAll("#cartoes .cartao-lead .nome-lead")].map((e) => e.textContent.trim()).join("|") === "CRM Alfa");
+  assert.match(await cartaoDe(a, "CRM Alfa").textContent(), /Próximo: \d\d\/\d\d\/\d{4}.*ligar sexta/);
+  m = await medirLargura(a); assert.equal(m.rolagem, m.largura, `Para hoje: ${m.fora.join(", ")}`);
+  // Ficha: histórico "dd/mm · nome · status · anotação"
+  await cartaoDe(a, "CRM Alfa").locator(".nome-lead").tap();
+  await a.waitForSelector("#ficha:not(.oculto) .historico li");
+  assert.match(await a.textContent("#ficha .historico li"), /^\d\d\/\d\d · .+ · Negociando · ligar sexta · próximo \d\d\/\d\d\/\d{4}$/);
+  await a.tap("#ficha .fechar-baixo");
+  // Início: "Para hoje: 1 contato" abre a lista
+  await a.tap("#barra-inferior a[data-ir=inicio]");
+  await esperarTexto(a, "#para-hoje", /1 contato/);
+  await a.tap("#para-hoje");
+  await a.waitForFunction(() => location.hash === "#leads" && /Para hoje/.test(document.querySelector("#chips").textContent));
+  // Exportação com as colunas do CRM
+  await a.evaluate(() => { document.querySelector("#baixar-xlsx").scrollIntoView(); });
+  await a.click("#baixar-xlsx");
+  await a.waitForSelector("#confirmacao:not(.oculto)");
+  const [arquivo] = await Promise.all([a.waitForEvent("download"), a.click("#conf-sim")]);
+  const destino = join(pasta, "crm.xlsx"); await arquivo.saveAs(destino);
+  const livro = new ExcelJS.Workbook(); await livro.xlsx.readFile(destino);
+  const ws = livro.getWorksheet("Leads");
+  assert.deepEqual(ws.getRow(1).values.slice(17), ["Status", "Próximo contato", "Última anotação", "Vendedor"]);
+  const linha = ws.getRow(2);
+  assert.equal(linha.getCell(1).value, "CRM Alfa");
+  assert.equal(linha.getCell(17).value, "Negociando");
+  assert.ok(linha.getCell(18).value instanceof Date);
+  assert.equal(linha.getCell(19).value, "ligar sexta");
+  assert.ok(String(linha.getCell(20).value).length > 0);
+  assert.deepEqual(erros, []);
+
+  // ---- Beto (vendedor B): o mesmo lugar numa busca dele → "Na carteira de <Ana>", sem WhatsApp/Ligar/status, fora do Para hoje
+  const b = await abrir("beto@x.example", "senha-forte-b", tel);
+  await abrirSo(b, "crmB");
+  const cb = cartaoDe(b, "CRM Alfa");
+  await cb.waitFor();
+  await b.waitForFunction(() => /Na carteira de/.test(document.querySelector("#cartoes .cartao-lead")?.textContent || ""));
+  const nomeDaAna = (await db.doc(`carteira/${fatiaDe("p_cr1")}`).get()).data().leads.p_cr1.nome;
+  assert.match(await cb.textContent(), new RegExp(`Na carteira de ${nomeDaAna}`));
+  assert.equal(await cb.locator("a.btn-whats, a[href^='tel:'], .status-lead").count(), 0);
+  assert.match(await b.textContent("#crm-barra [data-crm-hoje]"), /Para hoje\s*0/);
+  await b.context().close();
+  // Prazo: sem contato há 61 dias (padrão 60) → volta a ficar livre para o Beto
+  const refCart = db.doc(`carteira/${fatiaDe("p_cr1")}`);
+  await refCart.set({ leads: { p_cr1: { ultimo: agora - 61 * 86400000 } } }, { merge: true });
+  const b2 = await abrir("beto@x.example", "senha-forte-b", tel);
+  await abrirSo(b2, "crmB");
+  await b2.waitForSelector("#cartoes .cartao-lead .status-lead [data-status=contatado]");
+  assert.equal(await cartaoDe(b2, "CRM Alfa").locator("a.btn-whats").count(), 1);
+  await b2.context().close();
+  await a.context().close();
+
+  // ---- Admin transfere o lead para o Beto (ficha) e vê o painel Carteiras
+  await refCart.set({ leads: { p_cr1: { ultimo: agora } } }, { merge: true });
+  const ad = await abrir("breno@x.example", "senha-forte-1", tel);
+  await ad.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await abrirSo(ad, "crmA");
+  await cartaoDe(ad, "CRM Alfa").locator(".nome-lead").tap();
+  await ad.waitForSelector(`#transferir-para option[value="${beto.uid}"]`, { state: "attached" });
+  await ad.selectOption("#transferir-para", beto.uid);
+  await ad.tap("#transferir-btn");
+  await ad.tap("#conf-sim");
+  await esperarTexto(ad, "#toasts", /transferido para Beto/);
+  assert.equal((await refCart.get()).data().leads.p_cr1.uid, beto.uid);
+  await ad.evaluate(() => { location.hash = "#admin"; });
+  await ad.waitForSelector(`#carteiras-tabela [data-carteira-uid="${beto.uid}"]`);
+  assert.match(await ad.textContent(`#carteiras-tabela [data-carteira-uid="${beto.uid}"]`), /Beto/);
+  m = await medirLargura(ad); assert.equal(m.rolagem, m.largura, `Admin (carteiras): ${m.fora.join(", ")}`);
+  assert.deepEqual(erros, []);
+  await ad.context().close();
+  for (const id of ["crmA", "crmB"]) { await db.doc(`buscas/${id}/lotes/0`).delete(); await db.doc(`buscas/${id}`).delete(); }
+  void breno;
+});
+
+test("PB (390 px): Nova busca na Paraíba manda as cidades com 'PB'; Mapa PB com aprofundamento até os leads; Mercado PB; Estado inteiro PB estima", async () => {
+  const { db } = firebase();
+  const breno = (await firebase().auth.getUserByEmail("breno@x.example")).uid;
+  // Vendedora só deste teste (a Ana já gastou a cota do dia nos testes anteriores).
+  const paula = (await firebase().auth.createUser({ email: "paula@x.example", password: "senha-forte-p", displayName: "Paula" })).uid;
+  // Uma busca fictícia em João Pessoa (PB) com um lead
+  await db.doc("buscas/pbA").set({ tipo: "comum", lista: true, dono_uid: paula, status: "concluida", criada_em: new Date(), finalizada_em: new Date(),
+    parametros: { termos: ["clínica"], cidades: ["João Pessoa PB"] }, qtd_lotes: 1, resumo: { total: 1 } });
+  await db.doc("buscas/pbA/lotes/0").set({ dono_uid: paula, leads: [lead({ nome: "Clínica Paraibana", cidade: "João Pessoa", uf: "PB", cidade_buscada: "João Pessoa PB", id_lugar: "pb1",
+    latitude: -7.115, longitude: -34.86 })] });
+  const tel = { width: 390, height: 844 };
+  const esperarPB = (pg, fn) => pg.waitForFunction(fn, null, { timeout: 15000 }).catch(async (e) => {
+    throw new Error(`${e.message} [${String(fn).slice(6, 70)}] — hash ${await pg.evaluate(() => location.hash)} · painel: ${await pg.evaluate(() => (document.querySelector("#mapa-painel")?.innerText || "").replace(/\s+/g, " ").slice(0, 400))} · erros: ${erros.join(" | ")}`); });
+  const p = await abrir("paula@x.example", "senha-forte-p", tel);
+  // ---- Nova busca: seletor de estado com RN e PB; ao trocar, regiões e cidades da PB
+  await p.tap("#barra-inferior a[data-ir=nova]");
+  assert.deepEqual(await p.$$eval("#uf option", (o) => o.map((x) => x.textContent)), ["Rio Grande do Norte", "Paraíba"]);
+  await p.fill("#termo-input", "clínica"); await p.press("#termo-input", "Enter");
+  await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+  await p.selectOption("#uf", "PB");
+  await p.waitForSelector("#regioes input[data-regiao='25022']", { state: "attached" }); // microrregião de João Pessoa
+  assert.match(await p.textContent("#lista-cidades"), /Campina Grande/);
+  assert.doesNotMatch(await p.textContent("#lista-cidades"), /Mossoró/);
+  assert.equal(await p.locator("#lista-cidades input[data-cidade]").count(), 223);
+  assert.match(await p.textContent("#outras-rot"), /fora da PB/);
+  await p.$eval("#regioes input[data-regiao='25022']", (e) => e.closest("label").scrollIntoView({ block: "center" }));
+  await p.check("#regioes input[data-regiao='25022']");
+  await esperarTexto(p, "#qtd-cidades", /^6 de 40 cidades$/);
+  let m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `Nova busca PB: ${m.fora.join(", ")}`);
+  await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
+  const [pedidoSim] = await Promise.all([p.waitForRequest((r) => r.url().includes("/api/criar-busca") && JSON.parse(r.postData() || "{}").simular === true)]);
+  const cidadesSim = JSON.parse(pedidoSim.postData()).cidades.split(",");
+  assert.deepEqual(cidadesSim, ["Bayeux PB", "Cabedelo PB", "Conde PB", "João Pessoa PB", "Lucena PB", "Santa Rita PB"]);
+  // O servidor recebe e grava as consultas com "PB"
+  const [resp] = await Promise.all([p.waitForResponse((r) => r.url().includes("/api/criar-busca") && JSON.parse(r.request().postData() || "{}").simular !== true), p.tap("#buscar")]);
+  const criada = await resp.json();
+  assert.equal(resp.status(), 201, JSON.stringify(criada));
+  const b = (await db.doc(`buscas/${criada.id}`).get()).data();
+  assert.ok(b.parametros.cidades.every((c) => / PB$/.test(c)));
+  // ---- Mapa da PB: estado › microrregião › município › leads
+  await p.evaluate(() => { location.hash = "#mapa/pb"; });
+  await esperarPB(p, () => /Paraíba/.test(document.querySelector("#mapa-painel h2")?.textContent || ""));
+  assert.equal(await p.$eval("#uf-mapa", (e) => e.value), "PB");
+  assert.match(await p.textContent("#migalhas"), /^PB/);
+  await p.locator("#mapa-painel [data-ir-micro='25022']").tap();
+  await esperarPB(p, () => location.hash === "#mapa/pb/joao-pessoa");
+  await p.locator("#mapa-painel [data-ir-mun='2507507']").tap();
+  await esperarPB(p, () => location.hash === "#mapa/pb/joao-pessoa/joao-pessoa");
+  await esperarPB(p, () => /^PB›JoãoPessoa›JoãoPessoa$/.test(document.querySelector("#migalhas").textContent.replace(/\s+/g, "")));
+  await esperarPB(p, () => /Leads do segmento\s*i?\s*1\s/.test(document.querySelector("#mapa-painel")?.innerText || ""));
+  m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `Mapa PB: ${m.fora.join(", ")}`);
+  await p.tap("#mapa-ver-tabela");
+  await p.locator("#cartoes .cartao-lead", { hasText: "Clínica Paraibana" }).waitFor();
+  // Voltar ao Mapa do RN continua como sempre
+  await p.evaluate(() => { location.hash = "#mapa/rn"; });
+  await esperarPB(p, () => /Rio Grande do Norte/.test(document.querySelector("#mapa-painel h2")?.textContent || ""));
+  // ---- Mercado da PB: números do estado (IBGE)
+  await p.tap("#barra-inferior a[data-ir=mercado]").catch(() => p.evaluate(() => { location.hash = "#mercado"; }));
+  await p.evaluate(() => { location.hash = "#mercado"; });
+  await p.waitForSelector("#uf-mercado");
+  await p.selectOption("#uf-mercado", "PB");
+  await esperarTexto(p, "#kpis-mercado", /População da PB\s*i?\s*3\.974\.687/);
+  assert.match(await p.textContent("#kpis-mercado"), /PIB per capita \(PB\)\s*i?\s*R\$\s*21\.66\d/);
+  assert.match(await p.textContent("#kpis-mercado"), /Empresas \(CEMPRE · PB\)\s*i?\s*127\.114/);
+  assert.match(await p.textContent("#kpis-mercado"), /de 223 municípios pesquisados/);
+  m = await medirLargura(p); assert.equal(m.rolagem, m.largura, `Mercado PB: ${m.fora.join(", ")}`);
+  assert.deepEqual(erros, []);
+  await p.context().close();
+  // ---- Estado inteiro (admin): PB estima 345 consultas
+  const a = await abrir("breno@x.example", "senha-forte-1", tel);
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await a.evaluate(() => { location.hash = "#admin"; });
+  await a.waitForSelector("#rn-uf");
+  assert.match(await a.textContent("#estados"), /✓ Paraíba/);
+  assert.match(await a.textContent("#estados"), /Pernambuco · em breve/);
+  await a.selectOption("#rn-uf", "PB");
+  await a.fill("#rn-termos", "dentista");
+  await a.tap("#rn-estimar");
+  await esperarTexto(a, "#msg-rn", /^345 consultas em \d+ lotes · tempo estimado ~[\d,]+ h/);
+  assert.match(await a.textContent("#rn-confirmar"), /Estado inteiro \(PB\)/);
+  assert.deepEqual(erros, []);
+  await a.context().close();
+  for (const id of [criada.id]) for (const d of (await db.collection("buscas").where("mae_id", "==", id).get()).docs) await d.ref.delete();
+  await db.doc(`buscas/${criada.id}`).delete();
+  await db.doc("buscas/pbA/lotes/0").delete(); await db.doc("buscas/pbA").delete();
+  void breno;
 });

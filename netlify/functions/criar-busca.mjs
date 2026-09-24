@@ -114,7 +114,7 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
 
 async function criarRnInteiro(db, usuario, corpo, metricas) {
   // Bloqueio no SERVIDOR: esconder o botão na tela não basta.
-  if (!usuario.admin) throw new ErroHttp(403, "A busca RN inteiro é exclusiva do administrador.");
+  if (!usuario.admin) throw new ErroHttp(403, "A busca Estado inteiro é exclusiva do administrador.");
   let plano;
   try {
     plano = L.prepararRnInteiro(corpo, metricas);
@@ -122,6 +122,7 @@ async function criarRnInteiro(db, usuario, corpo, metricas) {
     throw new ErroHttp(400, erro.message);
   }
   const resumoPlano = {
+    uf: plano.parametros.uf,
     consultas: plano.consultas.length,
     lotes: plano.lotes.length,
     estimativa_seg: plano.estimativa_seg,
@@ -155,7 +156,7 @@ async function criarRnInteiro(db, usuario, corpo, metricas) {
       mae_id: refMae.id,
       dono_uid: usuario.uid,
       dono_email: usuario.email,
-      parametros: { termos: plano.parametros.termos, extrair_email: plano.parametros.extrair_email },
+      parametros: { termos: plano.parametros.termos, extrair_email: plano.parametros.extrair_email, uf: plano.parametros.uf },
       consultas,
       ordem,
       status: "na_fila",

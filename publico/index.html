@@ -397,6 +397,45 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .confirmacao .caixa h2 { font-size:17px; } .confirmacao .caixa p { margin:8px 0 16px; }
 .confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .btn-perigo-forte { background:var(--bad); color:#fff; }
+/* Mini-CRM */
+.status-lead { display:grid; grid-template-columns:repeat(auto-fit, minmax(84px, 1fr)); gap:4px; }
+.status-lead button { min-height:40px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-2); font-size:12px; font-weight:600; cursor:pointer; padding:0 4px; white-space:nowrap; }
+.status-lead button[aria-pressed="true"] { background:var(--brand); border-color:var(--brand); color:#fff; }
+.status-lead button[data-status="descartado"][aria-pressed="true"], .status-lead [data-folha-status="descartado"][aria-pressed="true"] { background:var(--bad); border-color:var(--bad); }
+.status-lead.motivos, .status-lead.folha-status { grid-template-columns:repeat(2, minmax(0,1fr)); }
+.status-lead.motivos button, .status-lead.folha-status button { min-height:48px; font-size:14px; }
+.info-crm { overflow-wrap:anywhere; }
+.na-carteira { padding:2px 0; }
+.crm-barra { display:flex; gap:6px; overflow-x:auto; padding:2px 0 6px; scrollbar-width:thin; }
+.crm-barra .btn { flex:none; }
+.crm-ficha { border:1px solid var(--line); border-radius:var(--r); padding:10px 12px; margin-bottom:12px; display:grid; gap:4px; }
+.historico { margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-2); display:grid; gap:2px; }
+.para-hoje { display:block; margin-bottom:12px; border-left:4px solid var(--brand); position:relative; text-decoration:none; color:inherit; }
+.para-hoje .val { font-size:22px; font-weight:700; }
+@media (max-width: 760px) {
+  /* celular: 3 por linha (Novo · Contatado · Negociando / Cliente · Descartado), palavra inteira, toque de 44 px */
+  .status-lead { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .status-lead button { min-height:44px; font-size:13px; overflow-wrap:normal; word-break:keep-all; white-space:nowrap; }
+}
+/* Liberar busca para vendedor (admin) */
+.caixa-buscas .linha-busca { flex-wrap:wrap; }
+.acoes-busca { display:flex; gap:6px; flex:none; flex-wrap:wrap; justify-content:flex-end; }
+.liberados { flex-basis:100%; display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:0 8px 6px; font-size:12px; }
+.liberados .chip button { width:28px; height:28px; }
+.etiqueta-liberada { margin-left:4px; vertical-align:1px; }
+.painel-rodape { padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); display:grid; gap:8px; background:var(--surface); }
+.painel-rodape .acoes { display:flex; gap:8px; justify-content:flex-end; }
+.lib-vendedores, .lib-cidades { display:grid; gap:6px; }
+.lib-cidades { max-height:44vh; overflow:auto; border:1px solid var(--line); border-radius:var(--r-sm); padding:6px; }
+.lib-regiao { border-bottom:1px solid var(--line); padding:4px 0 6px; }
+.lib-regiao:last-child { border-bottom:0; }
+.lib-regiao .cids { display:flex; flex-wrap:wrap; gap:6px; padding:4px 0 0 22px; }
+.lib-previa { font-size:13px; display:grid; gap:4px; max-height:26vh; overflow:auto; }
+.lib-previa .erro { color:var(--bad); }
+@media (max-width: 760px) {
+  .painel-rodape .acoes .btn { flex:1 1 0; min-height:48px; }
+  .lib-vendedores .alternar, .lib-cidades .alternar { min-height:44px; }
+}
 .caixa-buscas .linha-busca { display:flex; align-items:center; gap:6px; border-radius:var(--r-sm); }
 .caixa-buscas .linha-busca label { flex:1; min-width:0; }
 .caixa-buscas .linha-busca label.sem-leads { cursor:default; opacity:.85; }
@@ -437,7 +476,9 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   .tabela.vira-cartao td::before { content:attr(data-rot); color:var(--muted); font-size:12px; text-align:left; flex:none; max-width:50%; }
   .tabela.vira-cartao td[data-rot=""]::before, .tabela.vira-cartao td:not([data-rot])::before { content:none; }
   .tabela.vira-cartao td.principal-td { justify-content:flex-start; text-align:left; font-size:14px; }
-  .caixa-tabela:has(.vira-cartao) { max-height:none; overflow:visible; }
+  .caixa-tabela:has(.vira-cartao) { max-height:none !important; overflow:visible; } /* vence o max-height inline (senão a lista passa por cima dos cartões de baixo) */
+  #buscas-admin td { flex-wrap:wrap; justify-content:flex-end; }
+  #buscas-admin .liberados { justify-content:flex-end; padding:4px 0 0; }
   .caixa-buscas { position:fixed; left:16px; right:16px; width:auto; top:calc(var(--topo) + env(safe-area-inset-top) + 8px); max-height:70dvh; }
   .painel-acoes { grid-template-columns:1fr; }
   dl.dados { grid-template-columns:104px minmax(0,1fr); }
@@ -557,6 +598,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
         <div class="entre" style="margin:-4px 0 10px"><span class="small ink2">Os números contam os mesmos leads que aparecem ao clicar.</span>
           <div class="linha"><div class="segmentado" id="inicio-modo" aria-label="O que contar"><button data-modo="segmento" aria-pressed="true">No segmento</button><button data-modo="total">Ver total</button></div>
           <button type="button" class="info" aria-label="O que é isso?" data-ajuda="“No segmento” conta só os leads do segmento buscado e da cidade pedida (os filtros padrão de Meus leads). “Ver total” conta todos os leads coletados, sem repetidos.">i</button></div></div>
+        <a class="cartao para-hoje oculto" id="para-hoje" href="#" data-detalhe="parahoje"></a>
         <div class="grade-kpi" id="kpis"></div>
         <div class="duas">
           <div class="cartao"><div class="entre"><h2>Leads por dia</h2><span class="small muted" id="grafico-dias-nota">últimos 30 dias · horário de Natal</span></div>
@@ -595,7 +637,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
         <div class="cartao oculto" data-passo-conteudo="2">
           <div class="entre"><h2>Onde?</h2>
             <div class="linha">
-              <select id="uf" style="width:auto" aria-label="Estado"><option value="RN">Rio Grande do Norte</option></select>
+              <select id="uf" class="uf-seletor" style="width:auto" aria-label="Estado"><option value="RN">Rio Grande do Norte</option><option value="PB">Paraíba</option></select>
               <div class="segmentado" id="tipo-regiao" aria-label="Tipo de região"><button data-tipo="micro" aria-pressed="true">Microrregiões</button><button data-tipo="imediata">Regiões imediatas</button></div>
               <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Microrregião e região imediata são agrupamentos oficiais de municípios vizinhos do IBGE. Marcar uma região marca todas as cidades dela; depois você pode desmarcar cidade por cidade.">i</button>
             </div></div>
@@ -603,7 +645,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <div>
               <div class="entre"><div class="segmentado" id="clique-mapa"><button data-clique="mun" aria-pressed="true">Clique marca município</button><button data-clique="regiao">Clique marca região</button></div>
                 <span class="small muted" id="qtd-cidades">0 cidades</span></div>
-              <svg class="mapa-rn" id="mapa-escolha" viewBox="0 0 100 60" role="img" aria-label="Mapa do RN para escolher cidades"></svg>
+              <svg class="mapa-rn" id="mapa-escolha" viewBox="0 0 100 60" role="img" aria-label="Mapa do estado para escolher cidades"></svg>
               <p class="fonte">Contornos: IBGE (Malhas Territoriais). Azul = cidade escolhida.</p>
             </div>
             <div>
@@ -611,7 +653,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
               <div class="linha" style="margin-top:8px"><input id="busca-cidade" type="search" placeholder="Procurar município" style="flex:1;min-width:140px" aria-label="Procurar município">
                 <button class="btn btn-sec btn-mini" id="marcar-filtradas">Selecionar todas</button><button class="btn btn-fantasma btn-mini" id="limpar-cidades">Limpar</button></div>
               <div class="lista-cidades" id="lista-cidades" style="margin-top:6px"></div>
-              <label class="campo" for="outras">Outras cidades fora do RN (texto livre, separadas por vírgula)</label>
+              <label class="campo" for="outras" id="outras-rot">Outras cidades fora do RN (texto livre, separadas por vírgula)</label>
               <input id="outras" type="text" placeholder="ex.: João Pessoa PB">
             </div>
           </div>
@@ -668,6 +710,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <button class="btn btn-sec" id="abrir-filtros"><span data-icone="filtro"></span>Mais filtros <span class="pilula azul oculto" id="n-filtros"></span></button>
             </div>
           </div>
+          <div class="crm-barra" id="crm-barra" aria-label="Leads por status"></div>
           <div class="entre" style="margin:4px 0 8px">
             <div class="chips" id="chips"></div>
             <div class="linha">
@@ -692,11 +735,11 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
       <section data-pagina="mapa" class="oculto">
         <div class="cab">
           <div><h1>Mapa</h1><p>Clique para aprofundar: estado → microrregião → município → leads. Mesmos filtros de “Meus leads”.</p></div>
-          <div class="linha"><span class="small ink2" id="mapa-origem"></span><a class="btn btn-sec" href="#leads">Filtros e buscas</a></div>
+          <div class="linha"><select class="uf-seletor" id="uf-mapa" style="width:auto" aria-label="Estado"><option value="RN">Rio Grande do Norte</option><option value="PB">Paraíba</option></select><span class="small ink2" id="mapa-origem"></span><a class="btn btn-sec" href="#leads">Filtros e buscas</a></div>
         </div>
         <div class="mapa-area" id="mapa-area">
           <div style="position:relative;min-height:0">
-            <div id="mapa-leaflet" aria-label="Mapa interativo do RN"></div>
+            <div id="mapa-leaflet" aria-label="Mapa interativo do estado"></div>
             <div class="mapa-sobre trilha">
               <div class="migalhas" id="migalhas"></div>
               <button class="btn btn-sec btn-mini" id="mapa-voltar" title="Voltar um nível (Esc)">← Voltar</button>
@@ -722,13 +765,13 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
       <section data-pagina="mercado" class="oculto">
         <div class="cab">
           <div><h1>Mercado · IBGE × suas buscas</h1><p>Indicadores oficiais de cada município ao lado dos leads do segmento. Cinza = cidade ainda não pesquisada (não é “zero concorrentes”).</p></div>
-          <div class="linha"><span class="small ink2" id="mercado-origem"></span><a class="btn btn-sec" href="#leads">Escolher buscas</a></div>
+          <div class="linha"><select class="uf-seletor" id="uf-mercado" style="width:auto" aria-label="Estado"><option value="RN">Rio Grande do Norte</option><option value="PB">Paraíba</option></select><span class="small ink2" id="mercado-origem"></span><a class="btn btn-sec" href="#leads">Escolher buscas</a></div>
         </div>
         <div class="grade-kpi" id="kpis-mercado"></div>
         <div class="mercado">
           <div class="cartao">
             <div class="entre"><h2>Mapa por município <button type="button" class="info" data-ajuda="Cada município pintado pelo indicador escolhido ao lado. Toque num município para ver os números dele." aria-label="O que é isso?">i</button></h2><select id="mercado-metrica" style="width:auto" aria-label="Indicador do mapa"></select></div>
-            <svg class="mapa-rn" id="mapa-mercado" viewBox="0 0 100 60" role="img" aria-label="Mapa do RN por município"></svg>
+            <svg class="mapa-rn" id="mapa-mercado" viewBox="0 0 100 60" role="img" aria-label="Mapa do estado por município"></svg>
             <div class="legenda" id="legenda-mercado"></div>
             <p class="fonte" id="fontes-mercado"></p>
           </div>
@@ -767,20 +810,24 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <div class="cartao"><div class="entre"><h2>Saúde do motor <button type="button" class="info" data-ajuda="O motor é o robô que faz as buscas no Google Maps. Aqui você vê se ele está rodando, a fila e as últimas execuções." aria-label="O que é isso?">i</button></h2><div class="linha"><span class="small muted" id="saude-quando"></span><button class="btn btn-sec btn-mini" id="saude-atualizar">Atualizar</button></div></div><div id="saude"></div></div>
             <div class="pilha">
               <div class="cartao"><h2>Fila ao vivo <button type="button" class="info" data-ajuda="Buscas rodando agora e as que estão esperando a vez. As buscas comuns passam na frente das do Estado inteiro." aria-label="O que é isso?">i</button></h2><div id="fila-viva" class="small"></div></div>
-              <div class="cartao"><h2>Estado inteiro <button type="button" class="info" data-ajuda="Busca o segmento em todos os municípios do RN (cidades grandes por bairro). Só o admin pode usar; leva horas e não conta no limite diário." aria-label="O que é isso?">i</button></h2>
+              <div class="cartao"><h2>Estado inteiro <button type="button" class="info" data-ajuda="Busca o segmento em todos os municípios do estado escolhido (cidades grandes por bairro: Natal, Mossoró e Parnamirim no RN; João Pessoa e Campina Grande na PB). Só o admin pode usar; leva horas, no máximo 2 máquinas, vendedor na frente e não conta no limite diário." aria-label="O que é isso?">i</button></h2>
+                <label class="campo" for="rn-uf">Estado</label><select id="rn-uf" style="width:auto"><option value="RN">Rio Grande do Norte (167 municípios)</option><option value="PB">Paraíba (223 municípios)</option></select>
                 <label class="campo" for="rn-termos">Segmento / termos (separados por vírgula)</label><input id="rn-termos" type="text" placeholder="ex.: dentista, odontologia">
                 <div class="linha" style="margin-top:8px"><label class="alternar"><input type="checkbox" id="rn-email"> Extrair e-mail</label><label class="alternar"><input type="checkbox" id="rn-noite"> Agendar para a noite (22h)</label></div>
-                <div class="linha" style="margin-top:8px"><button class="btn btn-sec" id="rn-estimar">Estimar</button><button class="btn btn-primario" id="rn-confirmar" disabled>Confirmar Estado inteiro (RN)</button></div>
+                <div class="linha" style="margin-top:8px"><button class="btn btn-sec" id="rn-estimar">Estimar</button><button class="btn btn-primario" id="rn-confirmar" disabled>Confirmar Estado inteiro (<span id="rn-uf-rot">RN</span>)</button></div>
                 <p class="small" id="msg-rn" role="status" style="margin-top:6px"></p></div>
               <div class="cartao" id="cartao-config"><h2>Configurações <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Limites dos vendedores (o admin não tem): tamanho máximo de cada busca e consultas por dia. Uma consulta = 1 termo em 1 cidade. O servidor confere esses números em toda busca.">i</button></h2>
                 <div class="grade-cfg">
                   <div><label class="campo" for="cfg-cidades">Cidades por busca</label><input id="cfg-cidades" type="number" min="1" max="10000"></div>
                   <div><label class="campo" for="cfg-consultas">Consultas por busca</label><input id="cfg-consultas" type="number" min="1" max="10000"></div>
                   <div><label class="campo" for="cfg-consultas-dia">Consultas por dia (padrão)</label><input id="cfg-consultas-dia" type="number" min="1" max="10000"></div>
+                  <div><label class="campo" for="cfg-carteira">Carteira: dias sem contato até liberar</label><input id="cfg-carteira" type="number" min="1" max="3650"></div>
                 </div>
                 <p class="small ink2" style="margin:6px 0">Vendedor: no máximo X cidades OU Y consultas por busca (o que vier primeiro). Consultas por dia: dá para mudar por vendedor na tabela de usuários.</p>
                 <button class="btn btn-primario" id="cfg-salvar">Salvar configurações</button></div>
-              <div class="cartao"><h2>Estados ativos <button type="button" class="info" data-ajuda="Estados que aparecem para os vendedores. Por enquanto só o RN." aria-label="O que é isso?">i</button></h2><p class="small ink2" style="margin:6px 0">Por enquanto só o RN tem dados carregados (decisão do Breno). Os outros estados do Nordeste ficam prontos para ativar depois.</p><div id="estados" class="chips"></div></div>
+              <div class="cartao" id="cartao-carteiras"><div class="entre"><h2>Carteiras <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Leads que cada vendedor marcou como Contatado, Negociando ou Cliente ficam na carteira dele (os outros veem 'Na carteira de…'). Descartado ou sem contato no prazo volta a ficar livre. Conversão = Clientes ÷ leads contatados (Contatado + Negociando + Cliente).">i</button></h2><button class="btn btn-sec btn-mini" id="carteiras-atualizar">Atualizar</button></div>
+                <div class="caixa-tabela" style="margin-top:8px"><table class="tabela vira-cartao" id="carteiras-tabela"></table></div></div>
+              <div class="cartao"><h2>Estados ativos <button type="button" class="info" data-ajuda="Estados que aparecem para os vendedores: RN e Paraíba (ativada em 24/09). Os dados de cada um vêm do IBGE (municípios, regiões, contornos, Censo 2022, PIB e CEMPRE)." aria-label="O que é isso?">i</button></h2><p class="small ink2" style="margin:6px 0">RN e Paraíba ativos (dados oficiais do IBGE carregados). Os outros estados do Nordeste ficam prontos para ativar depois.</p><div id="estados" class="chips"></div></div>
             </div>
           </div>
         </div>
@@ -813,18 +860,20 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 <aside id="ficha" class="painel oculto" role="dialog" aria-modal="true" aria-labelledby="ficha-nome"></aside>
 <aside id="gaveta-filtros" class="gaveta oculto" role="dialog" aria-modal="true" aria-label="Mais filtros"></aside>
 <aside id="gaveta-colunas" class="gaveta oculto" role="dialog" aria-modal="true" aria-label="Colunas visíveis"></aside>
+<aside id="painel-liberar" class="painel oculto" role="dialog" aria-modal="true" aria-labelledby="lib-titulo"></aside>
 <div id="tour" class="tour oculto" role="dialog" aria-modal="true" aria-labelledby="tour-titulo"></div>
 <div id="confirmacao" class="tour confirmacao oculto" role="alertdialog" aria-modal="true" aria-labelledby="conf-titulo" aria-describedby="conf-texto">
   <div class="caixa"><h2 id="conf-titulo"></h2><p id="conf-texto" class="ink2"></p>
     <div class="acoes"><button class="btn btn-sec" id="conf-nao">Voltar</button><button class="btn btn-perigo-forte" id="conf-sim"></button></div></div>
 </div>
+<div id="folha-crm" class="tour confirmacao oculto" role="dialog" aria-modal="true" aria-labelledby="folha-titulo"><div class="caixa" id="folha-caixa"></div></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 <div id="balao" class="balao oculto" role="tooltip"></div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc, getDoc }
+import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc, getDoc, getDocs }
   from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 // ============================================================ CONFIGURAÇÃO (um lugar só)
@@ -902,6 +951,31 @@ function noSegmento(lead, criterio) {
 }
 // </relevancia>
 
+// <crm> ---------------------------------------------------------- MINI-CRM E CARTEIRA (bloco puro)
+// Espelho de netlify/lib/logica.mjs (testes/crm.test.mjs confere que dão o mesmo resultado). Não usa nada de fora.
+const STATUS_CRM = [["novo", "Novo"], ["contatado", "Contatado"], ["negociando", "Negociando"], ["cliente", "Cliente"], ["descartado", "Descartado"]];
+const MOTIVOS_DESCARTE = [["sem_interesse", "Sem interesse"], ["fechou", "Fechou"], ["numero_errado", "Número errado"], ["outro", "Outro"]];
+const STATUS_DA_CARTEIRA = ["contatado", "negociando", "cliente"];
+const FATIAS_CRM = 16;
+const slugCrm = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+function chaveCrm(l) {
+  const id = String(l?.id_lugar ?? "").trim();
+  if (id) return `p_${id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)}`;
+  const tel = String(l?.telefone ?? "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+  if (tel) return `t_${tel}_${slugCrm(l?.nome)}`;
+  return `n_${slugCrm(l?.nome)}_${slugCrm(l?.cidade)}`;
+}
+function fatiaDe(chave) {
+  let h = 0;
+  for (const c of String(chave)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return String(h % FATIAS_CRM).padStart(2, "0");
+}
+function carteiraAtiva(entrada, agoraMs, dias = 60) {
+  if (!entrada || !entrada.uid || !STATUS_DA_CARTEIRA.includes(entrada.s)) return false;
+  return agoraMs - Number(entrada.ultimo || 0) <= dias * 86400000;
+}
+// </crm>
+
 // ============================================================ UTILIDADES
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -936,6 +1010,7 @@ const ICONES = {
   admin: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
   whats: '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 2 2.5 4.2 4.5 4.5l1.2-1.2 2 .8-.5 1.8c-3.6.4-8-4-7.6-7.6l1.8-.5.8 2z"/>',
   fone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   fechar: '<path d="M6 6l12 12M18 6 6 18"/>',
   copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
   link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
@@ -1057,7 +1132,8 @@ function aplicarTema(t) {
 function escolherTema(t) {
   guardar("mapaleads.tema", aplicarTema(t));
   // Mapa e gráficos guardam cores ao desenhar: redesenha a tela atual com as cores novas.
-  if (M.mapa) { M.mapa.remove(); M.mapa = null; }
+  // Sem destruir o mapa (remover no meio de um zoom animado dava erro no Leaflet): só refaz os contornos com as cores novas.
+  if (M.mapa) M.uf = "";
   if (usuario) irPara();
 }
 aplicarTema(params.get("tema") || ler("mapaleads.tema", "claro"));
@@ -1078,47 +1154,85 @@ async function pegar(u, tentativas = 3) {
     }
   }
 }
-let config, municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson;
+// Estados ATIVOS (com dados oficiais do IBGE carregados): RN e, desde 24/09, PB. Os outros do Nordeste: "em breve".
+// Cada estado: municípios, microrregiões/regiões imediatas, contornos e indicadores (mesmas fontes).
+const ESTADOS_UI = {
+  RN: { nome: "Rio Grande do Norte", doEstado: "do RN", noEstado: "no RN" },
+  PB: { nome: "Paraíba", doEstado: "da PB", noEstado: "na PB" },
+};
+const UFS_ATIVAS = Object.keys(ESTADOS_UI);
+let config;
 try {
-  [config, municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson] = await Promise.all([
-    pegar("/api/config-publica"), pegar("/dados/municipios_rn.json"), pegar("/dados/microrregioes_rn.json"),
-    pegar("/dados/malha_rn_municipio_minima.geojson.json"), pegar("/dados/malha_rn_microrregiao_minima.geojson.json"),
-    pegar("/dados/ibge_rn_indicadores.json"),
-  ]);
+  const pegarEstado = (uf) => Promise.all([`municipios_${uf}`, `microrregioes_${uf}`, `malha_${uf}_municipio_minima.geojson`, `malha_${uf}_microrregiao_minima.geojson`, `ibge_${uf}_indicadores`]
+    .map((n) => pegar(`/dados/${n}.json`)));
+  const [cfg, ...dadosEstados] = await Promise.all([pegar("/api/config-publica"), ...UFS_ATIVAS.map((uf) => pegarEstado(uf.toLowerCase()))]);
+  config = cfg;
+  UFS_ATIVAS.forEach((uf, i) => { const [municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson] = dadosEstados[i]; Object.assign(ESTADOS_UI[uf], { uf, municipiosJson, regioesJson, malhaMun, malhaMicro, ibgeJson }); });
 } catch (e) {
   // Nunca fica parado em "Carregando…": explica e oferece tentar de novo.
   $("#tela-login").classList.remove("oculto");
   $("#msg-login").innerHTML = `Não foi possível conectar ao servidor agora. <button class="btn btn-sec btn-mini" onclick="location.reload()">Tentar de novo</button>`;
   throw e;
 }
-const IND = ibgeJson.indicadores;
-const porCodigo = new Map(municipiosJson.municipios.map((m) => [m.codigo_ibge, { codigo: m.codigo_ibge, nome: m.nome, ind: ibgeJson.municipios[m.codigo_ibge] || {} }]));
-const REGIOES = { micro: regioesJson.microrregioes, imediata: regioesJson.regioes_imediatas };
-for (const r of REGIOES.micro) for (const c of r.municipios) porCodigo.get(c).micro = r;
-for (const r of REGIOES.imediata) for (const c of r.municipios) porCodigo.get(c).imediata = r;
-const MUNS = [...porCodigo.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-const porNome = new Map(MUNS.map((m) => [normalizar(m.nome), m]));
-const infoCidade = (nome) => porNome.get(normalizar(nome)) || null;
-const microPorId = new Map(REGIOES.micro.map((r) => [r.id, r]));
-const POP_RN = MUNS.reduce((t, m) => t + (m.ind.populacao || 0), 0);
-
+// Código do IBGE é único no Brasil: porCodigo e microPorId valem para todos os estados ao mesmo tempo.
+const porCodigo = new Map(), microPorId = new Map();
 // Mapa em SVG (Nova busca, Mercado, login): projeção equiretangular com correção de latitude.
-const KX = Math.cos((-5.9 * Math.PI) / 180), LIM = { x0: -38.6, x1: -34.95, y0: -4.8, y1: -7.0 };
-const ALT = ((LIM.y0 - LIM.y1) / ((LIM.x1 - LIM.x0) * KX)) * 100;
-const px = ([lon, lat]) => [((lon - LIM.x0) / (LIM.x1 - LIM.x0)) * 100, ((LIM.y0 - lat) / (LIM.y0 - LIM.y1)) * ALT];
-const caminho = (g) => (g.type === "Polygon" ? g.coordinates : g.coordinates.flat())
-  .map((a) => "M" + a.map((p) => px(p).map((v) => v.toFixed(2)).join(",")).join("L") + "Z").join("");
-const CAMINHOS = new Map(malhaMun.features.map((f) => [f.properties.codarea, caminho(f.geometry)]));
-const CAMINHOS_MICRO = malhaMicro.features.map((f) => caminho(f.geometry));
+// RN: os mesmos limites de sempre (nada muda); outros estados: pelos contornos do IBGE, com uma folga.
+const PROJ_RN = { x0: -38.6, x1: -34.95, y0: -4.8, y1: -7.0, kx: Math.cos((-5.9 * Math.PI) / 180) };
+function projecaoDe(malha) {
+  let x0 = 180, x1 = -180, y0 = -90, y1 = 90;
+  const ver = (c) => (typeof c[0] === "number" ? (x0 = Math.min(x0, c[0]), x1 = Math.max(x1, c[0]), y0 = Math.max(y0, c[1]), y1 = Math.min(y1, c[1])) : c.forEach(ver));
+  for (const f of malha.features) ver(f.geometry.coordinates);
+  const fx = (x1 - x0) * 0.02, fy = (y0 - y1) * 0.04;
+  return { x0: x0 - fx, x1: x1 + fx, y0: y0 + fy, y1: y1 - fy, kx: Math.cos((((y0 + y1) / 2) * Math.PI) / 180) };
+}
+for (const [uf, e] of Object.entries(ESTADOS_UI)) {
+  for (const m of e.municipiosJson.municipios) porCodigo.set(m.codigo_ibge, { codigo: m.codigo_ibge, nome: m.nome, uf, ind: e.ibgeJson.municipios[m.codigo_ibge] || {} });
+  e.REGIOES = { micro: e.regioesJson.microrregioes, imediata: e.regioesJson.regioes_imediatas };
+  for (const r of e.REGIOES.micro) { r.uf = uf; microPorId.set(r.id, r); for (const c of r.municipios) porCodigo.get(c).micro = r; }
+  for (const r of e.REGIOES.imediata) { r.uf = uf; for (const c of r.municipios) porCodigo.get(c).imediata = r; }
+  e.MUNS = e.municipiosJson.municipios.map((m) => porCodigo.get(m.codigo_ibge)).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  e.porNome = new Map(e.MUNS.map((m) => [normalizar(m.nome), m]));
+  const P = uf === "RN" ? PROJ_RN : projecaoDe(e.malhaMun);
+  e.ALT = ((P.y0 - P.y1) / ((P.x1 - P.x0) * P.kx)) * 100;
+  const px = ([lon, lat]) => [((lon - P.x0) / (P.x1 - P.x0)) * 100, ((P.y0 - lat) / (P.y0 - P.y1)) * e.ALT];
+  const caminho = (g) => (g.type === "Polygon" ? g.coordinates : g.coordinates.flat())
+    .map((a) => "M" + a.map((p) => px(p).map((v) => v.toFixed(2)).join(",")).join("L") + "Z").join("");
+  e.CAMINHOS = new Map(e.malhaMun.features.map((f) => [f.properties.codarea, caminho(f.geometry)]));
+  e.CAMINHOS_MICRO = e.malhaMicro.features.map((f) => caminho(f.geometry));
+}
+// Estado escolhido (um só para Nova busca, Mapa e Mercado; guardado no navegador; ?uf=PB abre direto).
+let UF_ATUAL, MUNS, REGIOES, CAMINHOS, CAMINHOS_MICRO, ALT, malhaMun, malhaMicro, ibgeJson;
+function usarEstado(uf, guardarEscolha = true) {
+  const e = ESTADOS_UI[uf] || ESTADOS_UI.RN;
+  ({ uf: UF_ATUAL, MUNS, REGIOES, CAMINHOS, CAMINHOS_MICRO, ALT, malhaMun, malhaMicro, ibgeJson } = e);
+  if (guardarEscolha) guardar("mapaleads.uf", UF_ATUAL);
+  for (const sel of $$(".uf-seletor")) sel.value = UF_ATUAL;
+  const r = $("#outras-rot"); if (r) r.textContent = `Outras cidades fora ${e.doEstado} (texto livre, separadas por vírgula)`;
+}
+const estadoAtual = () => ESTADOS_UI[UF_ATUAL];
+/** Cidade → município do IBGE. "Natal RN"/"Patos PB" pela sigla; senão o estado dado; senão o escolhido e depois os outros. */
+function infoCidade(nome, uf) {
+  const bruto = String(nome || "").trim(), m = bruto.match(/^(.*?)[\s\-–/]+([A-Za-z]{2})$/);
+  let sigla = uf, base = bruto;
+  if (m && ESTADOS_UI[m[2].toUpperCase()]) { sigla = m[2].toUpperCase(); base = m[1]; }
+  if (sigla) return ESTADOS_UI[sigla]?.porNome.get(normalizar(base)) || null;
+  for (const u of [UF_ATUAL, ...UFS_ATIVAS]) { const x = ESTADOS_UI[u]?.porNome.get(normalizar(base)); if (x) return x; }
+  return null;
+}
+/** Sigla do estado no fim do nome ("João Pessoa PB" → "PB"), só dos estados ativos. */
+const ufDoNome = (nome) => { const m = String(nome || "").trim().match(/[\s\-–/]([A-Za-z]{2})$/); return m && ESTADOS_UI[m[1].toUpperCase()] ? m[1].toUpperCase() : ""; };
 function desenharSvg(svg, { cor = () => "var(--seq-1)", micro = true, aoClicar = null, dica = null } = {}) {
   svg.setAttribute("viewBox", `0 0 100 ${ALT.toFixed(2)}`);
   svg.innerHTML = [...CAMINHOS].map(([c, d]) => `<path class="mun" data-cod="${c}" fill="${cor(c)}" d="${d}"><title>${txt(dica ? dica(c) : porCodigo.get(c).nome)}</title></path>`).join("") +
     (micro ? CAMINHOS_MICRO.map((d) => `<path class="micro" d="${d}"/>`).join("") : "");
   if (aoClicar) svg.onclick = (ev) => { const c = ev.target.dataset?.cod; if (c) aoClicar(c); };
 }
+usarEstado("RN", false);
 desenharSvg($("#rn-login"), { cor: () => "#1d3a70" });
 $$("#rn-login path.micro").forEach((p) => (p.style.stroke = "#4b73c4"));
 $$("#rn-login path.mun").forEach((p) => (p.style.stroke = "#0b1b3a"));
+usarEstado(UFS_ATIVAS.includes((params.get("uf") || "").toUpperCase()) ? params.get("uf").toUpperCase() : ler("mapaleads.uf", "RN"), false);
 
 // ============================================================ FIREBASE E SESSÃO
 const app = initializeApp(config);
@@ -1135,8 +1249,8 @@ async function api(caminho, corpo) {
 let usuario = null, ehAdmin = false, buscas = [], estadoFila = null, cota = null, perfis = [];
 // Limites do vendedor (não admin), de config/geral (Admin › Configurações); o servidor confere de novo.
 let LIMV = { cidades: 40, consultas: 120, consultasDia: 300 };
-let pararBuscas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
-const pararOuvintes = () => { pararBuscas?.(); pararFila?.(); pararBuscas = pararFila = null; };
+let pararBuscas = null, pararLiberadas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
+const pararOuvintes = () => { pararBuscas?.(); pararLiberadas?.(); pararFila?.(); pararBuscas = pararLiberadas = pararFila = null; };
 
 $("#entrar").onclick = async () => {
   $("#msg-login").textContent = "Entrando…";
@@ -1223,19 +1337,94 @@ function ouvirDados() {
   // Até 50 buscas mais recentes (admin: de todos). Leads só são lidos quando a busca é aberta.
   const q = ehAdmin ? query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(50))
     : query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(50));
-  pararBuscas = onSnapshot(q, (s) => {
-    buscas = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (paginaAtual === "inicio") desenharInicio();
-    if (paginaAtual === "leads") abrirLeads();
-    // Mapa/Mercado abertos direto pelo link desenham antes das buscas chegarem: redesenha quando as buscas com
-    // leads mudam (não a cada progresso de busca rodando, para não mexer no zoom à toa).
-    const chave = buscas.filter(temLeads).map((b) => `${b.id}:${b.qtd_lotes || 0}:${b.cidades_prontas || 0}`).join(",");
-    if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
-    desenharCaixaBuscas();
-    if (paginaAtual === "admin") desenharBuscasAdmin();
-  }, (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
+  pararBuscas = onSnapshot(q, (s) => { buscasProprias = s.docs.map((d) => ({ id: d.id, ...d.data() })); juntarBuscas(); },
+    (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
+  // Vendedor: também as buscas que o admin LIBEROU para ele (etiqueta "Liberada por admin"; não apaga nem libera).
+  // Sem o índice/regras novos publicados, só não aparecem (as buscas dele continuam normais).
+  if (!ehAdmin) {
+    const ql = query(col, where("lista", "==", true), where("liberada_para", "array-contains", usuario.uid), orderBy("criada_em", "desc"), limit(50));
+    pararLiberadas = onSnapshot(ql, (s) => { buscasLiberadas = s.docs.map((d) => ({ id: d.id, ...d.data(), _liberada: true })); juntarBuscas(); },
+      (e) => console.warn("buscas liberadas indisponíveis:", e.code));
+  }
   pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...(d.data() || {}), lidoEm: Date.now() }; desenharStatus(); if (paginaAtual === "admin") desenharFilaViva(); });
   carregarCota();
+  carregarCrm().then(() => { if (paginaAtual === "leads") { desenharTabela(); desenharCrmBarra(); } if (paginaAtual === "inicio") desenharParaHoje(); });
+}
+let buscasProprias = [], buscasLiberadas = [];
+// ============================================================ MINI-CRM (status por vendedor + carteira)
+// Vendedor: lê crm/{uid}__00..15 (os dele) e carteira/00..15 (de quem é cada lugar) — 32 leituras por visita.
+// Admin: todos os crm/* (vê os status de todos) + carteira. Gravação só pela Function /api/crm-lead.
+const CRM = { meu: new Map(), todos: new Map(), carteira: new Map(), dias: 60, pronto: null, vendedores: null };
+const rotuloStatus = (s) => (STATUS_CRM.find(([k]) => k === s) || [s, s])[1];
+const rotuloMotivo = (m) => (MOTIVOS_DESCARTE.find(([k]) => k === m) || [m, m])[1];
+function carregarCrm() {
+  if (CRM.pronto) return CRM.pronto;
+  const fatias = Array.from({ length: FATIAS_CRM }, (_, i) => String(i).padStart(2, "0"));
+  CRM.pronto = (async () => {
+    const [cart, meus, geral] = await Promise.all([
+      Promise.all(fatias.map((f) => getDoc(doc(db, `carteira/${f}`)))),
+      ehAdmin ? getDocs(collection(db, "crm")).then((q) => q.docs) : Promise.all(fatias.map((f) => getDoc(doc(db, `crm/${usuario.uid}__${f}`)))),
+      getDoc(doc(db, "config/geral")),
+    ]);
+    const dias = geral.data()?.carteira_dias;
+    CRM.dias = Number.isInteger(dias) && dias >= 1 ? dias : 60;
+    for (const d of cart) for (const [k, e] of Object.entries(d.data()?.leads || {})) CRM.carteira.set(k, e);
+    for (const d of meus) {
+      const dono = d.data()?.dono_uid || d.id.split("__")[0];
+      for (const [k, r] of Object.entries(d.data()?.leads || {})) {
+        if (dono === usuario.uid) CRM.meu.set(k, r);
+        if (ehAdmin) { const l = CRM.todos.get(k) || []; l.push({ ...r, _uid: dono }); CRM.todos.set(k, l); }
+      }
+    }
+  })().catch((e) => { CRM.pronto = null; console.warn("CRM indisponível:", e.code || e.message); });
+  return CRM.pronto;
+}
+/** Situação do lead para quem está vendo: registro (status, anotação, próximo, histórico) e dono da carteira. */
+function crmDe(l) {
+  const k = chaveCrm(l), e = CRM.carteira.get(k);
+  const dono = carteiraAtiva(e, Date.now(), CRM.dias) ? e : null;
+  let reg = CRM.meu.get(k) || null;
+  if (ehAdmin) { // admin vê o do dono da carteira ou, sem carteira, o mais recente de qualquer vendedor
+    const todos = CRM.todos.get(k) || [];
+    reg = (dono && todos.find((r) => r._uid === dono.uid)) || todos.sort((a, b) => b.em - a.em)[0] || null;
+  }
+  const bloqueado = !ehAdmin && !!dono && dono.uid !== usuario.uid;
+  return { k, reg, dono, bloqueado, s: bloqueado ? "carteira" : reg?.s || "novo" };
+}
+const hojeFortaleza = () => diaFortaleza();
+const paraHoje = (l) => { const c = crmDe(l); return !c.bloqueado && !!c.reg?.p && c.reg.p <= hojeFortaleza() && c.reg.s !== "descartado"; };
+const dataBr = (d) => (d ? d.split("-").reverse().join("/") : "");
+async function salvarStatus(l, { status, motivo, anotacao, proximo }) {
+  const c = crmDe(l);
+  try {
+    const r = await api("crm-lead", { acao: "status", busca_id: (l._buscas || [l._busca])[0], chave: c.k, status, motivo, anotacao, proximo });
+    CRM.meu.set(c.k, r.registro);
+    if (r.carteira) CRM.carteira.set(c.k, r.carteira); else CRM.carteira.delete(c.k);
+    toast(`${rotuloStatus(status)}${status === "descartado" ? ` · ${rotuloMotivo(motivo)}` : ""} — salvo.`, "ok");
+  } catch (e) {
+    toast(e.message, "erro");
+    if (/carteira de/.test(e.message)) { const d = await getDoc(doc(db, `carteira/${fatiaDe(c.k)}`)); const x = d.data()?.leads?.[c.k]; if (x) CRM.carteira.set(c.k, x); }
+  }
+  aposMudarCrm(l);
+}
+function aposMudarCrm(l) {
+  if (paginaAtual === "leads") { desenharTabela(); desenharCrmBarra(); }
+  if (l && !$("#ficha").classList.contains("oculto") && $("#ficha").dataset.chave === chaveCrm(l)) abrirFicha(l);
+  if (paginaAtual === "inicio") desenharParaHoje();
+}
+function juntarBuscas() {
+  const vistas = new Set();
+  const ms = (b) => b.criada_em?.toMillis?.() || 0;
+  buscas = [...buscasProprias, ...buscasLiberadas].filter((b) => !vistas.has(b.id) && vistas.add(b.id)).sort((a, b) => ms(b) - ms(a));
+  for (const b of buscas) if (b._liberada) delete b.dono_email; // vendedor não precisa do e-mail de quem buscou
+  if (paginaAtual === "inicio") desenharInicio();
+  if (paginaAtual === "leads") abrirLeads();
+  // Mapa/Mercado abertos direto pelo link desenham antes das buscas chegarem: redesenha quando as buscas com
+  // leads mudam (não a cada progresso de busca rodando, para não mexer no zoom à toa).
+  const chave = buscas.filter(temLeads).map((b) => `${b.id}:${lotesDaBusca(b).length}:${b.cidades_prontas || 0}`).join(",");
+  if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
+  desenharCaixaBuscas();
+  if (paginaAtual === "admin") desenharBuscasAdmin();
 }
 async function carregarCota() {
   try {
@@ -1283,7 +1472,7 @@ function posicaoNaFila(b) {
 }
 const rotuloBusca = (b) => {
   const p = b.parametros || {};
-  const onde = b.tipo === "rn_mae" ? "Estado inteiro (RN)" : (p.cidades || []).length > 3 ? `${p.cidades.length} cidades` : (p.cidades || []).join(", ");
+  const onde = b.tipo === "rn_mae" ? `Estado inteiro (${p.uf || "RN"})` : (p.cidades || []).length > 3 ? `${p.cidades.length} cidades` : (p.cidades || []).join(", ");
   return `${(p.termos || []).join(", ")} · ${onde}`;
 };
 
@@ -1295,11 +1484,17 @@ const lotesLidos = new Map(); // "busca:lotes" → leads (1 leitura por lote, gu
 // Onde estão os leads da busca: nos lotes finais ou, enquanto ela roda dividida em partes (várias máquinas),
 // nos lotes PARCIAIS de cada parte — gravados a cada cidade pronta (mapa "parciais": id da parte → nº de lotes).
 function lotesDaBusca(b) {
+  // Liberada para este vendedor em recorte (só algumas cidades / dividida): lê a cópia dele, não os lotes inteiros.
+  const lib = b._liberada ? b.liberacoes?.[usuario.uid] : null;
+  if (lib?.modo === "recorte") return Array.from({ length: lib.qtd_lotes || 0 }, (_, n) => `buscas/${b.id}/liberacoes/${usuario.uid}/lotes/${n}`);
   if ((b.qtd_lotes || 0) > 0) return Array.from({ length: b.qtd_lotes }, (_, n) => `buscas/${b.id}/lotes/${n}`);
   if (b.status !== "rodando" || !b.parciais) return [];
   return Object.entries(b.parciais).sort().flatMap(([parte, n]) => Array.from({ length: n || 0 }, (_, k) => `buscas/${parte}/lotes/${k}`));
 }
 const temLeads = (b) => lotesDaBusca(b).length > 0;
+// Quantos leads a busca tem PARA QUEM ESTÁ VENDO (liberada em recorte = só os das cidades do vendedor).
+const totalLeads = (b) => (b._liberada && b.liberacoes?.[usuario.uid]?.modo === "recorte" ? b.liberacoes[usuario.uid].qtd_leads : b.resumo?.total) || 0;
+const etiquetaLiberada = (b) => (b._liberada ? ' <span class="pilula azul etiqueta-liberada">Liberada por admin</span>' : "");
 const parcial = (b) => !(b.qtd_lotes > 0) && temLeads(b); // ainda rodando, com cidades prontas
 function leadsDaBusca(b) {
   const caminhos = lotesDaBusca(b);
@@ -1321,12 +1516,28 @@ async function contarRecorte(lista) {
   return { n: vale.length, whats: vale.filter((l) => l.whatsapp_link).length, todos: leads.length };
 }
 let vezInicio = 0, serieInicio = [];
+// "Para hoje: X contatos" (vendedor): próximo contato hoje ou atrasado, fora os descartados e os da carteira de outro.
+function desenharParaHoje() {
+  const el = $("#para-hoje");
+  if (ehAdmin) return el.classList.add("oculto");
+  const hoje = hojeFortaleza(), agora = Date.now();
+  let n = 0, atrasados = 0;
+  for (const [k, r] of CRM.meu) {
+    const e = CRM.carteira.get(k);
+    if (!r.p || r.p > hoje || r.s === "descartado" || (carteiraAtiva(e, agora, CRM.dias) && e.uid !== usuario.uid)) continue;
+    n++; if (r.p < hoje) atrasados++;
+  }
+  el.classList.remove("oculto");
+  el.innerHTML = `<span class="seta" aria-hidden="true">›</span><div class="rot">${icone("relogio")} Para hoje${aj("Leads com o próximo contato marcado para hoje ou já atrasado. Toque para abrir a lista.")}</div>
+    <div class="val num">${numero(n)} ${n === 1 ? "contato" : "contatos"}</div><div class="ctx">${atrasados ? `${numero(atrasados)} atrasado(s)` : n ? "tudo em dia" : "nenhum contato marcado para hoje"}</div>`;
+}
 async function desenharInicio() {
   const vez = ++vezInicio;
+  desenharParaHoje();
   for (const b of $$("#inicio-modo button")) b.setAttribute("aria-pressed", String((b.dataset.modo === "total") === INICIO.total));
   desenharUltimas();
   const ativas = buscas.filter((b) => ["na_fila", "rodando"].includes(b.status)).length;
-  const comLeads = buscas.filter(temLeads);
+  const comLeads = buscas.filter((b) => minha(b) && temLeads(b));
   const semana = comLeads.filter((b) => buscaNoPeriodo(b, { dias: 7 }));
   const inicio30 = diasAtras(29), porDia = new Map();
   for (const b of comLeads) { const d = diaDaBusca(b); if (d >= inicio30) porDia.set(d, [...(porDia.get(d) || []), b]); }
@@ -1399,7 +1610,8 @@ function itemBusca(b) {
     ${podeCancelar ? `<button class="btn btn-perigo btn-mini" data-cancelar="${txt(b.id)}">Cancelar</button>` : ""}</div></div>`;
 }
 function desenharUltimas() {
-  $("#ultimas").innerHTML = buscas.length ? buscas.slice(0, 5).map(itemBusca).join("")
+  const proprias = buscas.filter(minha);
+  $("#ultimas").innerHTML = proprias.length ? proprias.slice(0, 5).map(itemBusca).join("")
     : `<div class="vazio"><div class="ic">${icone("busca")}</div><h3>Você ainda não tem buscas</h3><p>Comece por uma microrregião: escolha o segmento, marque as cidades e acompanhe aqui.</p><a class="btn btn-primario" href="#nova">Começar →</a></div>`;
 }
 // Busca (Início): o item inteiro abre os leads dela; "Ver no mapa" abre o mapa só com ela; Cancelar não abre nada.
@@ -1416,17 +1628,20 @@ document.addEventListener("click", async (ev) => {
   const ver = ev.target.closest("[data-ver-busca]")?.dataset.verBusca;
   if (ver) { const b = buscas.find((x) => x.id === ver); detalharLeads({ ids: [ver], origem: { rot: "Início", href: "#inicio", item: b ? rotuloBusca(b) : "" } }); return; }
   const dia = ev.target.closest("[data-dia]")?.dataset.dia;
-  if (dia) { const p = { dia }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: `Leads de ${rotuloPeriodo(p).replace("Dia ", "")}` } }); return; }
+  if (dia) { const p = { dia }; detalharLeads({ ids: idsComLeads((b) => minha(b) && buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: `Leads de ${rotuloPeriodo(p).replace("Dia ", "")}` } }); return; }
   const det = ev.target.closest("[data-detalhe]")?.dataset.detalhe;
   if (det) { ev.preventDefault(); DETALHES[det]?.(); }
 });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.matches?.("[data-ver-busca], [data-dia]")) ev.target.click(); });
 // Cartões do Início → detalhe com o mesmo recorte do número (no segmento = filtros padrão; "Ver total" = filtros desligados).
 const modoInicio = () => (INICIO.total ? { segmento: false, pedida: false } : {});
+// O Início conta só as buscas do próprio vendedor; as liberadas pelo admin ficam em Meus leads, Mapa e Mercado.
+function minha(b) { return !b._liberada; }
 const DETALHES = {
-  total: () => detalharLeads({ ids: idsComLeads(), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
-  semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
-  whats: () => detalharLeads({ ids: idsComLeads(), filtros: { whats: true, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
+  total: () => detalharLeads({ ids: idsComLeads(minha), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
+  semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => minha(b) && buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
+  parahoje: () => detalharLeads({ ids: idsComLeads(), filtros: { paraHoje: true, segmento: false, pedida: false }, origem: { rot: "Início", href: "#inicio", item: "Para hoje" } }),
+  whats: () => detalharLeads({ ids: idsComLeads(minha), filtros: { whats: true, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
   ativas: () => $("#ultimas").scrollIntoView({ behavior: "smooth", block: "center" }),
   cota: () => { location.hash = "#nova"; },
 };
@@ -1540,8 +1755,11 @@ function atualizarTravaBuscar() {
   $("#aviso-limite").classList.toggle("oculto", !msg);
 }
 $("#outras").addEventListener("input", () => desenharCidades());
+// Trocar o estado: mapa, regiões, cidades e população passam a ser do estado escolhido (a seleção anterior sai).
+$("#uf").onchange = () => { usarEstado($("#uf").value); NB.cidades.clear(); $("#busca-cidade").value = ""; desenharRegioes(); desenharCidades(); estimar(); };
 function cidadesDoPedido() {
-  const rn = [...NB.cidades].filter(([, v]) => v).map(([n]) => n).sort((a, b) => a.localeCompare(b, "pt-BR")).map((n) => `${n} RN`);
+  // Cidades do estado escolhido vão como "Nome UF" (RN; PB desde 24/09): o Google recebe o sufixo do estado.
+  const rn = [...NB.cidades].filter(([, v]) => v).map(([n]) => n).sort((a, b) => a.localeCompare(b, "pt-BR")).map((n) => `${n} ${UF_ATUAL}`);
   const outras = $("#outras").value.split(",").map((s) => s.trim()).filter(Boolean);
   return [...rn, ...outras];
 }
@@ -1591,7 +1809,7 @@ function estimar() {
 }
 for (const el of [...$$("input[name=prof]"), $("#email-sn"), $("#sin-buscar")]) el.addEventListener("change", estimar);
 $("#remover-pequenas").onclick = () => {
-  const tirar = (NB.pequenas || []).map((c) => c.replace(/ RN$/, ""));
+  const tirar = (NB.pequenas || []).map((c) => c.replace(new RegExp(` ${UF_ATUAL}$`), ""));
   for (const nome of tirar) NB.cidades.set(nome, false);
   desenharCidades(); desenharRegioes(); estimar();
   toast(`${tirar.length} cidade(s) pequena(s) removida(s). Dá para marcar de novo na etapa "Onde?".`, "ok");
@@ -1681,7 +1899,9 @@ $("#perfil-sel").onchange = () => {
   NB.tipoRegiao = p.tipo_regiao || "micro";
   NB.cidades.clear();
   const outras = [];
-  for (const c of p.cidades) { const m = infoCidade(c); if (m && /\sRN$/i.test(c)) NB.cidades.set(m.nome, true); else outras.push(c); }
+  const ufPerfil = p.cidades.map(ufDoNome).find(Boolean);
+  if (ufPerfil && ufPerfil !== UF_ATUAL) { usarEstado(ufPerfil); desenharRegioes(); }
+  for (const c of p.cidades) { const m = infoCidade(c); if (m && ufDoNome(c) === UF_ATUAL) NB.cidades.set(m.nome, true); else outras.push(c); }
   for (const id of p.regioes || []) for (const c of REGIOES[NB.tipoRegiao].find((x) => x.id === id)?.municipios || []) { const n = porCodigo.get(c).nome; if (!NB.cidades.has(n)) NB.cidades.set(n, false); }
   $("#outras").value = outras.join(", ");
   desenharTermos();
@@ -1750,9 +1970,13 @@ function coordenadas(l) {
   return m ? [Number(m[1]), Number(m[2])] : null;
 }
 // Região = cidade do ENDEREÇO (sem cidade = em branco; nada inferido). Segmento: marcado, nunca apagado.
+// Estado do lead: o gravado pelo motor; senão a sigla da cidade pedida; senão o da busca; senão RN (dados antigos).
+function ufDoLead(l) {
+  return String(l.uf || "").toUpperCase() || ufDoNome(l.cidade_buscada) || buscas.find((b) => b.id === l._busca)?.parametros?.uf || "RN";
+}
 function enriquecer(l, criterio = W.segmento.criterio) {
-  const m = infoCidade(l.cidade);
-  const x = { ...l, _cod: m?.codigo || "", microrregiao: m?.micro?.nome || "", regiao_imediata: m?.imediata?.nome || "", _micro: m?.micro?.id || "", _coord: coordenadas(l) };
+  const uf = ufDoLead(l), m = infoCidade(l.cidade, uf);
+  const x = { ...l, _uf: uf, _cod: m?.codigo || "", microrregiao: m?.micro?.nome || "", regiao_imediata: m?.imediata?.nome || "", _micro: m?.micro?.id || "", _coord: coordenadas(l) };
   x.no_segmento = noSegmento(x, criterio) ? "sim" : "não";
   return x;
 }
@@ -1762,7 +1986,7 @@ const doSegmentoNaCidade = (l) => l.no_segmento === "sim" && l.cidade_confere !=
 function municipiosPesquisados() {
   const s = new Set();
   for (const b of buscasAbertas()) {
-    if (b.tipo === "rn_mae") { for (const m of MUNS) s.add(m.codigo); continue; }
+    if (b.tipo === "rn_mae") { for (const m of ESTADOS_UI[b.parametros?.uf || "RN"]?.MUNS || []) s.add(m.codigo); continue; }
     for (const c of b.parametros?.cidades || []) { const m = infoCidade(c); if (m) s.add(m.codigo); }
   }
   return s;
@@ -1770,7 +1994,7 @@ function municipiosPesquisados() {
 
 // ============================================================ LEADS: filtros (compartilhados com o Mapa)
 const F = { texto: "", micro: "", cidade: "", bairro: "", segmento: true, pedida: true, semcidade: false, termo: "", whats: false, fixo: false, site: false,
-  semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", cats: new Set(), colunas: [], ordem: { campo: "nome", sobe: true }, pagina: 0, sel: new Set() };
+  semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", status: "", paraHoje: false, uf: "", cats: new Set(), colunas: [], ordem: { campo: "nome", sobe: true }, pagina: 0, sel: new Set() };
 // Período de uma busca = dia (Natal) em que terminou (é quando o motor soma as estatísticas); sem fim, o dia em que foi criada.
 const diaDaBusca = (b) => { const d = (b?.finalizada_em || b?.criada_em)?.toDate?.(); return d ? diaFortaleza(d) : ""; };
 const diasAtras = (n) => diaFortaleza(new Date(Date.now() - n * 86400000));
@@ -1799,13 +2023,16 @@ function passa(l, ig = {}) {
   if (F.origem && !(l._buscas || []).includes(F.origem)) return false;
   if (F.periodo && !(l._buscas || []).some((id) => buscaNoPeriodo(buscas.find((b) => b.id === id)))) return false;
   if (!ig.categoria && F.categoria && categoriaDo(l) !== F.categoria) return false;
+  if (!ig.status && F.status && crmDe(l).s !== F.status) return false;
+  if (F.uf && (l._uf || "RN") !== F.uf) return false;
+  if (!ig.status && F.paraHoje && !paraHoje(l)) return false;
   return true;
 }
 const filtrar = (ig) => W.leads.filter((l) => passa(l, ig));
 /** Filtros "limpos": só os dois padrões ligados (segmento e cidade pedida). */
 function limparTodosFiltros() {
   Object.assign(F, { texto: "", micro: "", cidade: "", bairro: "", segmento: true, pedida: true, semcidade: false, termo: "", whats: false, fixo: false, site: false,
-    semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", pagina: 0 });
+    semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", status: "", paraHoje: false, uf: "", pagina: 0 });
   F.cats.clear(); F.sel.clear();
 }
 /**
@@ -1856,7 +2083,7 @@ function desenharFiltrosLeads() {
   if (F.cidade && !cidades.some(([c]) => c === F.cidade)) $("#f-cidade").insertAdjacentHTML("beforeend", `<option value="${txt(F.cidade)}">${txt(F.cidade)} (0)</option>`);
   $("#f-cidade").value = F.cidade;
   $("#f-texto").value = F.texto; $("#f-segmento").checked = F.segmento; $("#f-pedida").checked = F.pedida;
-  desenharChips(); desenharSegmentoInfo(); desenharTabela(); desenharVisoes();
+  desenharChips(); desenharSegmentoInfo(); desenharTabela(); desenharVisoes(); desenharCrmBarra();
   if (!$("#gaveta-filtros").classList.contains("oculto")) desenharGavetaFiltros();
 }
 $("#f-texto").oninput = () => { F.texto = $("#f-texto").value; F.pagina = 0; desenharFiltrosLeads(); };
@@ -1864,6 +2091,22 @@ $("#f-micro").onchange = () => { F.micro = $("#f-micro").value; F.cidade = ""; F
 $("#f-cidade").onchange = () => { F.cidade = $("#f-cidade").value; F.bairro = ""; F.pagina = 0; desenharFiltrosLeads(); };
 $("#f-segmento").onchange = () => { F.segmento = $("#f-segmento").checked; F.pagina = 0; desenharFiltrosLeads(); };
 $("#f-pedida").onchange = () => { F.pedida = $("#f-pedida").checked; F.pagina = 0; desenharFiltrosLeads(); };
+// Contador por status (clicável = filtra) + aba "Para hoje" (próximo contato hoje ou atrasado).
+function desenharCrmBarra() {
+  const base = filtrar({ status: true });
+  const n = contar(base, (l) => crmDe(l).s), hoje = base.filter(paraHoje).length;
+  const botao = (k, rot, qtd) => `<button class="btn btn-mini ${F.status === k && !F.paraHoje ? "btn-primario" : "btn-sec"}" data-crm-status="${k}" aria-pressed="${F.status === k && !F.paraHoje}">${rot} <b class="num">${numero(qtd)}</b></button>`;
+  $("#crm-barra").innerHTML = `<button class="btn btn-mini ${F.paraHoje ? "btn-primario" : "btn-sec"} aba-hoje" data-crm-hoje aria-pressed="${F.paraHoje}">${icone("relogio")} Para hoje <b class="num">${numero(hoje)}</b></button>` +
+    STATUS_CRM.map(([k, rot]) => botao(k, rot, n.get(k) || 0)).join("") +
+    (n.get("carteira") ? botao("carteira", "Na carteira de outro", n.get("carteira")) : "");
+}
+$("#crm-barra").onclick = (ev) => {
+  const b = ev.target.closest("[data-crm-status], [data-crm-hoje]");
+  if (!b) return;
+  if (b.dataset.crmHoje !== undefined) { F.paraHoje = !F.paraHoje; F.status = ""; }
+  else { const k = b.dataset.crmStatus; F.status = F.status === k && !F.paraHoje ? "" : k; F.paraHoje = false; }
+  F.pagina = 0; desenharFiltrosLeads();
+};
 const ROTULOS_FILTRO = { whats: "Tem WhatsApp", fixo: "Tem telefone fixo", site: "Tem site", semsite: "Sem site", insta: "Tem Instagram", semcidade: "Mostrando sem cidade" };
 function filtrosAtivos() {
   const a = [];
@@ -1878,6 +2121,9 @@ function filtrosAtivos() {
   if (F.notaMin) a.push([`Nota ≥ ${String(F.notaMin).replace(".", ",")}`, "notaMin"]);
   if (F.avalMin) a.push([`≥ ${F.avalMin} avaliações`, "avalMin"]);
   if (F.origem) a.push(["Uma busca", "origem"]);
+  if (F.status) a.push([`Status: ${F.status === "carteira" ? "na carteira de outro" : rotuloStatus(F.status)}`, "status"]);
+  if (F.paraHoje) a.push(["Para hoje", "paraHoje"]);
+  if (F.uf) a.push([`Estado: ${ESTADOS_UI[F.uf]?.nome || F.uf}`, "uf"]);
   if (F.periodo) a.push([rotuloPeriodo(F.periodo), "periodo"]);
   if (F.categoria) a.push([`Categoria: ${F.categoria}`, "categoria"]);
   if (F.cats.size) a.push([`${F.cats.size} categoria(s) escondida(s)`, "cats"]);
@@ -1910,7 +2156,7 @@ function desenharSegmentoInfo() {
 }
 // Gaveta "Mais filtros"
 function abrirGaveta(id) { $(id).classList.remove("oculto"); $("#painel-fundo").classList.remove("oculto"); }
-function fecharPaineis() { for (const id of ["#ficha", "#gaveta-filtros", "#gaveta-colunas"]) $(id).classList.add("oculto"); $("#painel-fundo").classList.add("oculto"); }
+function fecharPaineis() { for (const id of ["#ficha", "#gaveta-filtros", "#gaveta-colunas", "#painel-liberar"]) $(id).classList.add("oculto"); $("#painel-fundo").classList.add("oculto"); }
 $("#painel-fundo").onclick = fecharPaineis;
 $("#abrir-filtros").onclick = () => { desenharGavetaFiltros(); abrirGaveta("#gaveta-filtros"); };
 function desenharGavetaFiltros() {
@@ -1985,7 +2231,7 @@ async function salvarCategoriasPerfil() {
 const FINAIS = ["concluida", "erro", "cancelada"];
 // Terminada → "Apagar"; em andamento → "Cancelar" (apagar só depois); já pediu o cancelamento → aviso.
 function botaoApagar(b, classe = "btn-mini") {
-  if (b.tipo === "rn_filha") return "";
+  if (b.tipo === "rn_filha" || b._liberada) return ""; // liberada pelo admin: o vendedor não apaga
   if (FINAIS.includes(b.status)) return `<button class="btn btn-perigo ${classe}" data-apagar="${txt(b.id)}">Apagar busca</button>`;
   if (b.cancelar_solicitado) return `<span class="small muted" style="flex:none">cancelando…</span>`;
   return `<button class="btn btn-sec ${classe}" data-cancelar="${txt(b.id)}" title="Busca em andamento: cancele primeiro e depois apague">Cancelar</button>`;
@@ -2006,7 +2252,8 @@ function confirmar({ titulo, texto, sim }) {
 async function apagarBusca(id) {
   const b = buscas.find((x) => x.id === id);
   const nome = b ? rotuloBusca(b) : "selecionada", n = b?.resumo?.total || 0;
-  if (!(await confirmar({ titulo: "Apagar busca", texto: `Apagar a busca ${nome} com ${numero(n)} ${n === 1 ? "lead" : "leads"}? Isso não pode ser desfeito.`, sim: "Sim, apagar" }))) return;
+  const liberada = Object.keys(b?.liberacoes || {}).length;
+  if (!(await confirmar({ titulo: "Apagar busca", texto: `Apagar a busca ${nome} com ${numero(n)} ${n === 1 ? "lead" : "leads"}? Isso não pode ser desfeito.${liberada ? ` Ela some também para ${liberada === 1 ? "o vendedor" : `os ${liberada} vendedores`} que a receberam.` : ""}`, sim: "Sim, apagar" }))) return;
   try {
     await api("apagar-busca", { id });
     toast("Busca apagada.", "ok");
@@ -2026,19 +2273,149 @@ function desenharBuscasAdmin() {
   $("#buscas-admin").innerHTML = buscas.length ? `<thead><tr><th>Busca</th><th>Vendedor</th><th>Criada</th><th>Status</th><th>Leads</th><th></th></tr></thead><tbody>` +
     buscas.map((b) => { const [rot, cls] = STATUS[b.status] || [b.status, ""];
       return `<tr><td class="principal-td" data-rot=""><b>${txt(rotuloBusca(b))}</b></td><td data-rot="Vendedor">${txt(b.dono_email || "–")}</td><td data-rot="Criada">${b.criada_em ? dataHora(b.criada_em.toDate()) : "–"}</td>
-        <td data-rot="Status"><span class="pilula ${cls}">${txt(rot)}</span></td><td data-rot="Leads" class="num">${numero(b.resumo?.total || 0)}</td><td data-rot="">${botaoApagar(b)}</td></tr>`; }).join("") + "</tbody>"
+        <td data-rot="Status"><span class="pilula ${cls}">${txt(rot)}</span></td><td data-rot="Leads" class="num">${numero(b.resumo?.total || 0)}</td><td data-rot=""><div class="linha" style="gap:6px">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</td></tr>`; }).join("") + "</tbody>"
     : `<tbody><tr><td class="muted">Nenhuma busca ainda.</td></tr></tbody>`;
 }
+// ============================================================ LIBERAR BUSCA PARA VENDEDOR (só admin; pela Function)
+// O admin escolhe vendedores, lista inteira ou só algumas cidades/regiões e se divide entre eles (cada um com cidades
+// diferentes, sem repetir lead). A prévia (quantos leads cada um recebe) vem do servidor antes de confirmar.
+const podeLiberar = (b) => ehAdmin && FINAIS.includes(b.status) && (b.qtd_lotes || 0) > 0 && !["parte", "rn_filha"].includes(b.tipo);
+function botaoLiberar(b, classe = "btn-mini") {
+  return podeLiberar(b) ? `<button class="btn btn-sec ${classe}" data-liberar="${txt(b.id)}">Liberar para vendedor</button>` : "";
+}
+function liberadosDe(b) {
+  const libs = Object.entries(b.liberacoes || {});
+  if (!ehAdmin || !libs.length) return "";
+  return `<div class="liberados"><span class="muted">Liberada para:</span>${libs.map(([uid, l]) =>
+    `<span class="chip" title="${txt(l.modo === "inteira" ? "lista inteira" : `${(l.cidades || []).length} cidade(s)${l.dividida ? " (dividida)" : ""}`)} · ${numero(l.qtd_leads || 0)} leads">${txt(l.rotulo || "vendedor")} · ${numero(l.qtd_leads || 0)}<button data-revogar="${txt(b.id)}" data-uid="${txt(uid)}" aria-label="Revogar a liberação de ${txt(l.rotulo || "vendedor")}">${icone("fechar")}</button></span>`).join("")}</div>`;
+}
+const LB = { id: "", vendedores: [], cidades: [], escolhidos: new Set(), modo: "inteira", marcadas: new Set(), dividir: false, plano: null, erro: "", vez: 0 };
+async function abrirLiberar(id) {
+  const b = buscas.find((x) => x.id === id);
+  if (!b) return;
+  $("#caixa-buscas").classList.add("oculto");
+  Object.assign(LB, { id, vendedores: [], cidades: [], escolhidos: new Set(), modo: "inteira", marcadas: new Set(), dividir: false, plano: null, erro: "" });
+  $("#painel-liberar").innerHTML = `<div class="painel-cab"><div style="flex:1"><h2 id="lib-titulo">Liberar para vendedor</h2><div class="small muted">Carregando…</div></div>
+    <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>`;
+  abrirGaveta("#painel-liberar");
+  try {
+    const r = await api("liberar-busca", { acao: "simular", id });
+    LB.vendedores = r.vendedores; LB.cidades = r.cidades;
+    desenharLiberar();
+  } catch (e) { toast(e.message, "erro"); fecharPaineis(); }
+}
+// Cidades da busca agrupadas pela região escolhida (micro/imediata); fora do RN e sem cidade vão para "Outras".
+function gruposLiberar() {
+  const grupos = new Map();
+  for (const c of LB.cidades) {
+    const m = infoCidade(c.cidade), reg = m ? (NB.tipoRegiao === "micro" ? m.micro : m.imediata) : null;
+    const chave = reg ? reg.id : "_outras";
+    if (!grupos.has(chave)) grupos.set(chave, { nome: reg ? reg.nome : "Outras cidades / sem cidade", cidades: [] });
+    grupos.get(chave).cidades.push(c);
+  }
+  return [...grupos.entries()].sort(([a, x], [b, y]) => (a === "_outras") - (b === "_outras") || x.nome.localeCompare(y.nome, "pt-BR"));
+}
+function desenharLiberar() {
+  const b = buscas.find((x) => x.id === LB.id);
+  if (!b) return fecharPaineis();
+  const total = LB.cidades.reduce((t, c) => t + c.leads, 0);
+  const vend = LB.vendedores.length ? LB.vendedores.map((v) => `<label class="alternar"><input type="checkbox" data-lib-vend="${txt(v.uid)}" ${LB.escolhidos.has(v.uid) ? "checked" : ""}> ${txt(v.rotulo)}${b.liberacoes?.[v.uid] ? ' <span class="small muted">(já recebeu — será trocada)</span>' : ""}</label>`).join("")
+    : `<p class="small muted">Nenhum vendedor disponível (crie em Admin › Usuários).</p>`;
+  const cidades = LB.modo === "cidades" ? `<div class="entre" style="margin-top:8px"><span class="small muted">Marque regiões inteiras ou cidade a cidade.</span>
+      <div class="segmentado" id="lib-tipo-regiao"><button data-tipo="micro" aria-pressed="${NB.tipoRegiao === "micro"}">Microrregiões</button><button data-tipo="imediata" aria-pressed="${NB.tipoRegiao === "imediata"}">Regiões imediatas</button></div></div>
+    <div class="lib-cidades" id="lib-cidades">${gruposLiberar().map(([chave, g]) => {
+      const n = g.cidades.reduce((t, c) => t + c.leads, 0), todas = g.cidades.every((c) => LB.marcadas.has(c.cidade));
+      return `<div class="lib-regiao"><label class="alternar" style="border:0"><input type="checkbox" data-lib-regiao="${txt(chave)}" ${todas ? "checked" : ""}> <b>${txt(g.nome)}</b> <span class="muted">(${numero(n)} leads)</span></label>
+        <div class="cids">${g.cidades.map((c) => `<label class="alternar"><input type="checkbox" data-lib-cidade="${txt(c.cidade)}" ${LB.marcadas.has(c.cidade) ? "checked" : ""}> ${txt(c.cidade)} <span class="muted">(${numero(c.leads)})</span></label>`).join("")}</div></div>`; }).join("")}</div>` : "";
+  $("#painel-liberar").innerHTML = `<div class="painel-cab"><div style="flex:1;min-width:0"><h2 id="lib-titulo">Liberar para vendedor</h2>
+      <div class="small muted">${txt(rotuloBusca(b))} · ${numero(total)} leads em ${numero(LB.cidades.length)} cidade(s)</div></div>
+      <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>
+    <div class="painel-corpo pilha">
+      <div><label class="campo">1. Vendedores</label><div class="lib-vendedores" id="lib-vendedores">${vend}</div></div>
+      <div><label class="campo">2. O que liberar</label><div class="lib-vendedores">
+        <label class="alternar"><input type="radio" name="lib-modo" value="inteira" ${LB.modo === "inteira" ? "checked" : ""}> Lista inteira</label>
+        <label class="alternar"><input type="radio" name="lib-modo" value="cidades" ${LB.modo === "cidades" ? "checked" : ""}> Só estas cidades/regiões</label></div>${cidades}</div>
+      <div><label class="alternar"><input type="checkbox" id="lib-dividir" ${LB.dividir ? "checked" : ""}> Dividir entre os vendedores escolhidos ${aj("Cada vendedor recebe cidades diferentes (nenhum lead repetido). As cidades com mais leads são repartidas primeiro, sempre para quem está com menos.")}</label></div>
+      <p class="small muted">A lista aparece em Meus leads do vendedor com a etiqueta "Liberada por admin". Não conta na cota dele. Você pode revogar quando quiser.</p>
+    </div>
+    <div class="painel-rodape"><div class="lib-previa" id="lib-previa" aria-live="polite"></div>
+      <div class="acoes"><button class="btn btn-sec" data-fechar>Voltar</button><button class="btn btn-primario" id="lib-confirmar" disabled>Liberar</button></div></div>`;
+  desenharPreviaLiberar();
+}
+function desenharPreviaLiberar() {
+  const nome = new Map(LB.vendedores.map((v) => [v.uid, v.rotulo]));
+  const ok = LB.plano && !LB.erro && LB.escolhidos.size;
+  $("#lib-previa").innerHTML = !LB.escolhidos.size ? `<span class="muted">Escolha pelo menos um vendedor.</span>`
+    : LB.erro ? `<span class="erro" role="alert">${txt(LB.erro)}</span>`
+    : !LB.plano ? `<span class="muted">Calculando…</span>`
+    : `<b>Quantos leads cada um recebe:</b>${LB.plano.por_vendedor.map((p) => `<span data-previa-uid="${txt(p.uid)}">${txt(nome.get(p.uid) || "vendedor")}: <b class="num">${numero(p.leads)}</b> leads · ${p.modo === "inteira" ? "lista inteira" : `${numero(p.cidades.length)} cidade(s)`}</span>`).join("")}`;
+  $("#lib-confirmar").disabled = !ok;
+}
+let temporizadorLib = null;
+function simularLiberar() {
+  LB.plano = null; LB.erro = "";
+  desenharPreviaLiberar();
+  clearTimeout(temporizadorLib);
+  if (!LB.escolhidos.size) return;
+  if (LB.modo === "cidades" && !LB.marcadas.size) { LB.erro = "Marque pelo menos uma cidade ou região."; return desenharPreviaLiberar(); }
+  const vez = ++LB.vez;
+  temporizadorLib = setTimeout(async () => {
+    try {
+      const r = await api("liberar-busca", corpoLiberar("simular"));
+      if (vez === LB.vez) LB.plano = r;
+    } catch (e) { if (vez === LB.vez) LB.erro = e.message; }
+    if (vez === LB.vez && !$("#painel-liberar").classList.contains("oculto")) desenharPreviaLiberar();
+  }, 250);
+}
+const corpoLiberar = (acao) => ({ acao, id: LB.id, vendedores: [...LB.escolhidos], modo: LB.modo, cidades: [...LB.marcadas], dividir: LB.dividir });
+$("#painel-liberar").addEventListener("change", (ev) => {
+  const t = ev.target;
+  if (t.dataset.libVend) { t.checked ? LB.escolhidos.add(t.dataset.libVend) : LB.escolhidos.delete(t.dataset.libVend); return simularLiberar(); }
+  if (t.name === "lib-modo") { LB.modo = t.value; desenharLiberar(); return simularLiberar(); }
+  if (t.id === "lib-dividir") { LB.dividir = t.checked; return simularLiberar(); }
+  if (t.dataset.libCidade) { t.checked ? LB.marcadas.add(t.dataset.libCidade) : LB.marcadas.delete(t.dataset.libCidade); desenharLiberar(); return simularLiberar(); }
+  if (t.dataset.libRegiao) {
+    const g = gruposLiberar().find(([k]) => k === t.dataset.libRegiao)?.[1];
+    for (const c of g?.cidades || []) t.checked ? LB.marcadas.add(c.cidade) : LB.marcadas.delete(c.cidade);
+    desenharLiberar(); return simularLiberar();
+  }
+});
+$("#painel-liberar").addEventListener("click", async (ev) => {
+  if (ev.target.closest("[data-ajuda]")) return;
+  if (ev.target.closest("[data-fechar]")) return fecharPaineis();
+  const tipo = ev.target.closest("#lib-tipo-regiao [data-tipo]")?.dataset.tipo;
+  if (tipo) { NB.tipoRegiao = tipo; guardar("mapaleads.tipoRegiao", tipo); return desenharLiberar(); }
+  const botao = ev.target.closest("#lib-confirmar");
+  if (!botao || botao.disabled) return;
+  botao.disabled = true; botao.textContent = "Liberando…";
+  try {
+    const r = await api("liberar-busca", corpoLiberar("liberar"));
+    toast(`Lista liberada para ${r.por_vendedor.length} vendedor(es).`, "ok");
+    fecharPaineis();
+  } catch (e) { toast(e.message, "erro"); botao.disabled = false; botao.textContent = "Liberar"; }
+});
+async function revogarLiberacao(id, uid) {
+  const b = buscas.find((x) => x.id === id), rot = b?.liberacoes?.[uid]?.rotulo || "o vendedor";
+  if (!(await confirmar({ titulo: "Revogar liberação", texto: `Tirar esta lista de ${rot}? Ela some da tela dele na hora.`, sim: "Sim, revogar" }))) return;
+  try { await api("liberar-busca", { acao: "revogar", id, uid }); toast("Liberação revogada.", "ok"); } catch (e) { toast(e.message, "erro"); }
+}
+document.addEventListener("click", (ev) => {
+  const lib = ev.target.closest("[data-liberar]")?.dataset.liberar;
+  const rev = ev.target.closest("[data-revogar]");
+  if (!lib && !rev) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if (lib) abrirLiberar(lib); else revogarLiberacao(rev.dataset.revogar, rev.dataset.uid);
+}, true);
 // Seletor de buscas abertas (uma ou várias, juntas sem repetidos)
 function desenharCaixaBuscas() {
   const n = W.ids.length;
   $("#rot-buscas").textContent = n ? `${n} busca(s) aberta(s)` : "Escolher buscas";
   // Todas as buscas: com leads dá para abrir; terminada dá para apagar; em andamento, cancelar primeiro.
   const lista = buscas;
-  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>Suas buscas</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
+  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>${ehAdmin ? "Buscas" : "Suas buscas"}</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
     (lista.map((b) => { const comLeads = temLeads(b);
-      const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(b.resumo?.total)} leads` : txt((STATUS[b.status] || [b.status])[0]);
-      return `<div class="linha-busca"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b><br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label>${botaoApagar(b)}</div>`; }).join("") ||
+      const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(totalLeads(b))} leads` : txt((STATUS[b.status] || [b.status])[0]);
+      return `<div class="linha-busca" data-busca="${txt(b.id)}"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b>${etiquetaLiberada(b)}<br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label><div class="acoes-busca">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</div>`; }).join("") ||
       `<p class="small muted" style="padding:8px">Nenhuma busca ainda.</p>`) +
     `<div class="entre" style="padding:8px"><span class="small muted">Cada lote de 300 leads = 1 leitura no banco.</span><button class="btn btn-primario btn-mini" id="aplicar-buscas">Abrir</button></div>`;
 }
@@ -2070,6 +2447,19 @@ const COLUNAS = [
   { id: "termo", rot: "Termo", campos: ["termo_que_encontrou"], html: (l) => `<span class="small">${txt(l.termo_que_encontrou)}</span>` },
 ];
 const POR_PAGINA = 100;
+// Cartão (celular): status em botões grandes (um toque), próximo contato/anotação; lead na carteira de outro vendedor
+// = etiqueta "Na carteira de <nome>", sem WhatsApp/Ligar e sem status.
+function htmlCrmCartao(l, i) {
+  const c = crmDe(l);
+  if (c.bloqueado) return `<div class="na-carteira"><span class="pilula warn">Na carteira de ${txt(c.dono.nome)}</span></div>`;
+  const contato = link(l.whatsapp_link) || l.telefone ? `<div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats btn-grande" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener" data-contato="${i}">${icone("whats")} WhatsApp</a>` : ""}
+    ${l.telefone ? `<a class="btn btn-sec btn-grande" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}" data-contato="${i}">${icone("fone")} Ligar</a>` : ""}</div>` : "";
+  const info = [c.reg?.p ? `${c.reg.p <= hojeFortaleza() ? "⏰ " : ""}Próximo: ${dataBr(c.reg.p)}` : "", c.reg?.n ? `“${c.reg.n}”` : "",
+    ehAdmin && c.dono ? `Carteira: ${c.dono.nome}` : ehAdmin && c.reg?.h?.[0]?.u ? `por ${c.reg.h[0].u}` : ""].filter(Boolean);
+  const status = ehAdmin ? `<div class="linha"><span class="pilula ${c.s === "novo" ? "" : "azul"}">${txt(rotuloStatus(c.s))}</span></div>`
+    : `<div class="status-lead" role="group" aria-label="Status do lead">${STATUS_CRM.map(([k, rot]) => `<button type="button" data-status="${k}" data-i="${i}" aria-pressed="${c.s === k}">${rot}</button>`).join("")}</div>`;
+  return `${contato}${status}${info.length ? `<div class="small ink2 info-crm">${txt(info.join(" · "))}</div>` : ""}`;
+}
 let visiveis = [];
 function desenharTabela() {
   const { campo, sobe } = F.ordem, numerico = ["nota", "qtd_avaliacoes"].includes(campo);
@@ -2090,8 +2480,7 @@ function desenharTabela() {
       <div class="cidade-lead">${icone("pin")}<span>${txt([l.cidade || "sem cidade", l.bairro].filter(Boolean).join(" · "))}</span></div>
       <div class="cat-lead">${txt(l.categoria)}</div></div>
     ${l.nota ? `<div class="num small" style="flex:none"><span class="estrela">★</span> ${String(l.nota).replace(".", ",")}</div>` : ""}</div>
-    ${link(l.whatsapp_link) || l.telefone ? `<div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats btn-grande" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : ""}
-    ${l.telefone ? `<a class="btn btn-sec btn-grande" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : ""}</div>` : ""}</div>`).join("");
+    ${htmlCrmCartao(l, F.pagina * POR_PAGINA + i)}</div>`).join("");
   $("#paginas").innerHTML = paginas > 1 ? `<button class="btn btn-sec btn-mini" data-pag="-1" ${F.pagina ? "" : "disabled"}>← Anterior</button><span class="small muted">página ${F.pagina + 1} de ${paginas}</span><button class="btn btn-sec btn-mini" data-pag="1" ${F.pagina < paginas - 1 ? "" : "disabled"}>Próxima →</button>` : "";
   $("#n-sel").textContent = F.sel.size ? `${F.sel.size} selecionado(s)` : "";
   $("#exportar-sel").classList.toggle("oculto", !F.sel.size);
@@ -2106,6 +2495,48 @@ $("#tabela-leads thead").onclick = (ev) => {
   F.ordem = { campo, sobe: F.ordem.campo === campo ? !F.ordem.sobe : !["nota", "qtd_avaliacoes"].includes(campo) };
   desenharTabela();
 };
+// Status em um toque (Descartado pede o motivo); depois de tocar em WhatsApp/Ligar, "Como foi?".
+document.addEventListener("click", (ev) => {
+  const st = ev.target.closest("#cartoes [data-status], #ficha [data-status]");
+  if (st) {
+    ev.preventDefault(); ev.stopPropagation();
+    const l = st.closest("#ficha") ? leadDaFicha : visiveis[Number(st.dataset.i)];
+    if (!l) return;
+    if (st.dataset.status === "descartado") return abrirFolhaCrm(l, { modo: "descarte" });
+    const extra = st.closest("#ficha") ? { anotacao: $("#ficha-nota")?.value.trim() || undefined, proximo: $("#ficha-proximo")?.value ?? undefined } : {};
+    return salvarStatus(l, { status: st.dataset.status, ...extra });
+  }
+  const ct = ev.target.closest("#cartoes [data-contato], #ficha [data-contato]");
+  if (ct && !ehAdmin) {
+    const l = ct.closest("#ficha") ? leadDaFicha : visiveis[Number(ct.dataset.contato)];
+    if (l) setTimeout(() => abrirFolhaCrm(l, { modo: "comofoi" }), 350); // o link abre o WhatsApp/discador; a pergunta fica esperando a volta
+  }
+}, true);
+let leadDaFicha = null;
+// Folha de baixo do CRM: "Como foi?" (status em botões + anotação + próximo contato) e motivo do descarte.
+function abrirFolhaCrm(l, { modo }) {
+  const c = crmDe(l);
+  if (c.bloqueado) return;
+  const descarte = modo === "descarte";
+  $("#folha-caixa").innerHTML = `<h2 id="folha-titulo">${descarte ? "Descartar lead" : "Como foi?"}</h2><p class="small ink2" style="margin:4px 0 10px">${pii(l.nome || "(sem nome)")}</p>
+    ${descarte ? `<p class="small" style="margin:0 0 6px">Motivo:</p><div class="status-lead motivos">${MOTIVOS_DESCARTE.map(([k, rot]) => `<button type="button" data-motivo="${k}">${rot}</button>`).join("")}</div>`
+      : `<div class="status-lead folha-status">${STATUS_CRM.filter(([k]) => k !== "novo").map(([k, rot]) => `<button type="button" data-folha-status="${k}" aria-pressed="${c.s === k}">${rot}</button>`).join("")}</div>`}
+    <label class="campo" for="folha-nota" style="margin-top:10px">Anotação (opcional)</label><input id="folha-nota" type="text" maxlength="500" placeholder="ex.: ligar sexta" value="">
+    ${descarte ? "" : `<label class="campo" for="folha-proximo" style="margin-top:8px">Próximo contato em</label><input id="folha-proximo" type="date" value="${txt(c.reg?.p || "")}">`}
+    <div class="acoes" style="margin-top:12px"><button class="btn btn-sec" data-folha-fechar>${descarte ? "Voltar" : "Agora não"}</button></div>`;
+  const folha = $("#folha-crm");
+  folha.classList.remove("oculto");
+  const fim = () => { folha.classList.add("oculto"); folha.onclick = null; };
+  folha.onclick = (ev) => {
+    if (ev.target === folha || ev.target.closest("[data-folha-fechar]")) return fim();
+    const s = ev.target.closest("[data-folha-status]")?.dataset.folhaStatus, m = ev.target.closest("[data-motivo]")?.dataset.motivo;
+    if (s === "descartado") return abrirFolhaCrm(l, { modo: "descarte" });
+    if (!s && !m) return;
+    const anotacao = $("#folha-nota").value.trim() || undefined, proximo = $("#folha-proximo") ? $("#folha-proximo").value : undefined;
+    fim();
+    salvarStatus(l, m ? { status: "descartado", motivo: m, anotacao } : { status: s, anotacao, proximo });
+  };
+}
 for (const el of [$("#tabela-leads tbody"), $("#cartoes")]) {
   el.onclick = (ev) => {
     const s = ev.target.dataset?.sel;
@@ -2147,22 +2578,57 @@ $("#visoes").onchange = () => {
 };
 
 // ============================================================ FICHA DO LEAD (painel lateral)
+// Bloco do CRM na ficha: status em botões, anotação, próximo contato e histórico ("23/09 · Flávio · Contatado · ligar sexta").
+function htmlCrmFicha(l, c) {
+  const hist = (c.reg?.h || []).map((h) => { const d = new Date(h.d); const dia = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return `<li>${txt([dia, h.u, rotuloStatus(h.s) + (h.m ? ` (${rotuloMotivo(h.m)})` : ""), h.n, h.p ? `próximo ${dataBr(h.p)}` : ""].filter(Boolean).join(" · "))}</li>`; }).join("");
+  if (c.bloqueado) return `<div class="crm-ficha"><span class="pilula warn">Na carteira de ${txt(c.dono.nome)}</span><p class="small muted" style="margin:6px 0 0">Outro vendedor já está atendendo este lugar. O admin pode transferir.</p></div>`;
+  const transferir = ehAdmin ? `<div class="linha" style="margin-top:8px"><select id="transferir-para" aria-label="Transferir para"><option value="">Transferir para…</option>${(CRM.vendedores || []).map((v) => `<option value="${txt(v.uid)}">${txt(v.nome)}</option>`).join("")}</select><button class="btn btn-sec btn-mini" id="transferir-btn">Transferir</button></div>` : "";
+  return `<div class="crm-ficha">
+    <div class="entre"><b>Status</b>${c.dono ? `<span class="small muted">Carteira: ${txt(c.dono.nome)}</span>` : ""}</div>
+    ${ehAdmin ? `<p style="margin:4px 0"><span class="pilula ${c.s === "novo" ? "" : "azul"}">${txt(rotuloStatus(c.s))}</span></p>`
+      : `<div class="status-lead" role="group" aria-label="Status do lead">${STATUS_CRM.map(([k, rot]) => `<button type="button" data-status="${k}" aria-pressed="${c.s === k}">${rot}</button>`).join("")}</div>
+    <label class="campo" for="ficha-nota" style="margin-top:8px">Anotação</label><input id="ficha-nota" type="text" maxlength="500" value="${txt(c.reg?.n || "")}" placeholder="ex.: ligar sexta">
+    <label class="campo" for="ficha-proximo" style="margin-top:6px">Próximo contato em</label><input id="ficha-proximo" type="date" value="${txt(c.reg?.p || "")}">
+    <button class="btn btn-sec btn-mini" id="ficha-salvar-nota" style="margin-top:6px">Salvar anotação e data</button>`}
+    ${transferir}
+    ${hist ? `<p class="small muted" style="margin:10px 0 2px">Histórico</p><ul class="historico">${hist}</ul>` : ""}</div>`;
+}
+document.addEventListener("click", async (ev) => {
+  if (ev.target.closest("#ficha-salvar-nota") && leadDaFicha) {
+    const c = crmDe(leadDaFicha);
+    return salvarStatus(leadDaFicha, { status: c.reg?.s || "novo", motivo: c.reg?.m || undefined, anotacao: $("#ficha-nota").value.trim() || undefined, proximo: $("#ficha-proximo").value });
+  }
+  if (ev.target.closest("#transferir-btn") && leadDaFicha) {
+    const para = $("#transferir-para").value;
+    if (!para) return toast("Escolha o vendedor.", "erro");
+    const c = crmDe(leadDaFicha), nome = CRM.vendedores?.find((v) => v.uid === para)?.nome || "o vendedor";
+    if (!(await confirmar({ titulo: "Transferir lead", texto: `Passar este lead para a carteira de ${nome}?`, sim: "Sim, transferir" }))) return;
+    try { const r = await api("crm-lead", { acao: "transferir", chave: c.k, para_uid: para }); CRM.carteira.set(c.k, r.carteira); CRM.pronto = null; CRM.meu.clear(); CRM.todos.clear(); await carregarCrm(); toast(`Lead transferido para ${nome}.`, "ok"); aposMudarCrm(leadDaFicha); }
+    catch (e) { toast(e.message, "erro"); }
+  }
+});
 async function abrirFicha(l) {
   if (!l) return;
+  if (ehAdmin && !CRM.vendedores) api("crm-lead", { acao: "carteiras" }).then((r) => { CRM.vendedores = r.vendedores.map((v) => ({ uid: v.uid, nome: v.nome })); if (leadDaFicha === l) abrirFicha(l); }).catch(() => {});
   const c = l._coord;
   const campos = [["Categoria", txt(l.categoria)], ["Todas as categorias", txt((l.categorias || []).join(", "))], ["No segmento", txt(l.no_segmento)], ["Telefone", pii(l.telefone)], ["E-mail", pii(l.email)],
     ["Endereço", pii(l.endereco)], ["Bairro", txt(l.bairro)],
     // Cidade e microrregião levam ao mapa nesse nível.
-    ["Cidade", l._cod ? `<a href="#mapa/${slug(l.microrregiao)}/${slug(porCodigo.get(l._cod).nome)}">${txt(l.cidade)} ›</a>` : txt(l.cidade)],
-    ["Microrregião", l._micro ? `<a href="#mapa/${slug(l.microrregiao)}">${txt(l.microrregiao)} ›</a>` : ""], ["Região imediata", txt(l.regiao_imediata)],
+    ["Cidade", l._cod ? `<a href="${prefixoMapa(l._uf)}/${slug(l.microrregiao)}/${slug(porCodigo.get(l._cod).nome)}">${txt(l.cidade)} ›</a>` : txt(l.cidade)],
+    ["Microrregião", l._micro ? `<a href="${prefixoMapa(l._uf)}/${slug(l.microrregiao)}">${txt(l.microrregiao)} ›</a>` : ""], ["Região imediata", txt(l.regiao_imediata)],
+    ["Estado", txt(ESTADOS_UI[l._uf]?.nome || l._uf)],
     ["Nota", l.nota ? `${String(l.nota).replace(".", ",")} (${numero(l.qtd_avaliacoes)} avaliações)` : ""], ["Site", l.site ? pii(l.site) : ""], ["Instagram", l.instagram ? pii(l.instagram) : ""],
     ["Encontrado por", txt(l.termo_que_encontrou)], ["Cidade pedida", txt(l.cidade_buscada)], ["Cidade confere", txt(l.cidade_confere)]];
+  leadDaFicha = l;
+  const cr = crmDe(l);
+  $("#ficha").dataset.chave = cr.k;
   $("#ficha").innerHTML = `<div class="painel-cab"><div style="flex:1;min-width:0"><div class="small muted">Ficha do lead</div><h2 id="ficha-nome" style="font-size:18px">${pii(l.nome || "(sem nome)")}</h2></div>
     <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>
-    <div class="painel-corpo"><dl class="dados">${campos.filter(([, v]) => v && v !== '<span class="pii"></span>').map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+    <div class="painel-corpo">${htmlCrmFicha(l, cr)}<dl class="dados">${campos.filter(([, v]) => v && v !== '<span class="pii"></span>').map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
     ${c ? `<div class="mini-mapa" id="mini-mapa"></div><p class="fonte">Localização do Google Maps. Mapa: © OpenStreetMap</p>` : `<p class="fonte">Sem coordenadas deste lugar.</p>`}</div>
-    <div class="painel-acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : `<span></span>`}
-    ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : `<span></span>`}
+    <div class="painel-acoes">${link(l.whatsapp_link) && !cr.bloqueado ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener" data-contato="f">${icone("whats")} WhatsApp</a>` : `<span></span>`}
+    ${l.telefone && !cr.bloqueado ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}" data-contato="f">${icone("fone")} Ligar</a>` : `<span></span>`}
     ${link(l.link_maps) ? `<a class="btn btn-sec" href="${link(l.link_maps)}" target="_blank" rel="noopener">${icone("mapa")} Google Maps</a>` : `<span></span>`}
     <button class="btn btn-sec" id="copiar-dados">${icone("copiar")} Copiar dados</button>
     <button class="btn btn-primario so-celular fechar-baixo" data-fechar>Fechar</button></div>`;
@@ -2200,7 +2666,8 @@ function lugarDoArquivo() {
   if (F.cidade) return F.cidade;
   if (F.micro) return microPorId.get(F.micro)?.nome || "varias-cidades";
   const abertas = buscasAbertas();
-  if (abertas.some((b) => b.tipo === "rn_mae")) return "RN";
+  const mae = abertas.find((b) => b.tipo === "rn_mae");
+  if (mae) return mae.parametros?.uf || "RN";
   const cidades = [...new Set(abertas.flatMap((b) => (b.parametros?.cidades || []).map((c) => infoCidade(c)?.nome || c)))];
   if (cidades.length === 1) return cidades[0];
   const conj = new Set(cidades);
@@ -2213,7 +2680,7 @@ function lugarDoArquivo() {
 // .csv (formato de sempre): segmento-lugar-AAAA-MM-DD
 function nomeArquivo() {
   const segmento = slug(W.segmento.termos.slice(0, 3).join("-")) || "leads", lugar = lugarDoArquivo();
-  return `${segmento}-${lugar === "RN" ? "RN" : slug(lugar)}-${diaFortaleza()}`;
+  return `${segmento}-${UFS_ATIVAS.includes(lugar) ? lugar : slug(lugar)}-${diaFortaleza()}`;
 }
 // .xlsx: MapaLeads_<termo>_<cidade ou região>_<dd-mm-aaaa>.xlsx (sem acento nem espaço: abre certo em qualquer celular)
 const trechoNome = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -2234,7 +2701,9 @@ function baixarCsv(lista) {
 // ---- Planilha .xlsx pronta para usar (pedido do Breno, 24/09): aba "Leads" formatada + aba "Resumo".
 // Só dados do Google Maps (nada de sócios nem outros dados pessoais — LGPD). O .csv continua simples.
 const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
-  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta",
+  // Mini-CRM (24/09): status de quem exporta (admin: o do dono da carteira), próximo contato, última anotação e vendedor.
+  "Status", "Próximo contato", "Última anotação", "Vendedor"];
 const LARGURA_MAX = { "Endereço": 45, "Categoria": 32, "Nome": 42 }; // o resto: até 30
 const AZUL_MARCA = "FF1F5FD6", ZEBRA = "FFF3F6FB", AZUL_LINK = "FF1F5FD6";
 /** Telefone limpo: (84) 99999-9999 (celular) ou (84) 3333-3333 (fixo); outro formato fica como veio. */
@@ -2263,7 +2732,14 @@ function linhasXlsx(lista) {
     telefonePadrao(l.telefone), link(l.whatsapp_link, "Abrir WhatsApp"), link(l.site || l.instagram, "Abrir site"), l.email || "",
     typeof l.nota === "number" && l.nota > 0 ? l.nota : "", typeof l.qtd_avaliacoes === "number" ? l.qtd_avaliacoes : "",
     l.no_segmento === "sim" ? "Sim" : "Não", link(l.link_maps, "Ver no mapa"), l.termo_que_encontrou || "", dataDaColeta(l),
+    ...colunasCrmXlsx(l),
   ]);
+}
+function colunasCrmXlsx(l) {
+  const c = crmDe(l);
+  const status = c.bloqueado ? `Na carteira de ${c.dono.nome}` : rotuloStatus(c.reg?.s || "novo") + (c.reg?.s === "descartado" && c.reg?.m ? ` (${rotuloMotivo(c.reg.m)})` : "");
+  const prox = c.reg?.p && !c.bloqueado ? (([a, m, d]) => new Date(Date.UTC(a, m - 1, d)))(c.reg.p.split("-").map(Number)) : "";
+  return [status, prox, c.bloqueado ? "" : c.reg?.n || "", c.dono?.nome || c.reg?.h?.[0]?.u || ""];
 }
 function estiloCabecalho(linha) {
   linha.eachCell((c) => {
@@ -2274,7 +2750,7 @@ function estiloCabecalho(linha) {
   linha.height = 20;
 }
 async function montarXlsx(lista) {
-  await carregarScript(CDN.exceljs);
+  await Promise.all([carregarScript(CDN.exceljs), carregarCrm()]);
   const livro = new window.ExcelJS.Workbook();
   livro.creator = "MapaLeads";
   const linhas = linhasXlsx(lista);
@@ -2290,12 +2766,13 @@ async function montarXlsx(lista) {
   ws.getColumn(11).numFmt = "0.0";
   ws.getColumn(12).numFmt = "0";
   ws.getColumn(16).numFmt = "dd/mm/yyyy";
+  ws.getColumn(18).numFmt = "dd/mm/yyyy";
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, linhas.length + 1), column: COLUNAS_XLSX.length } };
   // O Excel, quando salva uma planilha com filtro, grava também o nome interno _xlnm._FilterDatabase (da aba 1).
   // O ExcelJS não grava; sem ele o LibreOffice (e alguns apps) não mostram as setas do filtro. Mesmo formato do Excel.
   const modeloNomes = livro._definedNames;
   livro._definedNames = { get model() { return [...modeloNomes.model,
-    { name: "_xlnm._FilterDatabase", localSheetId: 0, ranges: [`'Leads'!$A$1:$P$${Math.max(1, linhas.length + 1)}`] }]; } };
+    { name: "_xlnm._FilterDatabase", localSheetId: 0, ranges: [`'Leads'!$A$1:$T$${Math.max(1, linhas.length + 1)}`] }]; } };
   // largura pelo conteúdo (o texto do link conta pelo que aparece), com limite
   COLUNAS_XLSX.forEach((nome, i) => {
     // cabeçalho: +4 para a seta do filtro não cobrir o texto
@@ -2408,10 +2885,22 @@ const M = { mapa: null, mun: null, micro: null, pontos: null, nivel: { micro: ""
 const urlTiles = () => "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const CREDITO_MAPA = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 $("#mapa-metrica").innerHTML = Object.entries(METRICAS).map(([k, v]) => `<option value="${k}">${v.rot}</option>`).join("");
+/**
+ * Estado na URL do mapa: "#mapa/pb/<micro>/<município>" para a PB; o RN continua sem prefixo ("#mapa/natal/natal").
+ * "#mapa" sozinho = o estado escolhido agora. Devolve o resto sem a sigla.
+ */
+function estadoDaRota(resto) {
+  if (UFS_ATIVAS.includes(String(resto[0] || "").toUpperCase())) { usarEstado(resto[0].toUpperCase()); return resto.slice(1); }
+  if (resto.length) usarEstado("RN"); // links antigos do RN
+  return resto;
+}
+const prefixoMapa = (uf = UF_ATUAL) => (uf === "RN" ? "#mapa" : `#mapa/${uf.toLowerCase()}`);
 async function abrirMapa(resto, entrando = false) {
+  resto = estadoDaRota(resto);
   try { await prepararLeads(); } catch { /* sem buscas: mapa só com IBGE */ }
   try { await carregarLeaflet(); } catch { $("#mapa-leaflet").innerHTML = `<div class="vazio"><h3>Não foi possível carregar o mapa agora</h3><p>Verifique a internet e tente de novo.</p></div>`; return; }
   if (!M.mapa) criarMapa();
+  if (M.uf !== UF_ATUAL) montarCamadasMapa();
   const abertas = buscasAbertas();
   $("#mapa-origem").textContent = abertas.length ? `Segmento: ${W.segmento.termos.join(", ")} · ${abertas.length} busca(s)` : "Sem buscas abertas: só dados do IBGE";
   aplicarRota(resto, entrando);
@@ -2421,6 +2910,13 @@ function criarMapa() {
   M.mapa = L.map("mapa-leaflet", { zoomSnap: 0.25, zoomControl: false, attributionControl: true }).setView([-5.8, -36.6], 7.5);
   L.control.zoom({ position: "bottomright" }).addTo(M.mapa); // no alto fica a trilha (RN › microrregião › município)
   L.tileLayer(urlTiles(), { maxZoom: 19, attribution: `${CREDITO_MAPA} · Contornos: IBGE` }).addTo(M.mapa);
+  montarCamadasMapa();
+  M.pontos = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 }).addTo(M.mapa);
+}
+// Contornos do estado escolhido (trocar o estado refaz as camadas de município e microrregião).
+function montarCamadasMapa() {
+  M.mun?.remove(); M.micro?.remove(); M.porCod.clear();
+  M.uf = UF_ATUAL;
   M.mun = L.geoJSON(malhaMun, {
     style: () => ({ weight: 0.7, color: "#fff", fillOpacity: 0.75 }),
     onEachFeature: (f, camada) => {
@@ -2430,8 +2926,11 @@ function criarMapa() {
     },
   }).addTo(M.mapa);
   M.micro = L.geoJSON(malhaMicro, { interactive: false, style: { weight: 1.6, color: cssVar("--map-region") || "#0e1726", opacity: 0.55, fill: false } }).addTo(M.mapa);
-  M.pontos = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 }).addTo(M.mapa);
 }
+$("#uf-mapa").onchange = () => { location.hash = `#mapa/${$("#uf-mapa").value.toLowerCase()}`; };
+$("#uf-mercado").onchange = () => { usarEstado($("#uf-mercado").value); MK.cod = ""; desenharMercado(); };
+// No Mapa, só os leads do estado que está na tela (pontos, categorias, bairros e WhatsApp do painel).
+const doEstadoAtual = (l) => (l._uf || "RN") === UF_ATUAL;
 function dicaMunicipio(cod) {
   const m = porCodigo.get(cod), agg = M.agg || new Map(), pesq = M.pesq || new Set();
   return `<b>${txt(m.nome)}</b> · ${txt(m.micro.nome)}<br>${numero(m.ind.populacao)} hab. · PIB pc ${reais(m.ind.pib_per_capita)}<br>` +
@@ -2443,10 +2942,10 @@ function clicarMunicipio(cod) {
   irNivel(m.micro.id, cod);
 }
 function irNivel(micro, cod) {
-  const partes = ["#mapa"];
+  const partes = [prefixoMapa(micro ? microPorId.get(micro).uf : UF_ATUAL)];
   if (micro) partes.push(slug(microPorId.get(micro).nome));
   if (cod) partes.push(slug(porCodigo.get(cod).nome));
-  if (location.hash !== partes.join("/")) location.hash = partes.join("/"); else aplicarRota(rota().resto);
+  if (location.hash !== partes.join("/")) location.hash = partes.join("/"); else aplicarRota(estadoDaRota(rota().resto));
 }
 function aplicarRota(resto, entrando = false) {
   const micro = REGIOES.micro.find((r) => slug(r.nome) === resto[0]);
@@ -2454,9 +2953,9 @@ function aplicarRota(resto, entrando = false) {
   // Chegando ao Mapa de outra tela sem nível na URL: usa o recorte da tabela (sincronizado).
   // Dentro do Mapa (Voltar, Esc, "RN" na trilha), "#mapa" é o RN inteiro — não volta para a microrregião.
   if (!resto.length && entrando && (F.micro || F.cidade)) {
-    const c = infoCidade(F.cidade);
+    const c = F.cidade ? infoCidade(F.cidade, UF_ATUAL) : null; // só se for do estado da tela
     if (c) return irNivel(c.micro.id, c.codigo);
-    if (F.micro) return irNivel(F.micro, "");
+    if (F.micro && microPorId.get(F.micro)?.uf === UF_ATUAL) return irNivel(F.micro, "");
   }
   M.nivel = { micro: micro?.id || "", cod: mun?.codigo || "" };
   // O recorte do mapa filtra a tabela (e vice-versa).
@@ -2498,7 +2997,7 @@ function redesenharMapa(enquadrar) {
   // Pontos dos leads do recorte (cor: do segmento = azul; fora = cinza).
   M.pontos.clearLayers();
   if ($("#camada-pontos").checked) {
-    const noRecorte = filtrar().filter((l) => l._coord);
+    const noRecorte = filtrar().filter((l) => l._coord && doEstadoAtual(l));
     for (const l of noRecorte) {
       const p = L.circleMarker(l._coord, { radius: 6, color: "#fff", weight: 1.5, fillOpacity: 0.95, fillColor: l.no_segmento === "sim" ? cssVar("--brand") : "#98a2b3" });
       p.bindTooltip(`${txt(l.nome)}<br><span style="opacity:.75">${txt(l.categoria)}</span>`);
@@ -2514,8 +3013,8 @@ function redesenharMapa(enquadrar) {
   desenharTrilha(); desenharLegenda(cl, vals); desenharPainelMapa();
 }
 function desenharTrilha() {
-  const { micro, cod } = M.nivel, partes = [`<a href="#mapa">RN</a>`];
-  if (micro) partes.push(cod ? `<a href="#mapa/${slug(microPorId.get(micro).nome)}">${txt(microPorId.get(micro).nome)}</a>` : `<span>${txt(microPorId.get(micro).nome)}</span>`);
+  const { micro, cod } = M.nivel, partes = [`<a href="${prefixoMapa()}">${UF_ATUAL}</a>`];
+  if (micro) partes.push(cod ? `<a href="${prefixoMapa()}/${slug(microPorId.get(micro).nome)}">${txt(microPorId.get(micro).nome)}</a>` : `<span>${txt(microPorId.get(micro).nome)}</span>`);
   if (cod) partes.push(`<span>${txt(porCodigo.get(cod).nome)}</span>`);
   $("#migalhas").innerHTML = partes.join('<span class="sep">›</span>');
   $("#mapa-voltar").disabled = !micro;
@@ -2529,9 +3028,9 @@ function desenharPainelMapa() {
   const cods = cod ? [cod] : MUNS.filter((m) => !micro || m.micro.id === micro).map((m) => m.codigo);
   const r = indicadoresRecorte(cods, agg, pesq), rn = indicadoresRecorte(MUNS.map((m) => m.codigo), agg, pesq);
   const rm = micro ? indicadoresRecorte(MUNS.filter((m) => m.micro.id === micro).map((m) => m.codigo), agg, pesq) : null;
-  const titulo = cod ? porCodigo.get(cod).nome : micro ? microPorId.get(micro).nome : "Rio Grande do Norte";
+  const titulo = cod ? porCodigo.get(cod).nome : micro ? microPorId.get(micro).nome : estadoAtual().nome;
   // Mesmos leads da tabela neste recorte: o número de cada categoria é o que aparece ao clicar nela.
-  const noRec = filtrar({ categoria: true });
+  const noRec = filtrar({ categoria: true }).filter(doEstadoAtual);
   const cats = [...contar(noRec, categoriaDo)].sort((a, b) => b[1] - a[1]).slice(0, 6);
   const pw = noRec.length ? Math.round((100 * noRec.filter((l) => l.whatsapp_link).length) / noRec.length) : null;
   // Barras: municípios do nível (estado: 10 maiores pela métrica).
@@ -2540,7 +3039,7 @@ function desenharPainelMapa() {
   const irmaos = (cod || micro ? MUNS.filter((m) => m.micro.id === (micro || porCodigo.get(cod).micro.id)) : MUNS).map((m) => [m, valor(m.codigo, M.metrica, agg, pesq)])
     .filter(([, v]) => v !== null || cod || micro).sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1)).slice(0, cod || micro ? 60 : 10);
   const maxB = Math.max(1e-9, ...irmaos.map(([, v]) => v || 0));
-  const bairros = cod ? [...contar(filtrar({ bairro: true }), (l) => l.bairro || "(sem bairro)")].sort((a, b) => b[1] - a[1]).slice(0, 12) : [];
+  const bairros = cod ? [...contar(filtrar({ bairro: true }).filter(doEstadoAtual), (l) => l.bairro || "(sem bairro)")].sort((a, b) => b[1] - a[1]).slice(0, 12) : [];
   const semBusca = cods.length === 1 && !pesq.has(cods[0]);
   // Estado: barras por microrregião (clique aprofunda).
   const micros = !micro && !cod ? REGIOES.micro.map((r) => { const x = indicadoresRecorte(r.municipios, agg, pesq);
@@ -2559,7 +3058,7 @@ function desenharPainelMapa() {
       <dt>Leads por 10 mil hab.${aj(AJ_TXT.seg10k)}</dt><dd>${semBusca ? "–" : num1(r.seg10k)}</dd>
       ${pw !== null ? `<dt>Com WhatsApp${aj(AJ_TXT.whats)}</dt><dd>${pw}%</dd>` : ""}
     </dl>
-    ${!semBusca && (micro || cod) ? `<p class="small ink2">${vezes(r.seg10k, rn.seg10k)} a média do RN em leads por habitante${rm && cod ? ` · ${vezes(r.seg10k, rm.seg10k)} a média da microrregião` : ""}.</p>` : ""}
+    ${!semBusca && (micro || cod) ? `<p class="small ink2">${vezes(r.seg10k, rn.seg10k)} a média ${estadoAtual().doEstado} em leads por habitante${rm && cod ? ` · ${vezes(r.seg10k, rm.seg10k)} a média da microrregião` : ""}.</p>` : ""}
     <p class="fonte" style="margin-top:0">IBGE: Censo 2022 (SIDRA 4714), PIB dos Municípios 2022 ÷ Censo 2022 (calculado), CEMPRE 2024 (SIDRA 9509). Leads: coletados (só do segmento e da cidade pedida).</p>
     ${cats.length ? `<div><h3>Top categorias do Google <span class="muted small">(clique para ver os leads)</span></h3><div class="barras-mini" style="margin-top:6px">${cats.map(([c, n]) => barra(`data-categoria="${txt(c)}"`, c, n, cats[0][1], numero)).join("")}</div></div>` : ""}
     ${micros.length ? `<div><h3>${METRICAS[M.metrica].rot} — microrregiões</h3><div class="barras-mini" style="margin-top:6px">${micros.map(([r, v]) => barra(`data-ir-micro="${txt(r.id)}"`, r.nome, v, maxM, METRICAS[M.metrica].fmt)).join("")}</div></div>` : ""}
@@ -2570,9 +3069,11 @@ function desenharPainelMapa() {
       <button class="btn btn-sec" id="mapa-exportar">Exportar este recorte (.xlsx)</button>
       <button class="btn btn-sec" id="mapa-nova">Fazer nova busca aqui</button>
     </div>`;
-  const origemMapa = () => ({ rot: "Mapa", href: location.hash || "#mapa", item: [micro ? microPorId.get(micro).nome : "RN", cod ? porCodigo.get(cod).nome : ""].filter(Boolean).join(" › ") });
-  $("#mapa-ver-tabela").onclick = () => detalharLeads({ manterFiltros: true, origem: origemMapa() });
-  $("#mapa-exportar").onclick = () => baixarXlsx(filtrar());
+  const origemMapa = () => ({ rot: "Mapa", href: location.hash || "#mapa", item: [micro ? microPorId.get(micro).nome : UF_ATUAL, cod ? porCodigo.get(cod).nome : ""].filter(Boolean).join(" › ") });
+  // Com leads de mais de um estado abertos, a tabela/exportação do mapa fica só com o estado da tela.
+  const variosEstados = new Set(W.leads.map((l) => l._uf || "RN")).size > 1;
+  $("#mapa-ver-tabela").onclick = () => detalharLeads({ manterFiltros: true, filtros: variosEstados ? { uf: UF_ATUAL } : {}, origem: origemMapa() });
+  $("#mapa-exportar").onclick = () => baixarXlsx(filtrar().filter(doEstadoAtual));
   $("#mapa-nova").onclick = () => preencherNova(cods.map((c) => porCodigo.get(c).nome));
   $("#mapa-painel").onclick = (ev) => {
     const b = ev.target.closest("[data-bairro]")?.dataset.bairro; if (b !== undefined) { F.bairro = F.bairro === b ? "" : b; return redesenharMapa(false); }
@@ -2590,6 +3091,7 @@ const MK = { metrica: "seg10k", nivel: "mun", ordem: { campo: "pop", sobe: false
 $("#mercado-metrica").innerHTML = Object.entries(METRICAS).map(([k, v]) => `<option value="${k}">${v.rot}</option>`).join("");
 $("#mercado-metrica").value = MK.metrica;
 async function abrirMercado() {
+  for (const sel of $$(".uf-seletor")) sel.value = UF_ATUAL;
   try { await prepararLeads(); } catch { /* só IBGE */ }
   const abertas = buscasAbertas();
   $("#mercado-origem").textContent = abertas.length ? `Segmento: ${W.segmento.termos.join(", ")} · ${abertas.length} busca(s)` : "Sem buscas abertas: só dados do IBGE";
@@ -2599,8 +3101,8 @@ function desenharMercado() {
   const base = filtrar({ geo: true }), agg = agregar(base), pesq = municipiosPesquisados();
   const rn = indicadoresRecorte(MUNS.map((m) => m.codigo), agg, pesq);
   const kpi = (rot, val, ctx, alvo) => `<a class="cartao kpi clicavel" href="#" data-mk-kpi="${alvo}"><span class="seta" aria-hidden="true">›</span><div class="rot">${rot}${aj(AJ_TXT[alvo])}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></a>`;
-  $("#kpis-mercado").innerHTML = kpi("População do RN", numero(rn.pop), "IBGE · Censo 2022", "pop") + kpi("PIB per capita (RN)", reais(rn.pibpc), "PIB 2022 ÷ Censo 2022 · calculado", "pibpc") +
-    kpi("Empresas (CEMPRE)", numero(rn.empresas), "IBGE · 2024", "empresas") + kpi("Leads do segmento", numero(rn.seg), `${rn.pesquisados} de 167 municípios pesquisados`, "seg") +
+  $("#kpis-mercado").innerHTML = kpi(`População ${estadoAtual().doEstado}`, numero(rn.pop), "IBGE · Censo 2022", "pop") + kpi(`PIB per capita (${UF_ATUAL})`, reais(rn.pibpc), "PIB 2022 ÷ Censo 2022 · calculado", "pibpc") +
+    kpi(`Empresas (CEMPRE · ${UF_ATUAL})`, numero(rn.empresas), "IBGE · 2024", "empresas") + kpi("Leads do segmento", numero(rn.seg), `${rn.pesquisados} de ${MUNS.length} municípios pesquisados`, "seg") +
     kpi("Leads por 10 mil hab.", num1(rn.seg10k), "nas cidades pesquisadas", "seg10k");
   const vals = MUNS.map((m) => valor(m.codigo, MK.metrica, agg, pesq)), cl = classes(vals);
   desenharSvg($("#mapa-mercado"), {
@@ -2707,12 +3209,26 @@ async function desenharGraficosMercado(agg, pesq) {
 }
 
 // ============================================================ ADMIN
-async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); }
+async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); carregarCarteiras(); }
+// Painel "Carteiras": leads por vendedor e por status, conversão (Cliente ÷ Contatado+Negociando+Cliente).
+async function carregarCarteiras() {
+  $("#carteiras-tabela").innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
+  try {
+    const { vendedores, dias } = await api("crm-lead", { acao: "carteiras" });
+    CRM.vendedores = vendedores.map((v) => ({ uid: v.uid, nome: v.nome }));
+    const pct = (x) => (x === null ? "–" : `${Math.round(x * 100)}%`);
+    $("#carteiras-tabela").innerHTML = vendedores.length ? `<thead><tr><th>Vendedor</th><th>Na carteira</th>${STATUS_CRM.filter(([k]) => k !== "novo").map(([, r]) => `<th>${r}</th>`).join("")}<th>Conversão</th></tr></thead><tbody>` +
+      vendedores.map((v) => `<tr data-carteira-uid="${txt(v.uid)}"><td class="principal-td" data-rot=""><b>${txt(v.nome)}</b></td><td class="num" data-rot="Na carteira">${numero(v.carteira)}</td>${STATUS_CRM.filter(([k]) => k !== "novo").map(([k, r]) => `<td class="num" data-rot="${r}">${numero(v.por_status[k] || 0)}</td>`).join("")}<td class="num" data-rot="Conversão">${pct(v.conversao)}</td></tr>`).join("") +
+      `</tbody><caption class="small muted" style="caption-side:bottom;text-align:left;padding:6px 8px">Sem contato há mais de ${dias} dias, o lead volta a ficar livre.</caption>`
+      : `<tbody><tr><td class="muted">Nenhum vendedor ainda.</td></tr></tbody>`;
+  } catch (e) { $("#carteiras-tabela").innerHTML = `<tbody><tr><td class="muted">${txt(e.message)}</td></tr></tbody>`; }
+}
+$("#carteiras-atualizar").onclick = carregarCarteiras;
 async function carregarUsuarios() {
   $("#u-tabela").innerHTML = `<tr><td><div class="esq" style="height:14px"></div></td></tr>`;
   try {
     const { usuarios, limite_padrao, config } = await api("admin-usuarios", { acao: "listar" });
-    if (config) { $("#cfg-cidades").value = config.max_cidades_busca; $("#cfg-consultas").value = config.max_consultas_busca; $("#cfg-consultas-dia").value = config.max_consultas_dia; }
+    if (config) { $("#cfg-cidades").value = config.max_cidades_busca; $("#cfg-consultas").value = config.max_consultas_busca; $("#cfg-consultas-dia").value = config.max_consultas_dia; $("#cfg-carteira").value = config.carteira_dias ?? 60; }
     const padraoConsultas = config?.max_consultas_dia ?? 300;
     $("#u-tabela").innerHTML = `<thead><tr><th>Usuário</th><th>Nome</th><th>Buscas hoje</th><th>Buscas (7 dias)</th><th>Leads (7 dias)</th><th>% WhatsApp</th><th>Limite/dia (padrão ${limite_padrao})</th><th>Consultas/dia (padrão ${padraoConsultas})</th><th></th></tr></thead><tbody>` +
       usuarios.map((u) => `<tr><td class="principal-td" data-rot=""><span style="overflow-wrap:anywhere">${txt(u.email)}</span> ${u.admin ? '<span class="pilula azul">admin</span>' : ""} ${u.removido ? '<span class="pilula bad">removido</span>' : ""}</td>
@@ -2729,8 +3245,9 @@ $("#cfg-salvar").onclick = async () => {
   const n = (id) => Number($(id).value);
   try {
     const { config } = await api("admin-usuarios", { acao: "definir_config", max_cidades_busca: n("#cfg-cidades"),
-      max_consultas_busca: n("#cfg-consultas"), max_consultas_dia: n("#cfg-consultas-dia") });
-    toast(`Configurações salvas: ${config.max_cidades_busca} cidades ou ${config.max_consultas_busca} consultas por busca; ${config.max_consultas_dia} consultas por dia.`, "ok");
+      max_consultas_busca: n("#cfg-consultas"), max_consultas_dia: n("#cfg-consultas-dia"), carteira_dias: n("#cfg-carteira") });
+    CRM.dias = config.carteira_dias;
+    toast(`Configurações salvas: ${config.max_cidades_busca} cidades ou ${config.max_consultas_busca} consultas por busca; ${config.max_consultas_dia} consultas por dia; carteira ${config.carteira_dias} dias.`, "ok");
     carregarUsuarios();
   } catch (e) { toast(e.message, "erro"); }
 };
@@ -2794,12 +3311,13 @@ async function carregarSaude() {
   } catch (e) { $("#saude").innerHTML = `<p class="small" style="color:var(--bad)">${txt(e.message)}</p>`; }
 }
 $("#saude-atualizar").onclick = carregarSaude;
-const pedidoRn = (simular) => ({ modo: "rn_inteiro", termos: $("#rn-termos").value, extrair_email: $("#rn-email").checked, agendar_noite: $("#rn-noite").checked, simular });
+const pedidoRn = (simular) => ({ modo: "rn_inteiro", uf: $("#rn-uf").value, termos: $("#rn-termos").value, extrair_email: $("#rn-email").checked, agendar_noite: $("#rn-noite").checked, simular });
 $("#rn-estimar").onclick = async () => {
   try { const r = await api("criar-busca", pedidoRn(true)); $("#msg-rn").textContent = `${r.consultas} consultas em ${r.lotes} lotes · tempo estimado ~${tempo(r.estimativa_seg)}. Confirme para enfileirar.`; $("#rn-confirmar").disabled = false; }
   catch (e) { $("#msg-rn").textContent = e.message; }
 };
-for (const id of ["#rn-termos", "#rn-email", "#rn-noite"]) $(id).oninput = () => ($("#rn-confirmar").disabled = true);
+for (const id of ["#rn-termos", "#rn-email", "#rn-noite", "#rn-uf"]) $(id).oninput = () => { $("#rn-confirmar").disabled = true; $("#rn-uf-rot").textContent = $("#rn-uf").value; };
+$("#rn-uf").onchange = () => { $("#rn-confirmar").disabled = true; $("#rn-uf-rot").textContent = $("#rn-uf").value; $("#msg-rn").textContent = ""; };
 $("#rn-confirmar").onclick = async () => {
   $("#rn-confirmar").disabled = true;
   try { const r = await api("criar-busca", pedidoRn(false)); toast(r.agendada_para ? `Estado inteiro agendado para ${dataHora(new Date(r.agendada_para))}.` : "Estado inteiro enfileirado.", "ok"); }
@@ -2807,7 +3325,8 @@ $("#rn-confirmar").onclick = async () => {
 };
 function desenharEstados() {
   const UFS = [["AL", "Alagoas"], ["BA", "Bahia"], ["CE", "Ceará"], ["MA", "Maranhão"], ["PB", "Paraíba"], ["PE", "Pernambuco"], ["PI", "Piauí"], ["RN", "Rio Grande do Norte"], ["SE", "Sergipe"]];
-  $("#estados").innerHTML = UFS.map(([uf, nome]) => `<span class="pilula ${uf === "RN" ? "ok" : ""}" title="${uf === "RN" ? "Ativo" : "Dados ainda não carregados"}">${uf === "RN" ? "✓ " : ""}${txt(nome)}${uf === "RN" ? "" : " · em breve"}</span>`).join("");
+  const ativo = (uf) => UFS_ATIVAS.includes(uf);
+  $("#estados").innerHTML = UFS.map(([uf, nome]) => `<span class="pilula ${ativo(uf) ? "ok" : ""}" data-uf-estado="${uf}" title="${ativo(uf) ? `Ativo · ${ESTADOS_UI[uf].MUNS.length} municípios` : "Dados ainda não carregados"}">${ativo(uf) ? "✓ " : ""}${txt(nome)}${ativo(uf) ? "" : " · em breve"}</span>`).join("");
 }
 
 // ============================================================ TOUR (primeiro acesso)

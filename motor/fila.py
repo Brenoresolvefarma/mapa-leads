@@ -199,23 +199,29 @@ def aplicar_disjuntor(vazias_seguidas, teve_leads, limite=3, vazia_conta=True):
     return vazias_seguidas, vazias_seguidas >= limite
 
 
-# População do Censo 2022 (dados/municipios_rn.json), para o disjuntor saber o porte da cidade.
+# População do Censo 2022 (dados/municipios_<uf>.json), para o disjuntor saber o porte da cidade.
 _POPULACAO = None
 CIDADE_GRANDE_ACIMA_DE = 20000  # aprovado pelo Breno (24/09)
+UFS_COM_DADOS = ("rn", "pb")  # PB ativada em 24/09
 
 
-def populacao_da_cidade(nome):
-    """População (Censo 2022) de um município do RN pelo nome; None se não achar."""
+def populacao_da_cidade(nome, uf=None):
+    """População (Censo 2022) de um município pelo nome e estado ("Natal", "RN"; ou "João Pessoa PB").
+    Sem estado: RN (buscas antigas). None se não achar."""
     global _POPULACAO
     if _POPULACAO is None:
-        caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dados", "municipios_rn.json")
-        try:
-            with open(caminho, encoding="utf-8") as arquivo:
-                dados = json.load(arquivo)
-            _POPULACAO = {tratamento.normalizar_nome(m["nome"]): m["populacao_2022"] for m in dados["municipios"]}
-        except (OSError, ValueError, KeyError):
-            _POPULACAO = {}
-    return _POPULACAO.get(tratamento.normalizar_nome(nome))
+        _POPULACAO = {}
+        for sigla in UFS_COM_DADOS:
+            caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dados", f"municipios_{sigla}.json")
+            try:
+                with open(caminho, encoding="utf-8") as arquivo:
+                    dados = json.load(arquivo)
+                for m in dados["municipios"]:
+                    _POPULACAO[(sigla.upper(), tratamento.normalizar_nome(m["nome"]))] = m["populacao_2022"]
+            except (OSError, ValueError, KeyError):
+                pass
+    uf = (uf or tratamento.uf_da_cidade(nome) or "RN").upper()
+    return _POPULACAO.get((uf, tratamento.cidade_sem_uf(nome)))
 
 
 def vazia_conta_para_disjuntor(consulta, falhou):
@@ -227,7 +233,7 @@ def vazia_conta_para_disjuntor(consulta, falhou):
     """
     if falhou or consulta.get("bairro"):
         return True
-    populacao = populacao_da_cidade(consulta.get("cidade"))
+    populacao = populacao_da_cidade(consulta.get("cidade"), consulta.get("uf"))
     return populacao is None or populacao > CIDADE_GRANDE_ACIMA_DE
 
 

@@ -171,8 +171,8 @@ try {
     await livro.xlsx.readFile(join(pasta, "t.xlsx"));
     const ws = livro.getWorksheet("Leads");
     confere(ws && livro.getWorksheet("Resumo"), "abas Leads e Resumo");
-    confere(ws.getRow(1).values.slice(1).join("|") === "Nome|Categoria|Cidade|Microrregião|Bairro|Endereço|Telefone|WhatsApp|Site|E-mail|Nota|Avaliações|No segmento|Link do Google Maps|Busca (termo)|Data da coleta", "colunas do xlsx");
-    confere(ws.views[0]?.state === "frozen" && ws.autoFilter === "A1:P3", "cabeçalho travado e filtro");
+    confere(ws.getRow(1).values.slice(1).join("|") === "Nome|Categoria|Cidade|Microrregião|Bairro|Endereço|Telefone|WhatsApp|Site|E-mail|Nota|Avaliações|No segmento|Link do Google Maps|Busca (termo)|Data da coleta|Status|Próximo contato|Última anotação|Vendedor", "colunas do xlsx");
+    confere(ws.views[0]?.state === "frozen" && ws.autoFilter === "A1:T3", "cabeçalho travado e filtro");
     confere(ws.getCell("A2").value === "Fictício A" && ws.getCell("H2").value?.hyperlink === "https://wa.me/5584900000001", "linha e link do WhatsApp");
     await p.selectOption("#f-cidade", ""); // o mapa acompanha o filtro da tabela: volta ao RN inteiro
   });

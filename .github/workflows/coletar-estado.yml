@@ -1,0 +1,39 @@
+# Coleta os dados oficiais do IBGE de um estado (municípios, regiões, malhas, indicadores, bairros) e faz commit
+# em dados/*_<uf>*.json na própria branch. Só dados públicos do IBGE — nada de leads.
+# Uso: Actions > Coletar dados de um estado > Run workflow (UF e, opcional, códigos IBGE das cidades por bairro).
+# Também roda sozinho quando o script muda numa branch claude/** (coleta da PB, ativada em 24/09).
+name: Coletar dados de um estado
+on:
+  workflow_dispatch:
+    inputs:
+      uf:
+        description: "Sigla do estado (ex.: PB)"
+        required: true
+        default: "PB"
+      bairros:
+        description: "Códigos IBGE das cidades buscadas por bairro, separados por vírgula"
+        required: false
+        default: "2507507,2504009"
+  push:
+    branches: ["claude/**"]
+    paths: [ferramentas/coletar_estado.py]
+permissions:
+  contents: write
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 ferramentas/coletar_estado.py
+        env:
+          UF: ${{ inputs.uf || 'PB' }}
+          BAIRROS: ${{ inputs.bairros || '2507507,2504009' }}
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dados/
+          git commit -m "Dados IBGE: ${UF_SIGLA} (municípios, regiões, malhas, indicadores, bairros)" || { echo "sem mudança"; exit 0; }
+          git pull -q --rebase origin "${GITHUB_REF_NAME}" && git push
+        env:
+          UF_SIGLA: ${{ inputs.uf || 'PB' }}
