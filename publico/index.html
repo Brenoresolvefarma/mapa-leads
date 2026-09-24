@@ -397,6 +397,22 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
 .confirmacao .caixa h2 { font-size:17px; } .confirmacao .caixa p { margin:8px 0 16px; }
 .confirmacao .acoes { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .btn-perigo-forte { background:var(--bad); color:#fff; }
+/* Mini-CRM */
+.status-lead { display:grid; grid-template-columns:repeat(auto-fit, minmax(64px, 1fr)); gap:4px; }
+.status-lead button { min-height:40px; border:1px solid var(--line-2); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-2); font-size:12px; font-weight:600; cursor:pointer; padding:0 4px; overflow-wrap:anywhere; }
+.status-lead button[aria-pressed="true"] { background:var(--brand); border-color:var(--brand); color:#fff; }
+.status-lead button[data-status="descartado"][aria-pressed="true"], .status-lead [data-folha-status="descartado"][aria-pressed="true"] { background:var(--bad); border-color:var(--bad); }
+.status-lead.motivos, .status-lead.folha-status { grid-template-columns:repeat(2, minmax(0,1fr)); }
+.status-lead.motivos button, .status-lead.folha-status button { min-height:48px; font-size:14px; }
+.info-crm { overflow-wrap:anywhere; }
+.na-carteira { padding:2px 0; }
+.crm-barra { display:flex; gap:6px; overflow-x:auto; padding:2px 0 6px; scrollbar-width:thin; }
+.crm-barra .btn { flex:none; }
+.crm-ficha { border:1px solid var(--line); border-radius:var(--r); padding:10px 12px; margin-bottom:12px; display:grid; gap:4px; }
+.historico { margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-2); display:grid; gap:2px; }
+.para-hoje { display:block; margin-bottom:12px; border-left:4px solid var(--brand); position:relative; text-decoration:none; color:inherit; }
+.para-hoje .val { font-size:22px; font-weight:700; }
+@media (max-width: 760px) { .status-lead button { min-height:44px; } }
 /* Liberar busca para vendedor (admin) */
 .caixa-buscas .linha-busca { flex-wrap:wrap; }
 .acoes-busca { display:flex; gap:6px; flex:none; flex-wrap:wrap; justify-content:flex-end; }
@@ -578,6 +594,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
         <div class="entre" style="margin:-4px 0 10px"><span class="small ink2">Os números contam os mesmos leads que aparecem ao clicar.</span>
           <div class="linha"><div class="segmentado" id="inicio-modo" aria-label="O que contar"><button data-modo="segmento" aria-pressed="true">No segmento</button><button data-modo="total">Ver total</button></div>
           <button type="button" class="info" aria-label="O que é isso?" data-ajuda="“No segmento” conta só os leads do segmento buscado e da cidade pedida (os filtros padrão de Meus leads). “Ver total” conta todos os leads coletados, sem repetidos.">i</button></div></div>
+        <a class="cartao para-hoje oculto" id="para-hoje" href="#" data-detalhe="parahoje"></a>
         <div class="grade-kpi" id="kpis"></div>
         <div class="duas">
           <div class="cartao"><div class="entre"><h2>Leads por dia</h2><span class="small muted" id="grafico-dias-nota">últimos 30 dias · horário de Natal</span></div>
@@ -689,6 +706,7 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
             <button class="btn btn-sec" id="abrir-filtros"><span data-icone="filtro"></span>Mais filtros <span class="pilula azul oculto" id="n-filtros"></span></button>
             </div>
           </div>
+          <div class="crm-barra" id="crm-barra" aria-label="Leads por status"></div>
           <div class="entre" style="margin:4px 0 8px">
             <div class="chips" id="chips"></div>
             <div class="linha">
@@ -798,9 +816,12 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
                   <div><label class="campo" for="cfg-cidades">Cidades por busca</label><input id="cfg-cidades" type="number" min="1" max="10000"></div>
                   <div><label class="campo" for="cfg-consultas">Consultas por busca</label><input id="cfg-consultas" type="number" min="1" max="10000"></div>
                   <div><label class="campo" for="cfg-consultas-dia">Consultas por dia (padrão)</label><input id="cfg-consultas-dia" type="number" min="1" max="10000"></div>
+                  <div><label class="campo" for="cfg-carteira">Carteira: dias sem contato até liberar</label><input id="cfg-carteira" type="number" min="1" max="3650"></div>
                 </div>
                 <p class="small ink2" style="margin:6px 0">Vendedor: no máximo X cidades OU Y consultas por busca (o que vier primeiro). Consultas por dia: dá para mudar por vendedor na tabela de usuários.</p>
                 <button class="btn btn-primario" id="cfg-salvar">Salvar configurações</button></div>
+              <div class="cartao" id="cartao-carteiras"><div class="entre"><h2>Carteiras <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Leads que cada vendedor marcou como Contatado, Negociando ou Cliente ficam na carteira dele (os outros veem 'Na carteira de…'). Descartado ou sem contato no prazo volta a ficar livre. Conversão = Clientes ÷ leads contatados (Contatado + Negociando + Cliente).">i</button></h2><button class="btn btn-sec btn-mini" id="carteiras-atualizar">Atualizar</button></div>
+                <div class="caixa-tabela" style="margin-top:8px"><table class="tabela vira-cartao" id="carteiras-tabela"></table></div></div>
               <div class="cartao"><h2>Estados ativos <button type="button" class="info" data-ajuda="Estados que aparecem para os vendedores. Por enquanto só o RN." aria-label="O que é isso?">i</button></h2><p class="small ink2" style="margin:6px 0">Por enquanto só o RN tem dados carregados (decisão do Breno). Os outros estados do Nordeste ficam prontos para ativar depois.</p><div id="estados" class="chips"></div></div>
             </div>
           </div>
@@ -840,13 +861,14 @@ svg path.micro { fill:none; stroke:var(--map-region); stroke-width:1.2px; stroke
   <div class="caixa"><h2 id="conf-titulo"></h2><p id="conf-texto" class="ink2"></p>
     <div class="acoes"><button class="btn btn-sec" id="conf-nao">Voltar</button><button class="btn btn-perigo-forte" id="conf-sim"></button></div></div>
 </div>
+<div id="folha-crm" class="tour confirmacao oculto" role="dialog" aria-modal="true" aria-labelledby="folha-titulo"><div class="caixa" id="folha-caixa"></div></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 <div id="balao" class="balao oculto" role="tooltip"></div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc, getDoc }
+import { getFirestore, connectFirestoreEmulator, collection, query, where, orderBy, limit, onSnapshot, doc, getDoc, getDocs }
   from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 // ============================================================ CONFIGURAÇÃO (um lugar só)
@@ -924,6 +946,31 @@ function noSegmento(lead, criterio) {
 }
 // </relevancia>
 
+// <crm> ---------------------------------------------------------- MINI-CRM E CARTEIRA (bloco puro)
+// Espelho de netlify/lib/logica.mjs (testes/crm.test.mjs confere que dão o mesmo resultado). Não usa nada de fora.
+const STATUS_CRM = [["novo", "Novo"], ["contatado", "Contatado"], ["negociando", "Negociando"], ["cliente", "Cliente"], ["descartado", "Descartado"]];
+const MOTIVOS_DESCARTE = [["sem_interesse", "Sem interesse"], ["fechou", "Fechou"], ["numero_errado", "Número errado"], ["outro", "Outro"]];
+const STATUS_DA_CARTEIRA = ["contatado", "negociando", "cliente"];
+const FATIAS_CRM = 16;
+const slugCrm = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+function chaveCrm(l) {
+  const id = String(l?.id_lugar ?? "").trim();
+  if (id) return `p_${id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)}`;
+  const tel = String(l?.telefone ?? "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+  if (tel) return `t_${tel}_${slugCrm(l?.nome)}`;
+  return `n_${slugCrm(l?.nome)}_${slugCrm(l?.cidade)}`;
+}
+function fatiaDe(chave) {
+  let h = 0;
+  for (const c of String(chave)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return String(h % FATIAS_CRM).padStart(2, "0");
+}
+function carteiraAtiva(entrada, agoraMs, dias = 60) {
+  if (!entrada || !entrada.uid || !STATUS_DA_CARTEIRA.includes(entrada.s)) return false;
+  return agoraMs - Number(entrada.ultimo || 0) <= dias * 86400000;
+}
+// </crm>
+
 // ============================================================ UTILIDADES
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -958,6 +1005,7 @@ const ICONES = {
   admin: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
   whats: '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 2 2.5 4.2 4.5 4.5l1.2-1.2 2 .8-.5 1.8c-3.6.4-8-4-7.6-7.6l1.8-.5.8 2z"/>',
   fone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   fechar: '<path d="M6 6l12 12M18 6 6 18"/>',
   copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
   link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
@@ -1256,8 +1304,70 @@ function ouvirDados() {
   }
   pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...(d.data() || {}), lidoEm: Date.now() }; desenharStatus(); if (paginaAtual === "admin") desenharFilaViva(); });
   carregarCota();
+  carregarCrm().then(() => { if (paginaAtual === "leads") { desenharTabela(); desenharCrmBarra(); } if (paginaAtual === "inicio") desenharParaHoje(); });
 }
 let buscasProprias = [], buscasLiberadas = [];
+// ============================================================ MINI-CRM (status por vendedor + carteira)
+// Vendedor: lê crm/{uid}__00..15 (os dele) e carteira/00..15 (de quem é cada lugar) — 32 leituras por visita.
+// Admin: todos os crm/* (vê os status de todos) + carteira. Gravação só pela Function /api/crm-lead.
+const CRM = { meu: new Map(), todos: new Map(), carteira: new Map(), dias: 60, pronto: null, vendedores: null };
+const rotuloStatus = (s) => (STATUS_CRM.find(([k]) => k === s) || [s, s])[1];
+const rotuloMotivo = (m) => (MOTIVOS_DESCARTE.find(([k]) => k === m) || [m, m])[1];
+function carregarCrm() {
+  if (CRM.pronto) return CRM.pronto;
+  const fatias = Array.from({ length: FATIAS_CRM }, (_, i) => String(i).padStart(2, "0"));
+  CRM.pronto = (async () => {
+    const [cart, meus, geral] = await Promise.all([
+      Promise.all(fatias.map((f) => getDoc(doc(db, `carteira/${f}`)))),
+      ehAdmin ? getDocs(collection(db, "crm")).then((q) => q.docs) : Promise.all(fatias.map((f) => getDoc(doc(db, `crm/${usuario.uid}__${f}`)))),
+      getDoc(doc(db, "config/geral")),
+    ]);
+    const dias = geral.data()?.carteira_dias;
+    CRM.dias = Number.isInteger(dias) && dias >= 1 ? dias : 60;
+    for (const d of cart) for (const [k, e] of Object.entries(d.data()?.leads || {})) CRM.carteira.set(k, e);
+    for (const d of meus) {
+      const dono = d.data()?.dono_uid || d.id.split("__")[0];
+      for (const [k, r] of Object.entries(d.data()?.leads || {})) {
+        if (dono === usuario.uid) CRM.meu.set(k, r);
+        if (ehAdmin) { const l = CRM.todos.get(k) || []; l.push({ ...r, _uid: dono }); CRM.todos.set(k, l); }
+      }
+    }
+  })().catch((e) => { CRM.pronto = null; console.warn("CRM indisponível:", e.code || e.message); });
+  return CRM.pronto;
+}
+/** Situação do lead para quem está vendo: registro (status, anotação, próximo, histórico) e dono da carteira. */
+function crmDe(l) {
+  const k = chaveCrm(l), e = CRM.carteira.get(k);
+  const dono = carteiraAtiva(e, Date.now(), CRM.dias) ? e : null;
+  let reg = CRM.meu.get(k) || null;
+  if (ehAdmin) { // admin vê o do dono da carteira ou, sem carteira, o mais recente de qualquer vendedor
+    const todos = CRM.todos.get(k) || [];
+    reg = (dono && todos.find((r) => r._uid === dono.uid)) || todos.sort((a, b) => b.em - a.em)[0] || null;
+  }
+  const bloqueado = !ehAdmin && !!dono && dono.uid !== usuario.uid;
+  return { k, reg, dono, bloqueado, s: bloqueado ? "carteira" : reg?.s || "novo" };
+}
+const hojeFortaleza = () => diaFortaleza();
+const paraHoje = (l) => { const c = crmDe(l); return !c.bloqueado && !!c.reg?.p && c.reg.p <= hojeFortaleza() && c.reg.s !== "descartado"; };
+const dataBr = (d) => (d ? d.split("-").reverse().join("/") : "");
+async function salvarStatus(l, { status, motivo, anotacao, proximo }) {
+  const c = crmDe(l);
+  try {
+    const r = await api("crm-lead", { acao: "status", busca_id: (l._buscas || [l._busca])[0], chave: c.k, status, motivo, anotacao, proximo });
+    CRM.meu.set(c.k, r.registro);
+    if (r.carteira) CRM.carteira.set(c.k, r.carteira); else CRM.carteira.delete(c.k);
+    toast(`${rotuloStatus(status)}${status === "descartado" ? ` · ${rotuloMotivo(motivo)}` : ""} — salvo.`, "ok");
+  } catch (e) {
+    toast(e.message, "erro");
+    if (/carteira de/.test(e.message)) { const d = await getDoc(doc(db, `carteira/${fatiaDe(c.k)}`)); const x = d.data()?.leads?.[c.k]; if (x) CRM.carteira.set(c.k, x); }
+  }
+  aposMudarCrm(l);
+}
+function aposMudarCrm(l) {
+  if (paginaAtual === "leads") { desenharTabela(); desenharCrmBarra(); }
+  if (l && !$("#ficha").classList.contains("oculto") && $("#ficha").dataset.chave === chaveCrm(l)) abrirFicha(l);
+  if (paginaAtual === "inicio") desenharParaHoje();
+}
 function juntarBuscas() {
   const vistas = new Set();
   const ms = (b) => b.criada_em?.toMillis?.() || 0;
@@ -1362,8 +1472,24 @@ async function contarRecorte(lista) {
   return { n: vale.length, whats: vale.filter((l) => l.whatsapp_link).length, todos: leads.length };
 }
 let vezInicio = 0, serieInicio = [];
+// "Para hoje: X contatos" (vendedor): próximo contato hoje ou atrasado, fora os descartados e os da carteira de outro.
+function desenharParaHoje() {
+  const el = $("#para-hoje");
+  if (ehAdmin) return el.classList.add("oculto");
+  const hoje = hojeFortaleza(), agora = Date.now();
+  let n = 0, atrasados = 0;
+  for (const [k, r] of CRM.meu) {
+    const e = CRM.carteira.get(k);
+    if (!r.p || r.p > hoje || r.s === "descartado" || (carteiraAtiva(e, agora, CRM.dias) && e.uid !== usuario.uid)) continue;
+    n++; if (r.p < hoje) atrasados++;
+  }
+  el.classList.remove("oculto");
+  el.innerHTML = `<span class="seta" aria-hidden="true">›</span><div class="rot">${icone("relogio")} Para hoje${aj("Leads com o próximo contato marcado para hoje ou já atrasado. Toque para abrir a lista.")}</div>
+    <div class="val num">${numero(n)} ${n === 1 ? "contato" : "contatos"}</div><div class="ctx">${atrasados ? `${numero(atrasados)} atrasado(s)` : n ? "tudo em dia" : "nenhum contato marcado para hoje"}</div>`;
+}
 async function desenharInicio() {
   const vez = ++vezInicio;
+  desenharParaHoje();
   for (const b of $$("#inicio-modo button")) b.setAttribute("aria-pressed", String((b.dataset.modo === "total") === INICIO.total));
   desenharUltimas();
   const ativas = buscas.filter((b) => ["na_fila", "rodando"].includes(b.status)).length;
@@ -1470,6 +1596,7 @@ function minha(b) { return !b._liberada; }
 const DETALHES = {
   total: () => detalharLeads({ ids: idsComLeads(minha), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
   semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => minha(b) && buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
+  parahoje: () => detalharLeads({ ids: idsComLeads(), filtros: { paraHoje: true, segmento: false, pedida: false }, origem: { rot: "Início", href: "#inicio", item: "Para hoje" } }),
   whats: () => detalharLeads({ ids: idsComLeads(minha), filtros: { whats: true, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads com WhatsApp" } }),
   ativas: () => $("#ultimas").scrollIntoView({ behavior: "smooth", block: "center" }),
   cota: () => { location.hash = "#nova"; },
@@ -1814,7 +1941,7 @@ function municipiosPesquisados() {
 
 // ============================================================ LEADS: filtros (compartilhados com o Mapa)
 const F = { texto: "", micro: "", cidade: "", bairro: "", segmento: true, pedida: true, semcidade: false, termo: "", whats: false, fixo: false, site: false,
-  semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", cats: new Set(), colunas: [], ordem: { campo: "nome", sobe: true }, pagina: 0, sel: new Set() };
+  semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", status: "", paraHoje: false, cats: new Set(), colunas: [], ordem: { campo: "nome", sobe: true }, pagina: 0, sel: new Set() };
 // Período de uma busca = dia (Natal) em que terminou (é quando o motor soma as estatísticas); sem fim, o dia em que foi criada.
 const diaDaBusca = (b) => { const d = (b?.finalizada_em || b?.criada_em)?.toDate?.(); return d ? diaFortaleza(d) : ""; };
 const diasAtras = (n) => diaFortaleza(new Date(Date.now() - n * 86400000));
@@ -1843,13 +1970,15 @@ function passa(l, ig = {}) {
   if (F.origem && !(l._buscas || []).includes(F.origem)) return false;
   if (F.periodo && !(l._buscas || []).some((id) => buscaNoPeriodo(buscas.find((b) => b.id === id)))) return false;
   if (!ig.categoria && F.categoria && categoriaDo(l) !== F.categoria) return false;
+  if (!ig.status && F.status && crmDe(l).s !== F.status) return false;
+  if (!ig.status && F.paraHoje && !paraHoje(l)) return false;
   return true;
 }
 const filtrar = (ig) => W.leads.filter((l) => passa(l, ig));
 /** Filtros "limpos": só os dois padrões ligados (segmento e cidade pedida). */
 function limparTodosFiltros() {
   Object.assign(F, { texto: "", micro: "", cidade: "", bairro: "", segmento: true, pedida: true, semcidade: false, termo: "", whats: false, fixo: false, site: false,
-    semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", pagina: 0 });
+    semsite: false, insta: false, notaMin: 0, avalMin: 0, origem: "", periodo: null, categoria: "", status: "", paraHoje: false, pagina: 0 });
   F.cats.clear(); F.sel.clear();
 }
 /**
@@ -1900,7 +2029,7 @@ function desenharFiltrosLeads() {
   if (F.cidade && !cidades.some(([c]) => c === F.cidade)) $("#f-cidade").insertAdjacentHTML("beforeend", `<option value="${txt(F.cidade)}">${txt(F.cidade)} (0)</option>`);
   $("#f-cidade").value = F.cidade;
   $("#f-texto").value = F.texto; $("#f-segmento").checked = F.segmento; $("#f-pedida").checked = F.pedida;
-  desenharChips(); desenharSegmentoInfo(); desenharTabela(); desenharVisoes();
+  desenharChips(); desenharSegmentoInfo(); desenharTabela(); desenharVisoes(); desenharCrmBarra();
   if (!$("#gaveta-filtros").classList.contains("oculto")) desenharGavetaFiltros();
 }
 $("#f-texto").oninput = () => { F.texto = $("#f-texto").value; F.pagina = 0; desenharFiltrosLeads(); };
@@ -1908,6 +2037,22 @@ $("#f-micro").onchange = () => { F.micro = $("#f-micro").value; F.cidade = ""; F
 $("#f-cidade").onchange = () => { F.cidade = $("#f-cidade").value; F.bairro = ""; F.pagina = 0; desenharFiltrosLeads(); };
 $("#f-segmento").onchange = () => { F.segmento = $("#f-segmento").checked; F.pagina = 0; desenharFiltrosLeads(); };
 $("#f-pedida").onchange = () => { F.pedida = $("#f-pedida").checked; F.pagina = 0; desenharFiltrosLeads(); };
+// Contador por status (clicável = filtra) + aba "Para hoje" (próximo contato hoje ou atrasado).
+function desenharCrmBarra() {
+  const base = filtrar({ status: true });
+  const n = contar(base, (l) => crmDe(l).s), hoje = base.filter(paraHoje).length;
+  const botao = (k, rot, qtd) => `<button class="btn btn-mini ${F.status === k && !F.paraHoje ? "btn-primario" : "btn-sec"}" data-crm-status="${k}" aria-pressed="${F.status === k && !F.paraHoje}">${rot} <b class="num">${numero(qtd)}</b></button>`;
+  $("#crm-barra").innerHTML = `<button class="btn btn-mini ${F.paraHoje ? "btn-primario" : "btn-sec"} aba-hoje" data-crm-hoje aria-pressed="${F.paraHoje}">${icone("relogio")} Para hoje <b class="num">${numero(hoje)}</b></button>` +
+    STATUS_CRM.map(([k, rot]) => botao(k, rot, n.get(k) || 0)).join("") +
+    (n.get("carteira") ? botao("carteira", "Na carteira de outro", n.get("carteira")) : "");
+}
+$("#crm-barra").onclick = (ev) => {
+  const b = ev.target.closest("[data-crm-status], [data-crm-hoje]");
+  if (!b) return;
+  if (b.dataset.crmHoje !== undefined) { F.paraHoje = !F.paraHoje; F.status = ""; }
+  else { const k = b.dataset.crmStatus; F.status = F.status === k && !F.paraHoje ? "" : k; F.paraHoje = false; }
+  F.pagina = 0; desenharFiltrosLeads();
+};
 const ROTULOS_FILTRO = { whats: "Tem WhatsApp", fixo: "Tem telefone fixo", site: "Tem site", semsite: "Sem site", insta: "Tem Instagram", semcidade: "Mostrando sem cidade" };
 function filtrosAtivos() {
   const a = [];
@@ -1922,6 +2067,8 @@ function filtrosAtivos() {
   if (F.notaMin) a.push([`Nota ≥ ${String(F.notaMin).replace(".", ",")}`, "notaMin"]);
   if (F.avalMin) a.push([`≥ ${F.avalMin} avaliações`, "avalMin"]);
   if (F.origem) a.push(["Uma busca", "origem"]);
+  if (F.status) a.push([`Status: ${F.status === "carteira" ? "na carteira de outro" : rotuloStatus(F.status)}`, "status"]);
+  if (F.paraHoje) a.push(["Para hoje", "paraHoje"]);
   if (F.periodo) a.push([rotuloPeriodo(F.periodo), "periodo"]);
   if (F.categoria) a.push([`Categoria: ${F.categoria}`, "categoria"]);
   if (F.cats.size) a.push([`${F.cats.size} categoria(s) escondida(s)`, "cats"]);
@@ -2245,6 +2392,19 @@ const COLUNAS = [
   { id: "termo", rot: "Termo", campos: ["termo_que_encontrou"], html: (l) => `<span class="small">${txt(l.termo_que_encontrou)}</span>` },
 ];
 const POR_PAGINA = 100;
+// Cartão (celular): status em botões grandes (um toque), próximo contato/anotação; lead na carteira de outro vendedor
+// = etiqueta "Na carteira de <nome>", sem WhatsApp/Ligar e sem status.
+function htmlCrmCartao(l, i) {
+  const c = crmDe(l);
+  if (c.bloqueado) return `<div class="na-carteira"><span class="pilula warn">Na carteira de ${txt(c.dono.nome)}</span></div>`;
+  const contato = link(l.whatsapp_link) || l.telefone ? `<div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats btn-grande" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener" data-contato="${i}">${icone("whats")} WhatsApp</a>` : ""}
+    ${l.telefone ? `<a class="btn btn-sec btn-grande" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}" data-contato="${i}">${icone("fone")} Ligar</a>` : ""}</div>` : "";
+  const info = [c.reg?.p ? `${c.reg.p <= hojeFortaleza() ? "⏰ " : ""}Próximo: ${dataBr(c.reg.p)}` : "", c.reg?.n ? `“${c.reg.n}”` : "",
+    ehAdmin && c.dono ? `Carteira: ${c.dono.nome}` : ehAdmin && c.reg?.h?.[0]?.u ? `por ${c.reg.h[0].u}` : ""].filter(Boolean);
+  const status = ehAdmin ? `<div class="linha"><span class="pilula ${c.s === "novo" ? "" : "azul"}">${txt(rotuloStatus(c.s))}</span></div>`
+    : `<div class="status-lead" role="group" aria-label="Status do lead">${STATUS_CRM.map(([k, rot]) => `<button type="button" data-status="${k}" data-i="${i}" aria-pressed="${c.s === k}">${rot}</button>`).join("")}</div>`;
+  return `${contato}${status}${info.length ? `<div class="small ink2 info-crm">${txt(info.join(" · "))}</div>` : ""}`;
+}
 let visiveis = [];
 function desenharTabela() {
   const { campo, sobe } = F.ordem, numerico = ["nota", "qtd_avaliacoes"].includes(campo);
@@ -2265,8 +2425,7 @@ function desenharTabela() {
       <div class="cidade-lead">${icone("pin")}<span>${txt([l.cidade || "sem cidade", l.bairro].filter(Boolean).join(" · "))}</span></div>
       <div class="cat-lead">${txt(l.categoria)}</div></div>
     ${l.nota ? `<div class="num small" style="flex:none"><span class="estrela">★</span> ${String(l.nota).replace(".", ",")}</div>` : ""}</div>
-    ${link(l.whatsapp_link) || l.telefone ? `<div class="acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats btn-grande" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : ""}
-    ${l.telefone ? `<a class="btn btn-sec btn-grande" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : ""}</div>` : ""}</div>`).join("");
+    ${htmlCrmCartao(l, F.pagina * POR_PAGINA + i)}</div>`).join("");
   $("#paginas").innerHTML = paginas > 1 ? `<button class="btn btn-sec btn-mini" data-pag="-1" ${F.pagina ? "" : "disabled"}>← Anterior</button><span class="small muted">página ${F.pagina + 1} de ${paginas}</span><button class="btn btn-sec btn-mini" data-pag="1" ${F.pagina < paginas - 1 ? "" : "disabled"}>Próxima →</button>` : "";
   $("#n-sel").textContent = F.sel.size ? `${F.sel.size} selecionado(s)` : "";
   $("#exportar-sel").classList.toggle("oculto", !F.sel.size);
@@ -2281,6 +2440,48 @@ $("#tabela-leads thead").onclick = (ev) => {
   F.ordem = { campo, sobe: F.ordem.campo === campo ? !F.ordem.sobe : !["nota", "qtd_avaliacoes"].includes(campo) };
   desenharTabela();
 };
+// Status em um toque (Descartado pede o motivo); depois de tocar em WhatsApp/Ligar, "Como foi?".
+document.addEventListener("click", (ev) => {
+  const st = ev.target.closest("#cartoes [data-status], #ficha [data-status]");
+  if (st) {
+    ev.preventDefault(); ev.stopPropagation();
+    const l = st.closest("#ficha") ? leadDaFicha : visiveis[Number(st.dataset.i)];
+    if (!l) return;
+    if (st.dataset.status === "descartado") return abrirFolhaCrm(l, { modo: "descarte" });
+    const extra = st.closest("#ficha") ? { anotacao: $("#ficha-nota")?.value.trim() || undefined, proximo: $("#ficha-proximo")?.value ?? undefined } : {};
+    return salvarStatus(l, { status: st.dataset.status, ...extra });
+  }
+  const ct = ev.target.closest("#cartoes [data-contato], #ficha [data-contato]");
+  if (ct && !ehAdmin) {
+    const l = ct.closest("#ficha") ? leadDaFicha : visiveis[Number(ct.dataset.contato)];
+    if (l) setTimeout(() => abrirFolhaCrm(l, { modo: "comofoi" }), 350); // o link abre o WhatsApp/discador; a pergunta fica esperando a volta
+  }
+}, true);
+let leadDaFicha = null;
+// Folha de baixo do CRM: "Como foi?" (status em botões + anotação + próximo contato) e motivo do descarte.
+function abrirFolhaCrm(l, { modo }) {
+  const c = crmDe(l);
+  if (c.bloqueado) return;
+  const descarte = modo === "descarte";
+  $("#folha-caixa").innerHTML = `<h2 id="folha-titulo">${descarte ? "Descartar lead" : "Como foi?"}</h2><p class="small ink2" style="margin:4px 0 10px">${pii(l.nome || "(sem nome)")}</p>
+    ${descarte ? `<p class="small" style="margin:0 0 6px">Motivo:</p><div class="status-lead motivos">${MOTIVOS_DESCARTE.map(([k, rot]) => `<button type="button" data-motivo="${k}">${rot}</button>`).join("")}</div>`
+      : `<div class="status-lead folha-status">${STATUS_CRM.filter(([k]) => k !== "novo").map(([k, rot]) => `<button type="button" data-folha-status="${k}" aria-pressed="${c.s === k}">${rot}</button>`).join("")}</div>`}
+    <label class="campo" for="folha-nota" style="margin-top:10px">Anotação (opcional)</label><input id="folha-nota" type="text" maxlength="500" placeholder="ex.: ligar sexta" value="">
+    ${descarte ? "" : `<label class="campo" for="folha-proximo" style="margin-top:8px">Próximo contato em</label><input id="folha-proximo" type="date" value="${txt(c.reg?.p || "")}">`}
+    <div class="acoes" style="margin-top:12px"><button class="btn btn-sec" data-folha-fechar>${descarte ? "Voltar" : "Agora não"}</button></div>`;
+  const folha = $("#folha-crm");
+  folha.classList.remove("oculto");
+  const fim = () => { folha.classList.add("oculto"); folha.onclick = null; };
+  folha.onclick = (ev) => {
+    if (ev.target === folha || ev.target.closest("[data-folha-fechar]")) return fim();
+    const s = ev.target.closest("[data-folha-status]")?.dataset.folhaStatus, m = ev.target.closest("[data-motivo]")?.dataset.motivo;
+    if (s === "descartado") return abrirFolhaCrm(l, { modo: "descarte" });
+    if (!s && !m) return;
+    const anotacao = $("#folha-nota").value.trim() || undefined, proximo = $("#folha-proximo") ? $("#folha-proximo").value : undefined;
+    fim();
+    salvarStatus(l, m ? { status: "descartado", motivo: m, anotacao } : { status: s, anotacao, proximo });
+  };
+}
 for (const el of [$("#tabela-leads tbody"), $("#cartoes")]) {
   el.onclick = (ev) => {
     const s = ev.target.dataset?.sel;
@@ -2322,8 +2523,39 @@ $("#visoes").onchange = () => {
 };
 
 // ============================================================ FICHA DO LEAD (painel lateral)
+// Bloco do CRM na ficha: status em botões, anotação, próximo contato e histórico ("23/09 · Flávio · Contatado · ligar sexta").
+function htmlCrmFicha(l, c) {
+  const hist = (c.reg?.h || []).map((h) => { const d = new Date(h.d); const dia = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return `<li>${txt([dia, h.u, rotuloStatus(h.s) + (h.m ? ` (${rotuloMotivo(h.m)})` : ""), h.n, h.p ? `próximo ${dataBr(h.p)}` : ""].filter(Boolean).join(" · "))}</li>`; }).join("");
+  if (c.bloqueado) return `<div class="crm-ficha"><span class="pilula warn">Na carteira de ${txt(c.dono.nome)}</span><p class="small muted" style="margin:6px 0 0">Outro vendedor já está atendendo este lugar. O admin pode transferir.</p></div>`;
+  const transferir = ehAdmin ? `<div class="linha" style="margin-top:8px"><select id="transferir-para" aria-label="Transferir para"><option value="">Transferir para…</option>${(CRM.vendedores || []).map((v) => `<option value="${txt(v.uid)}">${txt(v.nome)}</option>`).join("")}</select><button class="btn btn-sec btn-mini" id="transferir-btn">Transferir</button></div>` : "";
+  return `<div class="crm-ficha">
+    <div class="entre"><b>Status</b>${c.dono ? `<span class="small muted">Carteira: ${txt(c.dono.nome)}</span>` : ""}</div>
+    ${ehAdmin ? `<p style="margin:4px 0"><span class="pilula ${c.s === "novo" ? "" : "azul"}">${txt(rotuloStatus(c.s))}</span></p>`
+      : `<div class="status-lead" role="group" aria-label="Status do lead">${STATUS_CRM.map(([k, rot]) => `<button type="button" data-status="${k}" aria-pressed="${c.s === k}">${rot}</button>`).join("")}</div>
+    <label class="campo" for="ficha-nota" style="margin-top:8px">Anotação</label><input id="ficha-nota" type="text" maxlength="500" value="${txt(c.reg?.n || "")}" placeholder="ex.: ligar sexta">
+    <label class="campo" for="ficha-proximo" style="margin-top:6px">Próximo contato em</label><input id="ficha-proximo" type="date" value="${txt(c.reg?.p || "")}">
+    <button class="btn btn-sec btn-mini" id="ficha-salvar-nota" style="margin-top:6px">Salvar anotação e data</button>`}
+    ${transferir}
+    ${hist ? `<p class="small muted" style="margin:10px 0 2px">Histórico</p><ul class="historico">${hist}</ul>` : ""}</div>`;
+}
+document.addEventListener("click", async (ev) => {
+  if (ev.target.closest("#ficha-salvar-nota") && leadDaFicha) {
+    const c = crmDe(leadDaFicha);
+    return salvarStatus(leadDaFicha, { status: c.reg?.s || "novo", motivo: c.reg?.m || undefined, anotacao: $("#ficha-nota").value.trim() || undefined, proximo: $("#ficha-proximo").value });
+  }
+  if (ev.target.closest("#transferir-btn") && leadDaFicha) {
+    const para = $("#transferir-para").value;
+    if (!para) return toast("Escolha o vendedor.", "erro");
+    const c = crmDe(leadDaFicha), nome = CRM.vendedores?.find((v) => v.uid === para)?.nome || "o vendedor";
+    if (!(await confirmar({ titulo: "Transferir lead", texto: `Passar este lead para a carteira de ${nome}?`, sim: "Sim, transferir" }))) return;
+    try { const r = await api("crm-lead", { acao: "transferir", chave: c.k, para_uid: para }); CRM.carteira.set(c.k, r.carteira); CRM.pronto = null; CRM.meu.clear(); CRM.todos.clear(); await carregarCrm(); toast(`Lead transferido para ${nome}.`, "ok"); aposMudarCrm(leadDaFicha); }
+    catch (e) { toast(e.message, "erro"); }
+  }
+});
 async function abrirFicha(l) {
   if (!l) return;
+  if (ehAdmin && !CRM.vendedores) api("crm-lead", { acao: "carteiras" }).then((r) => { CRM.vendedores = r.vendedores.map((v) => ({ uid: v.uid, nome: v.nome })); if (leadDaFicha === l) abrirFicha(l); }).catch(() => {});
   const c = l._coord;
   const campos = [["Categoria", txt(l.categoria)], ["Todas as categorias", txt((l.categorias || []).join(", "))], ["No segmento", txt(l.no_segmento)], ["Telefone", pii(l.telefone)], ["E-mail", pii(l.email)],
     ["Endereço", pii(l.endereco)], ["Bairro", txt(l.bairro)],
@@ -2332,12 +2564,15 @@ async function abrirFicha(l) {
     ["Microrregião", l._micro ? `<a href="#mapa/${slug(l.microrregiao)}">${txt(l.microrregiao)} ›</a>` : ""], ["Região imediata", txt(l.regiao_imediata)],
     ["Nota", l.nota ? `${String(l.nota).replace(".", ",")} (${numero(l.qtd_avaliacoes)} avaliações)` : ""], ["Site", l.site ? pii(l.site) : ""], ["Instagram", l.instagram ? pii(l.instagram) : ""],
     ["Encontrado por", txt(l.termo_que_encontrou)], ["Cidade pedida", txt(l.cidade_buscada)], ["Cidade confere", txt(l.cidade_confere)]];
+  leadDaFicha = l;
+  const cr = crmDe(l);
+  $("#ficha").dataset.chave = cr.k;
   $("#ficha").innerHTML = `<div class="painel-cab"><div style="flex:1;min-width:0"><div class="small muted">Ficha do lead</div><h2 id="ficha-nome" style="font-size:18px">${pii(l.nome || "(sem nome)")}</h2></div>
     <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>
-    <div class="painel-corpo"><dl class="dados">${campos.filter(([, v]) => v && v !== '<span class="pii"></span>').map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+    <div class="painel-corpo">${htmlCrmFicha(l, cr)}<dl class="dados">${campos.filter(([, v]) => v && v !== '<span class="pii"></span>').map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
     ${c ? `<div class="mini-mapa" id="mini-mapa"></div><p class="fonte">Localização do Google Maps. Mapa: © OpenStreetMap</p>` : `<p class="fonte">Sem coordenadas deste lugar.</p>`}</div>
-    <div class="painel-acoes">${link(l.whatsapp_link) ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener">${icone("whats")} WhatsApp</a>` : `<span></span>`}
-    ${l.telefone ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}">${icone("fone")} Ligar</a>` : `<span></span>`}
+    <div class="painel-acoes">${link(l.whatsapp_link) && !cr.bloqueado ? `<a class="btn btn-whats" href="${link(l.whatsapp_link)}" target="_blank" rel="noopener" data-contato="f">${icone("whats")} WhatsApp</a>` : `<span></span>`}
+    ${l.telefone && !cr.bloqueado ? `<a class="btn btn-sec" href="tel:${txt(String(l.telefone).replace(/\D/g, ""))}" data-contato="f">${icone("fone")} Ligar</a>` : `<span></span>`}
     ${link(l.link_maps) ? `<a class="btn btn-sec" href="${link(l.link_maps)}" target="_blank" rel="noopener">${icone("mapa")} Google Maps</a>` : `<span></span>`}
     <button class="btn btn-sec" id="copiar-dados">${icone("copiar")} Copiar dados</button>
     <button class="btn btn-primario so-celular fechar-baixo" data-fechar>Fechar</button></div>`;
@@ -2409,7 +2644,9 @@ function baixarCsv(lista) {
 // ---- Planilha .xlsx pronta para usar (pedido do Breno, 24/09): aba "Leads" formatada + aba "Resumo".
 // Só dados do Google Maps (nada de sócios nem outros dados pessoais — LGPD). O .csv continua simples.
 const COLUNAS_XLSX = ["Nome", "Categoria", "Cidade", "Microrregião", "Bairro", "Endereço", "Telefone", "WhatsApp", "Site", "E-mail",
-  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta"];
+  "Nota", "Avaliações", "No segmento", "Link do Google Maps", "Busca (termo)", "Data da coleta",
+  // Mini-CRM (24/09): status de quem exporta (admin: o do dono da carteira), próximo contato, última anotação e vendedor.
+  "Status", "Próximo contato", "Última anotação", "Vendedor"];
 const LARGURA_MAX = { "Endereço": 45, "Categoria": 32, "Nome": 42 }; // o resto: até 30
 const AZUL_MARCA = "FF1F5FD6", ZEBRA = "FFF3F6FB", AZUL_LINK = "FF1F5FD6";
 /** Telefone limpo: (84) 99999-9999 (celular) ou (84) 3333-3333 (fixo); outro formato fica como veio. */
@@ -2438,7 +2675,14 @@ function linhasXlsx(lista) {
     telefonePadrao(l.telefone), link(l.whatsapp_link, "Abrir WhatsApp"), link(l.site || l.instagram, "Abrir site"), l.email || "",
     typeof l.nota === "number" && l.nota > 0 ? l.nota : "", typeof l.qtd_avaliacoes === "number" ? l.qtd_avaliacoes : "",
     l.no_segmento === "sim" ? "Sim" : "Não", link(l.link_maps, "Ver no mapa"), l.termo_que_encontrou || "", dataDaColeta(l),
+    ...colunasCrmXlsx(l),
   ]);
+}
+function colunasCrmXlsx(l) {
+  const c = crmDe(l);
+  const status = c.bloqueado ? `Na carteira de ${c.dono.nome}` : rotuloStatus(c.reg?.s || "novo") + (c.reg?.s === "descartado" && c.reg?.m ? ` (${rotuloMotivo(c.reg.m)})` : "");
+  const prox = c.reg?.p && !c.bloqueado ? (([a, m, d]) => new Date(Date.UTC(a, m - 1, d)))(c.reg.p.split("-").map(Number)) : "";
+  return [status, prox, c.bloqueado ? "" : c.reg?.n || "", c.dono?.nome || c.reg?.h?.[0]?.u || ""];
 }
 function estiloCabecalho(linha) {
   linha.eachCell((c) => {
@@ -2449,7 +2693,7 @@ function estiloCabecalho(linha) {
   linha.height = 20;
 }
 async function montarXlsx(lista) {
-  await carregarScript(CDN.exceljs);
+  await Promise.all([carregarScript(CDN.exceljs), carregarCrm()]);
   const livro = new window.ExcelJS.Workbook();
   livro.creator = "MapaLeads";
   const linhas = linhasXlsx(lista);
@@ -2465,12 +2709,13 @@ async function montarXlsx(lista) {
   ws.getColumn(11).numFmt = "0.0";
   ws.getColumn(12).numFmt = "0";
   ws.getColumn(16).numFmt = "dd/mm/yyyy";
+  ws.getColumn(18).numFmt = "dd/mm/yyyy";
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, linhas.length + 1), column: COLUNAS_XLSX.length } };
   // O Excel, quando salva uma planilha com filtro, grava também o nome interno _xlnm._FilterDatabase (da aba 1).
   // O ExcelJS não grava; sem ele o LibreOffice (e alguns apps) não mostram as setas do filtro. Mesmo formato do Excel.
   const modeloNomes = livro._definedNames;
   livro._definedNames = { get model() { return [...modeloNomes.model,
-    { name: "_xlnm._FilterDatabase", localSheetId: 0, ranges: [`'Leads'!$A$1:$P$${Math.max(1, linhas.length + 1)}`] }]; } };
+    { name: "_xlnm._FilterDatabase", localSheetId: 0, ranges: [`'Leads'!$A$1:$T$${Math.max(1, linhas.length + 1)}`] }]; } };
   // largura pelo conteúdo (o texto do link conta pelo que aparece), com limite
   COLUNAS_XLSX.forEach((nome, i) => {
     // cabeçalho: +4 para a seta do filtro não cobrir o texto
@@ -2882,12 +3127,26 @@ async function desenharGraficosMercado(agg, pesq) {
 }
 
 // ============================================================ ADMIN
-async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); }
+async function carregarAdmin() { if (!ehAdmin) return; desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); carregarCarteiras(); }
+// Painel "Carteiras": leads por vendedor e por status, conversão (Cliente ÷ Contatado+Negociando+Cliente).
+async function carregarCarteiras() {
+  $("#carteiras-tabela").innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
+  try {
+    const { vendedores, dias } = await api("crm-lead", { acao: "carteiras" });
+    CRM.vendedores = vendedores.map((v) => ({ uid: v.uid, nome: v.nome }));
+    const pct = (x) => (x === null ? "–" : `${Math.round(x * 100)}%`);
+    $("#carteiras-tabela").innerHTML = vendedores.length ? `<thead><tr><th>Vendedor</th><th>Na carteira</th>${STATUS_CRM.filter(([k]) => k !== "novo").map(([, r]) => `<th>${r}</th>`).join("")}<th>Conversão</th></tr></thead><tbody>` +
+      vendedores.map((v) => `<tr data-carteira-uid="${txt(v.uid)}"><td class="principal-td" data-rot=""><b>${txt(v.nome)}</b></td><td class="num" data-rot="Na carteira">${numero(v.carteira)}</td>${STATUS_CRM.filter(([k]) => k !== "novo").map(([k, r]) => `<td class="num" data-rot="${r}">${numero(v.por_status[k] || 0)}</td>`).join("")}<td class="num" data-rot="Conversão">${pct(v.conversao)}</td></tr>`).join("") +
+      `</tbody><caption class="small muted" style="caption-side:bottom;text-align:left;padding:6px 8px">Sem contato há mais de ${dias} dias, o lead volta a ficar livre.</caption>`
+      : `<tbody><tr><td class="muted">Nenhum vendedor ainda.</td></tr></tbody>`;
+  } catch (e) { $("#carteiras-tabela").innerHTML = `<tbody><tr><td class="muted">${txt(e.message)}</td></tr></tbody>`; }
+}
+$("#carteiras-atualizar").onclick = carregarCarteiras;
 async function carregarUsuarios() {
   $("#u-tabela").innerHTML = `<tr><td><div class="esq" style="height:14px"></div></td></tr>`;
   try {
     const { usuarios, limite_padrao, config } = await api("admin-usuarios", { acao: "listar" });
-    if (config) { $("#cfg-cidades").value = config.max_cidades_busca; $("#cfg-consultas").value = config.max_consultas_busca; $("#cfg-consultas-dia").value = config.max_consultas_dia; }
+    if (config) { $("#cfg-cidades").value = config.max_cidades_busca; $("#cfg-consultas").value = config.max_consultas_busca; $("#cfg-consultas-dia").value = config.max_consultas_dia; $("#cfg-carteira").value = config.carteira_dias ?? 60; }
     const padraoConsultas = config?.max_consultas_dia ?? 300;
     $("#u-tabela").innerHTML = `<thead><tr><th>Usuário</th><th>Nome</th><th>Buscas hoje</th><th>Buscas (7 dias)</th><th>Leads (7 dias)</th><th>% WhatsApp</th><th>Limite/dia (padrão ${limite_padrao})</th><th>Consultas/dia (padrão ${padraoConsultas})</th><th></th></tr></thead><tbody>` +
       usuarios.map((u) => `<tr><td class="principal-td" data-rot=""><span style="overflow-wrap:anywhere">${txt(u.email)}</span> ${u.admin ? '<span class="pilula azul">admin</span>' : ""} ${u.removido ? '<span class="pilula bad">removido</span>' : ""}</td>
@@ -2904,8 +3163,9 @@ $("#cfg-salvar").onclick = async () => {
   const n = (id) => Number($(id).value);
   try {
     const { config } = await api("admin-usuarios", { acao: "definir_config", max_cidades_busca: n("#cfg-cidades"),
-      max_consultas_busca: n("#cfg-consultas"), max_consultas_dia: n("#cfg-consultas-dia") });
-    toast(`Configurações salvas: ${config.max_cidades_busca} cidades ou ${config.max_consultas_busca} consultas por busca; ${config.max_consultas_dia} consultas por dia.`, "ok");
+      max_consultas_busca: n("#cfg-consultas"), max_consultas_dia: n("#cfg-consultas-dia"), carteira_dias: n("#cfg-carteira") });
+    CRM.dias = config.carteira_dias;
+    toast(`Configurações salvas: ${config.max_cidades_busca} cidades ou ${config.max_consultas_busca} consultas por busca; ${config.max_consultas_dia} consultas por dia; carteira ${config.carteira_dias} dias.`, "ok");
     carregarUsuarios();
   } catch (e) { toast(e.message, "erro"); }
 };
