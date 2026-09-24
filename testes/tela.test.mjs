@@ -1573,6 +1573,7 @@ test("seletor de estado (390 px, também no WebKit): Paraíba em Nova busca, Map
   await esperarTexto(a, "#lista-cidades", /Mossoró/);
   assert.equal(await a.locator("#lista-cidades input[data-cidade]").count(), 167);
   assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem("mapaleads.uf"))), "RN");
-  assert.deepEqual(erros, []);
+  // WebKit: o recarregamento corta a escuta do Firestore (emulador) e registra "... access control checks" (ver teste do tema).
+  assert.deepEqual(erros.filter((e) => !/Firestore\/Listen\/channel.*access control checks/.test(e)), []);
   await a.context().close();
 });
