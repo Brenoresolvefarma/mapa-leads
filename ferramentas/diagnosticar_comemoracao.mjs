@@ -39,8 +39,9 @@ const INSTRUMENTOS = () => {
   };
   const olhar = () => new MutationObserver((ms) => {
     for (const m of ms) {
+      for (const n of m.addedNodes) if (n.classList?.contains("toast") && /Te aviso quando os leads chegarem/.test(n.textContent)) C.mensagem = t();
       for (const n of m.addedNodes) if (n.id === "comemoracao") C.eventos.push(["entrou", t(), n.dataset.modo || "", n.dataset.pecas || ""]);
-      for (const n of m.removedNodes) if (n.id === "comemoracao") C.eventos.push(["saiu", t()]);
+      for (const n of m.removedNodes) if (n.id === "comemoracao") C.eventos.push(["saiu", t(), n.dataset.quadros || ""]);
     }
   }).observe(document.body, { childList: true, subtree: true });
   if (document.body) olhar(); else document.addEventListener("DOMContentLoaded", olhar);
@@ -115,20 +116,23 @@ async function estadoInteiro(p, uf) {
   await toque(p, "#rn-confirmar");
 }
 async function medir(nome, p) {
-  await p.waitForTimeout(5000);
+  // Espera o canvas aparecer (a criação real leva alguns segundos) e sumir (ou até 15 s), depois lê os números.
+  await p.waitForSelector("#comemoracao", { state: "attached", timeout: 20000 }).catch(() => {});
+  await p.waitForSelector("#comemoracao", { state: "detached", timeout: 15000 }).catch(() => {});
+  await p.waitForTimeout(300);
   const r = await p.evaluate(() => {
     const C = window.__com, depois = (x) => x - C.clique;
     const entrou = C.eventos.find((e) => e[0] === "entrou"), saiu = C.eventos.find((e) => e[0] === "saiu");
     const longas = C.longas.filter(([ini, dur]) => ini + dur >= C.clique);
     return {
       apareceu: !!entrou, entrou_ms: entrou ? depois(entrou[1]) : null, modo: entrou?.[2] || "", pecas: entrou?.[3] || "",
-      durou_ms: entrou && saiu ? saiu[1] - entrou[1] : null, desenhos: C.desenhos, quadros: C.quadros.size,
+      durou_ms: entrou && saiu ? saiu[1] - entrou[1] : null, desenhos: C.desenhos, quadros: C.quadros.size, quadros_da_tela: saiu?.[2] || "",
       tarefas_longas: longas.length, maior_trava_ms: Math.max(0, ...longas.map((l) => l[1])), trava_total_ms: longas.reduce((s, l) => s + l[1], 0),
       reduzir: matchMedia("(prefers-reduced-motion: reduce)").matches,
-      mensagem: [...document.querySelectorAll("#toasts .toast")].some((t) => /Te aviso quando os leads chegarem/.test(t.textContent)),
+      mensagem_ms: C.mensagem ? depois(C.mensagem) : null,
     };
   });
-  const ok = r.apareceu && r.quadros >= 20;
+  const ok = r.apareceu && r.quadros >= 20 && r.durou_ms !== null;
   if (!ok) falhas++;
   console.log(`${ok ? "OK    " : "FALHOU"} ${nome}: ${JSON.stringify({ ...r, erros: p.erros.length })}`);
   return r;

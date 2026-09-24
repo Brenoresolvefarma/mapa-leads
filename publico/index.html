@@ -1972,7 +1972,7 @@ $("#outras").addEventListener("input", () => { if (NB.passo === 3) estimar(); })
 $("#buscar").onclick = async () => {
   if (!NB.termos.length || !cidadesDoPedido().length) return irParaPasso(1);
   if (passaDoLimite()) return atualizarTravaBuscar();
-  $("#buscar").disabled = true;
+  $("#buscar").disabled = true; $("#buscar").textContent = "Criando busca…"; // a criação leva alguns segundos
   try {
     const r = await api("criar-busca", pedidoComum(false));
     const festa = comemorar(MSG_CRIADA); // primeiro a festa; a troca para o Início só depois que ela termina
@@ -1980,7 +1980,7 @@ $("#buscar").onclick = async () => {
     $("#r-resumo").textContent = `Busca criada. Acompanhe no Início. Restam ${r.restantes_hoje} busca(s) hoje.`;
     festa.then(() => { carregarCota(); if (rota().pag === "nova") location.hash = "#inicio"; });
   } catch (e) { toast(e.message, "erro"); $("#r-resumo").textContent = e.message; }
-  finally { $("#buscar").disabled = false; }
+  finally { $("#buscar").disabled = false; $("#buscar").textContent = "Buscar"; }
 };
 // ============================================================ COMEMORAÇÃO (busca criada, Estado inteiro, lista liberada)
 // Uma função só — comemorar(mensagem) — chamada em todo ponto onde algo é criado com sucesso (Nova busca, Estado inteiro
@@ -2057,8 +2057,9 @@ function animarComemoracao(fim) {
   const trava = setTimeout(encerrar, 8000);
   const aoEsconder = () => { if (document.hidden) encerrar(); };
   document.addEventListener("visibilitychange", aoEsconder);
+  let quadros = 0;
   const desenhar = (dt) => {
-    tempo += dt;
+    tempo += dt; cv.dataset.quadros = String(++quadros); // quadros desenhados (os testes conferem)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, L, A);
     ctx.globalAlpha = tempo > DURA - 0.3 ? Math.max(0, (DURA - tempo) / 0.3) : 1;
     for (const p of pecas) {
@@ -3577,7 +3578,7 @@ function desenharCartaoEstadoInteiro() {
   $("#rn-uf-rot").textContent = UF_ATUAL;
 }
 $("#rn-confirmar").onclick = async () => {
-  $("#rn-confirmar").disabled = true;
+  $("#rn-confirmar").disabled = true; $("#msg-rn").textContent = "Enfileirando…"; // a criação leva alguns segundos
   try {
     const r = await api("criar-busca", pedidoRn(false));
     comemorar(r.agendada_para ? `Estado inteiro agendado para ${dataHora(new Date(r.agendada_para))}! Te aviso quando os leads chegarem.` : MSG_ESTADO);
