@@ -106,6 +106,13 @@ async function abrir(email, senha, viewport = { width: 1366, height: 768 }) {
   await p.goto(`${local.url}/?emulador=1`);
   await p.waitForSelector("#entrar:not([disabled])", { timeout: 30000 })
     .catch((e) => { throw new Error(`${e.message}\nErros da página: ${erros.join(" | ") || "nenhum"}`); });
+  // Login mostra os estados ativos (RN e PB): título, etiquetas e o mapa dos dois com a divisa.
+  assert.match(await p.locator("#tela-login h1").textContent(), /no RN e na PB/);
+  assert.deepEqual(await p.locator(".ufs-ativas span").allTextContents(), ["RN", "PB"]);
+  assert.equal(await p.locator("#rn-login path[data-uf=RN]").count(), 167);
+  assert.equal(await p.locator("#rn-login path[data-uf=PB]").count(), 223);
+  assert.equal(await p.locator("#rn-login path.divisa").count(), 1);
+  assert.match(await p.title(), /RN e na PB/);
   await p.fill("#le", email);
   await p.fill("#ls", senha);
   await p.click("#entrar");

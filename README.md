@@ -8,7 +8,7 @@ dela precisa de aprovação antes.
 > **Estado atual: Fase 3a v2 no ar** (PR 12) + **celular primeiro** (PR 13): tela clara por padrão, menu fixo embaixo,
 > cartões com WhatsApp/Ligar, ícones (i) que funcionam no toque, **apagar busca** (dono ou admin) e comemoração ao
 > criar uma busca. **Motor em paralelo** (PR 14): até 4 máquinas ao mesmo tempo, leads cidade a cidade e aviso de
-> cidades pequenas. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
+> cidades pequenas. **Estados ativos: RN e PB** (login, título e preview do link mostram os dois). Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
 
 ## Como funciona
 

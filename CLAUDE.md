@@ -475,6 +475,15 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   equipe, desativar com carteira, painel), motor (equipe_id nos lotes/parciais/estatísticas), migração no emulador e
   tela 390 px (master cria equipe, gestor cria preposto e vê só a equipe, preposto não vê outra, desativar pede a carteira).
 
+### RN · PB na vitrine (PR 21, pedido do Breno em 24/09)
+- Título da página, og/twitter, manifest e login: "Prospecção B2B inteligente no RN e na PB" + etiquetas `RN` `PB`
+  (`.ufs-ativas`). Mapa do login = RN e PB juntos numa projeção só (`projecaoDe` das duas malhas) com a **divisa**
+  (lados de contorno presentes nos dois estados). "Sobre" cita os dois estados.
+- Preview do link: `publico/og-image-rn-pb.png` (nome novo por causa do cache do WhatsApp; `og-image.png` removido),
+  gerado por `ferramentas/gerar_imagens.mjs` (RN + PB coloridos por população do Censo 2022, divisa e siglas;
+  `FONTES_LOCAIS=<pasta @fontsource/inter/files>` usa a Inter sem internet).
+- Teste da tela confere título, etiquetas, 167 + 223 contornos e a divisa no login.
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -500,7 +509,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   e "Testar tela em produção" passaram.
 - **PR 18**: seletor de estado no celular (Mapa, Nova busca, Mercado, Admin) + comemoração no iOS. Mergeado; Verificar
   Functions, "Testar tela em produção" e capturas reais passaram.
-- **PR 19**: equipes (master › gestor › vendedor), cotas por equipe, carteira por equipe, migração.
+- **PR 19**: equipes (master › gestor › vendedor), cotas por equipe, carteira por equipe, migração. Mergeado; migrado;
+  regras publicadas; teste em produção das equipes (PR 20) passou.
+- **PR 21**: RN · PB no título, login e preview do link.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 
