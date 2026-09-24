@@ -1132,7 +1132,7 @@ test("liberar busca (390 px): admin libera dividindo sem repetir; vendedor vê '
   await a.tap("#abrir-buscas");
   await a.locator("#caixa-buscas [data-liberar=lib]").tap();
   await a.locator(`[data-lib-vend="${uids.ana}"]`).check();
-  await esperarTexto(a, "#lib-previa", /Ana Souza|ana@x.example/);
+  await esperarTexto(a, "#lib-previa", /: 6 leads · lista inteira/);
   await a.locator("#lib-confirmar").tap();
   await esperarTexto(a, "#toasts", /liberada para 1 vendedor/);
   // Chips "Liberada para" com revogar
