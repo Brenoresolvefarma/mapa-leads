@@ -29,7 +29,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - Só dados reais (IBGE oficial + leads coletados); nada estimado apresentado como dado.
 
 ## Arquitetura
-1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a feita**).
+1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a v2** no PR 12, aguardando aprovação).
 2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
 3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/admin-usuarios`, `/api/config-publica`,
    `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
@@ -156,7 +156,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Relevância do segmento (PR 11, pedido do Breno)**: o Google devolve "parecidos" em cidade pequena (busca HOME CARE
   em 30 cidades: 406 leads, só 50 do segmento e só 7 nas cidades pedidas). Cada lead é **marcado** (nunca apagado)
   como `no_segmento` sim/não, na tela: termo + sinônimos + categorias aceitas comparados com nome e categoria do Google
-  (sem acento/maiúsculas; frase = todas as palavras; plural só em palavras de 5+ letras). Filtro **"Só do segmento"
+  (sem acento/maiúsculas; frase = todas as palavras; plural só em palavras de 5+ letras; termo com "." ou ";" vira
+  frases separadas — ex.: "HOME CARE. CUIDADO DE IDOSOS" dava 0 no segmento, visto em 23/09). Filtro **"Só do segmento"
   ligado** com contador "x fora do segmento escondidos – ver"; filtro de **Categorias do Google** com contagem,
   busca, marcar/desmarcar, "Só as ✓" e "Guardar no perfil" (`perfis` ação `salvar_categorias` → `categorias_aceitas`).
   **Sinônimos**: dicionário curto no bloco `<relevancia>` do `index.html` (testado por `testes/relevancia.test.mjs`),
@@ -171,6 +172,41 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   produção" (logins temporários comum+admin, busca fictícia, tudo apagado). Com `api_local=true` testa o
   **deploy preview** de um PR com as Functions do commit rodando no runner (o preview não tem os secrets).
 
+### Fase 3a v2 (tela nova — PR 12)
+- **Etapa 0 aprovada com ajustes** (visual, mapa; PIB per capita = **opção b: PIB 2022 ÷ Censo 2022, calculado**).
+  Sem link para a tela antiga; `publico/prototipo.html` removido.
+- **Compacta**: fonte base 14 px, cartões/espaços ~20–25% menores; tabela compacto/confortável; 1366×768 sem zoom.
+- **Celular** (pedido do Breno): zero rolagem lateral em 360/390/414 (html/body `overflow-x: clip` + tudo com
+  `min-width:0`/quebra de palavras), margens de 16 px com área segura do iPhone, tabelas viram cartões (leads por
+  `#cartoes`; ranking/usuários/execuções por `.tabela.vira-cartao` + `data-rot`), chips e filtros numa faixa que rola
+  só por dentro, toques ≥ 44 px, ranking do Mercado 20 por vez ("mostrar mais"). O teste mede a largura tirando o clip.
+- **Tudo clicável** (`detalharLeads()` + trilha `#trilha-leads`): cartões do Início (total/semana/WhatsApp abrem Meus
+  leads com o mesmo recorte do número — no segmento ou, em "Ver total", filtros desligados; semana = buscas que TERMINARAM
+  nos últimos 7 dias em Fortaleza, filtro `F.periodo`), barra do dia, busca (leads) e "Ver no mapa"; no Mapa, barras
+  de microrregião/município aprofundam e categoria abre a tabela com `F.categoria` (mesma contagem, mantém os filtros);
+  Mercado: cartões (indicador → ranking; leads → tabela), ranking e gráficos → mapa; ficha: cidade/microrregião → mapa.
+- **Mapa** Leaflet: RN › microrregião › município (bairro só como chips do painel), estado na URL
+  (`#mapa/<micro>/<municipio>` em slug), Esc/Voltar, tela cheia, painel recolhível (gaveta no celular), zoom embaixo
+  à direita, zoom máximo 11 (contorno simplificado). Mapa de fundo **OpenStreetMap** (gratuito, sem chave, com crédito;
+  escurecido por filtro CSS no tema escuro) — o CARTO passou a exigir chave ("API KEY REQUIRED" nas capturas de 23/09).
+  Abrir o mapa/mercado direto pelo link redesenha quando as buscas com leads chegam.
+  Tela: `config-publica` com até 3 tentativas e "Tentar de novo" (500 intermitente visto em 23/09 antes dos créditos). Cinza = "sem busca". Sem índice de oportunidade (proposta só
+  com aprovação da fórmula).
+- **Início (ajustes do Breno)**: saudação com o NOME (`usuarios/{uid}.nome` ou displayName; sem nome = "Olá!", nunca o
+  e-mail); admin edita o nome (`admin-usuarios` ação `definir_nome`, até 60 caracteres, grava doc + displayName).
+  Cartões e gráfico contam por padrão só leads **no segmento e da cidade pedida** (mesma regra dos filtros padrão),
+  alternância "No segmento | Ver total" (guardada no navegador); calculados dos lotes das buscas (cache `lotesLidos`,
+  compartilhado com Meus leads; 1 leitura por lote por visita — o Início não lê mais `estatisticas`), cada recorte com
+  o segmento das suas buscas, igual ao detalhe. Gráfico: até 7 dias com busca nos últimos 30 → só esses dias.
+- **Exportação**: colunas FIXAS (as de sempre + categorias + no_segmento); escolher colunas vale só para a tabela.
+  **Aprovado pelo Breno (23/09)**, junto com: "Sair" volta o endereço ao Início (sem #leads/#mapa do usuário anterior)
+  e ranking do Mercado só com indicadores lado a lado (sem nota/índice calculado).
+- **Duplicados**: o mesmo lugar em outra busca completa os campos vazios (dado real do Google).
+- `admin-usuarios` listar devolve `semana` (7 dias de `estatisticas/{dia}__{uid}`: 7 leituras por usuário).
+- Motor grava `latitude`/`longitude` (campo "longtitude" do scraper); leads antigos: coordenadas do `link_maps`.
+- Testes: `testes/rotas-cdn.mjs` (CDN do node_modules + `medirLargura`); `tela.test.mjs` reescrito (6 testes);
+  `ferramentas/testar_tela_producao.mjs` e `capturar_telas.mjs` (SEMEAR=1 = busca fictícia temporária) para a v2.
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -181,8 +217,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - PRs 5–8: Firestore REST, chave privada normalizada, diagnóstico criar_e_cancelar — Fase 2 validada em produção.
 - **Fase 3a (PR 9)**: tela definitiva + perfis + saúde do motor + despertador + disjuntor novo + estatísticas.
 - **PR 11**: bug de sessão corrigido + relevância do segmento (categorias, sinônimos, sem cidade).
-- **Fase 3a v2 (tela nova)**: Etapa 0 (proposta, protótipo `publico/prototipo.html`, fontes do IBGE conferidas, preview de
-  link) no PR 10, **pausado** para o PR 11 passar antes; volta num PR novo, aguardando aprovação do Breno.
+- **Fase 3a v2 (tela nova)**: Etapa 0 aprovada com ajustes; todas as telas no PR 12 (deploy preview) — aguardando a
+  aprovação visual do Breno (capturas 1366 e celular) antes do merge; depois CI verde + teste real → merge.
   Testes: pytest do motor, lógica Node, regras, Functions (fonte e empacotadas), motor no emulador e tela no Chrome.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real.
 

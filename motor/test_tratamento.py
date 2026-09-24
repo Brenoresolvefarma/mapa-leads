@@ -107,6 +107,8 @@ def test_montar_lead_campos_completos():
         "nome": "Clínica Fictícia",
         "categoria": "Dentista",
         "categorias": [],
+        "latitude": None,
+        "longitude": None,
         "telefone": "(84) 99999-0000",
         "whatsapp_link": "https://wa.me/5584999990000",
         "email": "contato@ficticia.example",
@@ -139,6 +141,12 @@ def test_nota_zero_vira_vazio():
     lead = t.montar_lead(entrada_ficticia(review_rating=0, review_count=0), "x")
     assert lead["nota"] is None
     assert lead["qtd_avaliacoes"] == 0
+
+
+def test_coordenadas_do_google():
+    lead = t.montar_lead(entrada_ficticia(latitude=-5.79, longtitude=-35.21), "x")
+    assert (lead["latitude"], lead["longitude"]) == (-5.79, -35.21)
+    assert t.montar_lead(entrada_ficticia(latitude=0, longitude="x"), "x")["latitude"] is None
 
 
 def test_categorias_guarda_a_lista_do_google():

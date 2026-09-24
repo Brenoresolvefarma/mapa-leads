@@ -1,5 +1,5 @@
 // POST /api/admin-usuarios  — SÓ admin (conferido pela claim do token, no servidor).
-// Ações: listar | criar | remover | definir_limite
+// Ações: listar | criar | remover | definir_limite | definir_nome
 // Não existe cadastro público e não existe "promover a admin" por aqui:
 // o admin é definido só pelo workflow "Definir admin" no GitHub.
 
@@ -22,6 +22,8 @@ export default handler(async (req) => {
       return json(200, await remover(auth, db, usuario, corpo));
     case "definir_limite":
       return json(200, await definirLimite(auth, db, corpo));
+    case "definir_nome":
+      return json(200, await definirNome(auth, db, corpo));
     default:
       throw new ErroHttp(400, "Ação inválida.");
   }
@@ -37,6 +39,17 @@ async function listar(auth, db) {
   ]);
   const perfis = new Map(docs.docs.map((d) => [d.id, d.data()]));
   const hoje = diaFortaleza();
+  // Uso da semana por vendedor: estatisticas/{dia}__{uid} dos últimos 7 dias (7 leituras por usuário).
+  const dias = Array.from({ length: 7 }, (_, i) => diaFortaleza(new Date(Date.now() - i * 86400000)));
+  const refs = contas.users.flatMap((u) => dias.map((d) => db.doc(`estatisticas/${d}__${u.uid}`)));
+  const stats = refs.length ? await db.getAll(...refs) : [];
+  const semana = new Map();
+  for (const s of stats) {
+    if (!s.exists) continue;
+    const x = s.data(), uid = x.dono_uid, atual = semana.get(uid) || { buscas: 0, leads: 0, com_whatsapp: 0 };
+    atual.buscas += x.buscas || 0; atual.leads += x.leads || 0; atual.com_whatsapp += x.com_whatsapp || 0;
+    semana.set(uid, atual);
+  }
   const usuarios = contas.users.map((u) => {
     const p = perfis.get(u.uid) || {};
     perfis.delete(u.uid);
@@ -47,6 +60,7 @@ async function listar(auth, db) {
       admin: u.customClaims?.admin === true,
       limite_diario: Number.isInteger(p.limite_diario) ? p.limite_diario : null,
       buscas_hoje: p.dia === hoje ? p.contagem_dia || 0 : 0,
+      semana: semana.get(u.uid) || { buscas: 0, leads: 0, com_whatsapp: 0 },
       removido: false,
     };
   });
@@ -58,7 +72,11 @@ async function listar(auth, db) {
   return { usuarios, limite_padrao: limitePadrao };
 }
 
-async function criar(auth, db, { email, senha, nome, limite_diario }) {
+// Nome mostrado na saudação ("Olá, Breno"): até 60 caracteres, sem espaços sobrando.
+const limparNome = (nome) => String(nome ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+
+async function criar(auth, db, { email, senha, nome: nomeBruto, limite_diario }) {
+  const nome = limparNome(nomeBruto);
   if (!email || !senha) throw new ErroHttp(400, "Informe e-mail e senha.");
   if (String(senha).length < 8) throw new ErroHttp(400, "A senha precisa ter pelo menos 8 caracteres.");
   let conta;
@@ -115,4 +133,16 @@ async function definirLimite(auth, db, { uid, limite_diario }) {
     { merge: true },
   );
   return { limite_diario: usarPadrao ? null : limite_diario };
+}
+
+async function definirNome(auth, db, { uid, nome: nomeBruto }) {
+  if (!uid) throw new ErroHttp(400, "Informe o usuário.");
+  const nome = limparNome(nomeBruto);
+  try {
+    await auth.updateUser(uid, { displayName: nome || null });
+  } catch {
+    throw new ErroHttp(404, "Usuário não encontrado.");
+  }
+  await db.doc(`usuarios/${uid}`).set({ nome }, { merge: true });
+  return { nome };
 }

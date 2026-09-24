@@ -3,7 +3,7 @@
   publish = "publico"
   functions = "netlify/functions"
   # Único "build": copia os dados oficiais do IBGE (arquivos fixos do repo) para a página ler.
-  command = "mkdir -p publico/dados && cp dados/municipios_rn.json dados/microrregioes_rn.json publico/dados/"
+  command = "mkdir -p publico/dados && cp dados/*.json publico/dados/"
 
 [build.environment]
   NODE_VERSION = "22"

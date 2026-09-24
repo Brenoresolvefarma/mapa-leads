@@ -1,0 +1,25 @@
+# Atualiza dados/ibge_rn_indicadores.json com os indicadores oficiais do IBGE (população, área, densidade,
+# PIB 2022 e per capita calculado, CEMPRE 2024). Só dados públicos do IBGE.
+# Uso: Actions > Atualizar indicadores do IBGE > Run workflow (escolha a branch; o commit vai para ela).
+# Também roda sozinho quando o script muda numa branch claude/** (primeira coleta).
+name: Atualizar indicadores do IBGE
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/**"]
+    paths: [ferramentas/atualizar_ibge.py]
+permissions:
+  contents: write
+jobs:
+  ibge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 ferramentas/atualizar_ibge.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dados/ibge_rn_indicadores.json
+          git commit -m "Dados IBGE: indicadores por município do RN" || { echo "sem mudança"; exit 0; }
+          git pull -q --rebase origin "${GITHUB_REF_NAME}" && git push

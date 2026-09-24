@@ -43,3 +43,12 @@ test("frase exige todas as palavras; plural aceito", () => {
   assert.equal(R.casaFrase("casa de repouso", R.palavras("Casa de Material de Construção")), false);
   assert.equal(R.casaFrase("", p), false);
 });
+
+test("termo com ponto ou ponto e vírgula vira frases separadas (\"HOME CARE. CUIDADO DE IDOSOS\")", () => {
+  const c = R.criterioSegmento({ termos: ["HOME CARE. CUIDADO DE IDOSOS"] });
+  assert.deepEqual(c.frases, ["HOME CARE", "CUIDADO DE IDOSOS"]);
+  assert.equal(R.noSegmento({ nome: "Vida Home Care", categoria: "Serviço de saúde" }, c), true);
+  assert.equal(R.noSegmento({ nome: "Lar Feliz", categoria: "Cuidado de idosos" }, c), true);
+  assert.equal(R.noSegmento({ nome: "Loja Construção", categoria: "Loja de materiais de construção" }, c), false);
+  assert.deepEqual(R.criterioSegmento({ termos: ["dentista; odontologia"] }).frases, ["dentista", "odontologia"]);
+});

@@ -182,11 +182,27 @@ test("admin-usuarios: só admin; criar, limitar, listar e remover (buscas ficam)
   const buscaCaio = await pedido(criarBusca, { termos: "farmácia", profundidade: "rapida" }, tokenCaio);
   assert.equal(buscaCaio.status, 201);
 
+  // Uso da semana: soma estatisticas/{dia}__{uid} dos últimos 7 dias (o de 8 dias atrás não entra).
+  const dia = (n) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() - n * 86400000));
+  await db.doc(`estatisticas/${dia(0)}__${uid}`).set({ dono_uid: uid, buscas: 1, leads: 10, com_whatsapp: 4 });
+  await db.doc(`estatisticas/${dia(3)}__${uid}`).set({ dono_uid: uid, buscas: 2, leads: 5, com_whatsapp: 1 });
+  await db.doc(`estatisticas/${dia(8)}__${uid}`).set({ dono_uid: uid, buscas: 9, leads: 99, com_whatsapp: 9 });
   const lista = await pedido(adminUsuarios, { acao: "listar" }, tokens.breno);
   assert.equal(lista.corpo.limite_padrao, 20);
   const caio = lista.corpo.usuarios.find((u) => u.uid === uid);
   assert.equal(caio.limite_diario, 5);
   assert.equal(caio.buscas_hoje, 1);
+  assert.deepEqual(caio.semana, { buscas: 3, leads: 15, com_whatsapp: 5 });
+  assert.equal(caio.nome, "Caio");
+  // Nome (saudação "Olá, ..."): só o admin muda; espaços limpos e no máximo 60 caracteres.
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "Ana" }, tokens.ana)).status, 403);
+  const renomeado = await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "  Caio   Souza  " }, tokens.breno);
+  assert.equal(renomeado.status, 200);
+  assert.equal((await db.doc(`usuarios/${uid}`).get()).data().nome, "Caio Souza");
+  assert.equal((await firebase().auth.getUser(uid)).displayName, "Caio Souza");
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "x".repeat(80) }, tokens.breno)).corpo.nome.length, 60);
+  assert.equal((await pedido(adminUsuarios, { acao: "definir_nome", uid: "nao-existe", nome: "X" }, tokens.breno)).status, 404);
+  await pedido(adminUsuarios, { acao: "definir_nome", uid, nome: "Caio" }, tokens.breno);
   assert.ok(lista.corpo.usuarios.find((u) => u.email === "breno@x.example").admin);
 
   const brenoUid = (await firebase().auth.getUserByEmail("breno@x.example")).uid;

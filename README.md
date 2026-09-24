@@ -5,9 +5,9 @@ Prospecção B2B multiusuário via Google Maps, 100% na nuvem, feito para caber 
 (com alerta de orçamento de R$ 20/mês): o código continua dentro da cota grátis, e qualquer custo acima
 dela precisa de aprovação antes.
 
-> **Estado atual: Fase 3a** — tela definitiva: painel "Hoje", nova busca por regiões do IBGE
-> com perfis salvos, tabela de leads (uma ou várias buscas juntas) com filtros e ficha,
-> download .xlsx/.csv e aba Admin com saúde do motor. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
+> **Estado atual: Fase 3a v2** (PR 12, aguardando aprovação) — tela nova: Início, Nova busca em 3 passos,
+> Meus leads, Mapa com aprofundamento (RN › microrregião › município), Mercado (IBGE × buscas), Admin e Sobre;
+> tudo clicável leva ao detalhe filtrado; celular sem rolagem lateral. Fases 3b e 3c estão no [CLAUDE.md](CLAUDE.md).
 
 ## Como funciona
 
@@ -32,32 +32,45 @@ GitHub Actions "Motor MapaLeads" ──esvazia a fila──> scraper (Docker) �
 - **Cancelar**: na fila, cancela na hora; rodando, para antes da próxima consulta e guarda os
   leads já coletados. No RN inteiro, cancela os lotes que faltam e fecha com o que já veio.
 
-### A tela (Fase 3a)
-- **Hoje**: suas buscas na fila/rodando (e a fila geral), leads dos últimos 7 dias, % com
-  WhatsApp e a cota do dia. O admin vê também os números de todos.
-- **Nova busca**: escolha **microrregiões (19)** ou **regiões imediatas (11)** do IBGE
-  ([`dados/microrregioes_rn.json`](dados/microrregioes_rn.json)); marcar uma região traz as
-  cidades dela, e cada cidade pode ser desmarcada. Dá para adicionar municípios avulsos e
-  cidades fora do RN (texto livre). A **estimativa de tempo** aparece antes de buscar.
-  **Perfis salvos** (termos, cidades, profundidade) ficam no servidor, por usuário.
-- **Buscas**: lista das suas buscas (admin: de todos), posição na fila, cancelar. Marque uma ou
-  **várias** para ver os leads **juntos, sem duplicados**.
-- **Leads**: nome, bairro, cidade, microrregião/região imediata, telefone, botão WhatsApp,
-  site/Instagram, nota, avaliações, cidade confere. Filtros: região, cidade (com contagem),
-  **"Só da cidade pedida" (ligado)**, tem WhatsApp, sem site, nota mínima, nome. Clique na linha
-  para a **ficha** do lead. Download **.xlsx** (SheetJS, CDN oficial) e **.csv** (`;`, abre no
-  Excel) **respeitando os filtros**, sem `id_lugar`, com `microrregiao`, `regiao_imediata` e
-  `cidade_confere`. Nome: `segmento-cidade-data`, `segmento-RN-data`, `segmento-<região>-data`
-  (todas as cidades de uma região) ou `segmento-varias-cidades-data`.
-  "Só da cidade pedida" esconde os leads cujo endereço mostra **outra** cidade; os sem cidade no
-  endereço continuam. A região do lead vem da cidade do **endereço** (sem cidade = em branco).
-- **Segmento**: cada lead é marcado como "do segmento" ou "fora" (o Google devolve lojas, prefeituras etc. quando a
-  cidade não tem o segmento). **"Só do segmento" vem ligado**, com o contador dos escondidos; filtro de **categorias do
-  Google** com contagem; sinônimos sugeridos na Nova busca (você confirma); categorias aceitas guardadas no perfil.
-  Nada é apagado: só marcado e filtrado.
-- **Admin**: saúde do motor (últimas execuções no GitHub, despertador, fila, pausas do
-  disjuntor, órfãs, tempos reais), RN inteiro, usuários, cota por usuário e uso de hoje.
-- Tema claro/escuro automático (segue o aparelho). Datas sempre no horário de Natal.
+### A tela (Fase 3a v2)
+Arquivo único [`publico/index.html`](publico/index.html) (Leaflet, MarkerCluster, Chart.js e SheetJS por CDN, carregados só
+quando a tela que usa abre). Fonte base 14 px; funciona em 1366×768 sem zoom e no celular (360–414 px).
+- **Início**: "Olá, <nome>" (nome do cadastro; o admin edita em Admin), cartões (leads no segmento, da semana, % com
+  WhatsApp, buscas ativas, cota), leads por dia e últimas buscas com linha do tempo. Os números contam **só os leads do
+  segmento e da cidade pedida** (os filtros padrão de Meus leads), com a alternância **"Ver total"**; são calculados
+  dos mesmos leads que aparecem ao clicar (lê os lotes das buscas uma vez por visita). Com até 7 dias de busca nos
+  últimos 30, o gráfico mostra só esses dias (com o valor em cima de cada barra). **Tudo clicável**: "Leads da semana" abre Meus leads só com as buscas dos últimos
+  7 dias; "% com WhatsApp" abre só os com WhatsApp; uma barra do gráfico abre os leads daquele dia; uma busca abre os
+  leads dela ("Ver no mapa" abre o mapa só com ela). A tela de destino mostra a trilha de volta.
+- **Nova busca** (3 passos): O quê (termos em chips, sinônimos sugeridos e editáveis, perfis salvos no servidor) ·
+  Onde (mapa do RN clicável ou lista por microrregião/região imediata, com população) · Como (profundidade, e-mail,
+  consultas, tempo estimado e cota).
+- **Meus leads**: uma ou várias buscas juntas, sem repetidos (o mesmo lugar em outra busca completa os campos que
+  faltavam). Filtros: texto, microrregião, cidade, **"Só do segmento"** e **"Só da cidade pedida"** (ligados), e em
+  "Mais filtros": WhatsApp, fixo, site, sem site, Instagram, sem cidade, nota, avaliações, bairro, termo, busca de
+  origem, **categorias do Google** (guardar no perfil). Chips com "limpar tudo", colunas escolhíveis, compacto/
+  confortável, visões salvas (neste navegador), seleção, ficha lateral com mini-mapa. No celular a tabela vira cartões.
+  **Exportar** .xlsx (com aba "Resumo" e a assinatura) e .csv (`;` + BOM, sem assinatura) com os leads filtrados;
+  colunas fixas: nome, categoria, telefone, whatsapp_link, email, site, instagram, endereco, bairro, cidade,
+  microrregiao, regiao_imediata, nota, qtd_avaliacoes, link_maps, termo_que_encontrou, cidade_buscada,
+  cidade_confere, categorias, no_segmento (sem `id_lugar`).
+- **Mapa** (Leaflet + mapa de fundo OpenStreetMap, gratuito e sem chave; escurecido no tema escuro): cores por município (leads do segmento, por 10 mil hab., população,
+  PIB per capita 2022, empresas CEMPRE), pontos dos leads, contornos de microrregião, legenda. **Aprofundamento**:
+  RN › microrregião › município (trilha, "Voltar" e Esc; estado na URL, ex.: `#mapa/serido-oriental/currais-novos`).
+  Painel do nível: indicadores com fonte e ano, comparação com a média do RN e da microrregião, top categorias e
+  barras dos municípios — tudo clicável — e "ver estes leads na tabela", "exportar este recorte", "fazer nova busca
+  aqui". Tela cheia, painel recolhível; no celular o painel vira gaveta de baixo. O recorte do mapa filtra a tabela e
+  vice-versa. **Cinza = "sem busca"** (não é "zero concorrentes").
+- **Mercado**: mapa por município, ranking com os indicadores lado a lado (sem nota inventada; clique abre o mapa na
+  cidade), gráficos (leads por 10 mil hab. por microrregião; população × leads) clicáveis.
+- **Indicadores do IBGE** em [`dados/ibge_rn_indicadores.json`](dados/ibge_rn_indicadores.json) (workflow manual
+  "Atualizar indicadores do IBGE"): população, área e densidade (Censo 2022, SIDRA 4714); PIB 2022 (SIDRA 5938);
+  **PIB per capita 2022 = PIB 2022 ÷ população do Censo 2022 (calculado; opção "b" aprovada pelo Breno)**; empresas,
+  unidades locais, pessoal ocupado e salário médio (CEMPRE 2024, SIDRA 9509).
+- **Admin**: usuários (criar com nome, editar nome, limite, remover) com buscas/leads/% WhatsApp da semana, fila ao vivo, saúde do motor,
+  Estado inteiro (RN) e estados ativos (só RN).
+- Tema claro/escuro (automático ou escolhido), tour de 4 passos no 1º acesso, "Desenvolvido por Resolve Farma"
+  (constante `ASSINATURA`). Datas sempre no horário de Natal.
 
 ### Agendamento do motor (rede de segurança)
 - O GitHub **atrasa ou pula** agendamentos (o `*/15` nunca disparou). Agora são dois relógios:
@@ -212,6 +225,9 @@ npm run test:motor          # motor inteiro contra o emulador, com scraper falso
 npm run test:empacotadas    # Functions empacotadas como no Netlify
 npm run test:tela           # tela no Chromium (Playwright) contra os emuladores
 ```
+`test:tela` clica em cada cartão, barra, categoria e item do ranking e confere o detalhe que abre, e mede em
+360/390/414 px que a página tem a largura da tela (nada passa para o lado) e que os toques têm ≥ 44 px.
+Leaflet, MarkerCluster e Chart.js vêm do `node_modules` nos testes (mesmas versões do CDN).
 Tudo com dados fictícios; roda automaticamente no workflow **Testes** a cada push/PR.
 
 ## Estrutura
