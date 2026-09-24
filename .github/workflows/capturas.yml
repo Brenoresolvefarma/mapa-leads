@@ -12,13 +12,14 @@ on:
         required: true
         default: "https://mapaleads-rn.netlify.app"
       conjunto:
-        description: "celular (390/360, claro e escuro) ou completo (computador + celular)"
+        description: "celular (390/360, claro e escuro), completo (computador + celular) ou crm-pb (status, carteira, mapa e Mercado da PB)"
         required: true
         default: "celular"
         type: choice
         options:
           - celular
           - completo
+          - crm-pb
 
 permissions:
   contents: write
@@ -37,6 +38,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Capturas (login temporário + busca fictícia)
+        if: github.event.inputs.conjunto != 'crm-pb'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           NAVEGADOR: /usr/bin/google-chrome
@@ -44,6 +46,13 @@ jobs:
           CONJUNTO: ${{ github.event.inputs.conjunto == 'celular' && 'celular' || '' }}
           PASTA_CAPTURAS: ${{ runner.temp }}/capturas
         run: node ferramentas/capturar_telas.mjs "${{ github.event.inputs.url }}"
+      - name: Capturas do CRM, carteira e PB (2 logins temporários + dados fictícios, tudo apagado no fim)
+        if: github.event.inputs.conjunto == 'crm-pb'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          NAVEGADOR: /usr/bin/google-chrome
+          PASTA_CAPTURAS: ${{ runner.temp }}/capturas
+        run: node testes/capturas-crm-pb.mjs "${{ github.event.inputs.url }}"
       - name: Publicar na branch capturas-tela
         if: always()
         run: |
