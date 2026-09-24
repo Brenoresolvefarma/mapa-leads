@@ -408,6 +408,25 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **Mapa no celular**: o enquadramento desconta a altura do painel de baixo e dos botões do topo (o estado não fica mais
   escondido atrás da gaveta). Workflow "Capturas da tela" ganhou o conjunto `crm-pb` (`testes/capturas-crm-pb.mjs`).
 
+### Seletor de estado no celular + comemoração no iOS (PR 18, pedido do Breno em 24/09)
+- **Bug**: no iPhone, escolher Paraíba não trocava nada. Causas achadas: (1) no celular o cabeçalho do Mapa (com o seletor)
+  ficava escondido (`[data-pagina=mapa] .cab {display:none}`), então não havia como trocar no Mapa; (2) trocar o estado pelo
+  Mapa/link não redesenhava a Nova busca (regiões/cidades do estado anterior e cidades do RN seguiam marcadas, indo como
+  "Natal PB"); (3) `abrirMercado`/`usarEstado` regravavam o valor de TODOS os seletores, inclusive o que estava aberto.
+- **Uma troca só**: `ligarSeletorUf(sel, depois)` em Nova busca (`#uf`), Mapa (`#uf-mapa`), Mercado (`#uf-mercado`) e Admin ›
+  Estado inteiro (`#rn-uf`, agora também `.uf-seletor`): ouve `input` E `change`, lê o valor no ciclo seguinte (depois de o
+  seletor nativo fechar), ignora o repetido, erro vira aviso. `usarEstado` → `depoisDeTrocarEstado` (a partir de
+  `telaPronta`): limpa as cidades marcadas com aviso "As cidades do RN foram desmarcadas.", redesenha a Nova busca, zera a
+  estimativa do Estado inteiro e refaz o cartão (`#rn-info`: municípios e população do Censo 2022). `sincronizarSeletoresUf`
+  não mexe no seletor focado. Estado guardado por aparelho (`mapaleads.uf`); o pedido do Estado inteiro usa `UF_ATUAL`.
+- **Visual**: `select.uf-seletor` com 44 px de altura mínima, negrito, borda e texto na cor da marca; no celular o Mapa
+  mostra só a linha do seletor + "Filtros e buscas" (mapa 56 px mais baixo).
+- **Comemoração no iOS**: começa depois de fechar o teclado/modal (tira o foco; se a área visível estiver encolhida, espera
+  ela parar de mudar, até 0,7 s; depois 2 quadros), canvas do tamanho e na posição do `visualViewport`, resolução até 2×.
+- Teste "seletor de estado" (390 px; no CI também no **WebKit**): cada tela troca para PB por `change`, `input`, os dois e
+  pelo Playwright; confere municípios da PB (João Pessoa, Campina Grande; 223), mapa da PB (223 contornos), números, que
+  recarregar abre na PB e a volta ao RN. `PASTA_CAPTURAS=/pasta` guarda capturas desses momentos e das comemorações.
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -429,7 +448,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 - **PR 16**: liberar busca para vendedor + mini-CRM + carteira + PB ativa (um PR só, pedido do Breno). Mergeado; regras e
   índice publicados pelo Breno; Verificar Functions e "Testar tela em produção" (só tela e criar_e_cancelar) passaram;
   capturas reais do CRM/PB feitas no site (workflow "Capturas da tela", conjunto crm-pb).
-- **PR 17**: comemoração em todo ponto de criação (Estado inteiro incluído) + mapa no celular.
+- **PR 17**: comemoração em todo ponto de criação (Estado inteiro incluído) + mapa no celular. Mergeado; Verificar Functions
+  e "Testar tela em produção" passaram.
+- **PR 18**: seletor de estado no celular (Mapa, Nova busca, Mercado, Admin) + comemoração no iOS.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 

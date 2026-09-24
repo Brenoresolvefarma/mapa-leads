@@ -62,4 +62,4 @@ jobs:
           MOTOR: webkit
         run: |
           npx --yes playwright@1.63.0 install --with-deps webkit
-          npx firebase emulators:exec --only firestore,auth --project demo-mapaleads "node --test --test-concurrency=1 --test-name-pattern='^(tema|comemoração)' testes/tela.test.mjs"
+          npx firebase emulators:exec --only firestore,auth --project demo-mapaleads "node --test --test-concurrency=1 --test-name-pattern='^(tema|comemoração|seletor de estado)' testes/tela.test.mjs"
