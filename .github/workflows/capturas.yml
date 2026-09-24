@@ -66,6 +66,7 @@ jobs:
       - name: Vídeos da comemoração em GIF
         if: always() && github.event.inputs.conjunto == 'comemoracao'
         run: |
+          command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null; }
           cd "$RUNNER_TEMP/capturas" || exit 0
           for v in *.webm; do
             [ -f "$v" ] || continue

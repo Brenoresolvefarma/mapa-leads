@@ -46,16 +46,34 @@ const INSTRUMENTOS = () => {
   if (document.body) olhar(); else document.addEventListener("DOMContentLoaded", olhar);
 };
 
+// Apaga as buscas criadas de verdade pelo master temporário (com partes e lotes), antes de o motor pegar.
+async function limparReais(uid) {
+  const buscas = await db.collection("buscas").where("dono_uid", "==", uid).get();
+  for (const d of buscas.docs) {
+    for (const l of (await d.ref.collection("lotes").get()).docs) await l.ref.delete();
+    await d.ref.delete();
+  }
+  if (!buscas.size) return;
+  // Tira do estado público da fila (como o /api/apagar-busca faz).
+  const ids = buscas.docs.map((d) => d.id), fora = (i) => !ids.includes(i.id) && !ids.includes(i.mae_id);
+  await db.runTransaction(async (t) => {
+    const ref = db.doc("fila/estado"), atual = (await t.get(ref)).data();
+    if (atual) t.set(ref, { ...atual, itens: (atual.itens || []).filter(fora), rodando: (atual.rodando || []).filter(fora), aguardando: (atual.aguardando || []).filter(fora) });
+  }).catch(() => {});
+  console.log(`${buscas.size} busca(s) de teste apagada(s).`);
+}
+
 const navegador = await chromium.launch({ executablePath: process.env.NAVEGADOR || "/usr/bin/google-chrome" });
-async function abrir(u, { largura, reduzir = false, video = "" }) {
+async function abrir(u, { largura, reduzir = false, video = "", real = false, cpu = 1 }) {
   const cel = largura < 500;
   const viewport = cel ? { width: 390, height: 844 } : { width: 1366, height: 768 };
   const ctx = await navegador.newContext({ locale: "pt-BR", viewport, hasTouch: cel, isMobile: cel, deviceScaleFactor: cel ? 2 : 1,
     reducedMotion: reduzir ? "reduce" : "no-preference", ...(video ? { recordVideo: { dir: PASTA, size: viewport } } : {}) });
   await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
   await ctx.addInitScript(INSTRUMENTOS);
-  // Criação simulada: nada vai para a fila.
-  await ctx.route("**/api/criar-busca", async (r) => {
+  // Criação simulada: nada vai para a fila. Com real=true a busca é criada DE VERDADE (como o usuário faz: a lista de
+  // buscas recebe a nova e a tela redesenha) e apagada logo depois da medição (limparReais), antes de o motor pegar.
+  if (!real) await ctx.route("**/api/criar-busca", async (r) => {
     let corpo = {}; try { corpo = r.request().postDataJSON() || {}; } catch {}
     if (corpo.simular) return r.continue();
     await new Promise((ok) => setTimeout(ok, 300));
@@ -69,6 +87,8 @@ async function abrir(u, { largura, reduzir = false, video = "" }) {
   await p.fill("#le", u.email); await p.fill("#ls", u.senha); await p.click("#entrar");
   await p.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)", { timeout: 45000 });
   await p.waitForTimeout(2500); // dados do Início chegando (como um usuário de verdade)
+  // CPU mais lenta (como um celular comum): o Chrome do runner é bem mais rápido que um aparelho de verdade.
+  if (cpu > 1) await (await ctx.newCDPSession(p)).send("Emulation.setCPUThrottlingRate", { rate: cpu });
   return p;
 }
 const toque = (p, sel) => (p.viewportSize().width < 500 ? p.locator(sel).first().tap() : p.locator(sel).first().click());
@@ -137,17 +157,23 @@ try {
     if (p) await fecharComVideo(p, video).catch(() => {});
   }
   // Master (vê as buscas de todos — por isso SEM vídeo e SEM captura; só números).
-  for (const [nome, largura, fazer] of [
-    ["master 1366 Nova busca", 1366, (p) => novaBusca(p)],
-    ["master 1366 Estado inteiro RN", 1366, (p) => estadoInteiro(p, "RN")],
-    ["master 390 Estado inteiro PB", 390, (p) => estadoInteiro(p, "PB")],
+  // "real": criação de verdade (apagada em seguida); "cpu N": processador N vezes mais lento (celular comum).
+  for (const [nome, largura, fazer, opcoes] of [
+    ["master 1366 Nova busca", 1366, (p) => novaBusca(p), {}],
+    ["master 1366 Estado inteiro RN", 1366, (p) => estadoInteiro(p, "RN"), {}],
+    ["master 390 Estado inteiro PB", 390, (p) => estadoInteiro(p, "PB"), {}],
+    ["master 1366 Nova busca real cpu 2", 1366, (p) => novaBusca(p), { real: true, cpu: 2 }],
+    ["master 390 Nova busca real cpu 4", 390, (p) => novaBusca(p), { real: true, cpu: 4 }],
+    ["master 390 Estado inteiro RN cpu 4", 390, (p) => estadoInteiro(p, "RN"), { cpu: 4 }],
   ]) {
     let p;
-    try { p = await abrir(contas.master, { largura }); await fazer(p); await medir(nome, p); }
+    try { p = await abrir(contas.master, { largura, ...opcoes }); await fazer(p); await medir(nome, p); }
     catch (e) { falhas++; console.log(`FALHOU ${nome}: ${String(e.message).split("\n")[0].slice(0, 140)}`); }
     if (p) await p.context().close().catch(() => {});
+    if (opcoes.real) await limparReais(contas.master.uid);
   }
 } finally {
+  if (contas.master.uid) await limparReais(contas.master.uid);
   await navegador.close().catch(() => {});
   for (const u of Object.values(contas)) if (u.uid) { await db.doc(`usuarios/${u.uid}`).delete().catch(() => {}); await auth.deleteUser(u.uid).catch(() => {}); }
   console.log("logins temporários apagados.");
