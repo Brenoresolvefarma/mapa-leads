@@ -402,6 +402,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   leads chegarem."; Estado inteiro RN/PB → "Estado inteiro enfileirado! Te aviso quando os leads chegarem." (agendado:
   "Estado inteiro agendado para <data>! …"); lista liberada → `tipo: "pequena"` (só "Lista liberada para X e Y.").
   "Reduzir movimento": mensagem + UM logo que pula uma vez (`data-modo="um"`); normal: chuva (`data-modo="chuva"`).
+  (Refeita no PR 22 — ver "Comemoração que aparece de verdade"; lista liberada agora também tem os logos.)
   Canvas `z-index: 2950` (acima de modais 2500, painéis 1401 e barra de baixo 1200; avisos 3000 por cima), tamanho da
   área visível (`visualViewport`, por causa da barra do Safari), sem toques, some em ~2 s (+ trava por `setTimeout`).
 - Teste 390 px: Admin confirma Estado inteiro RN → chuva por cima de tudo e some; PB agendado com reduzir movimento → um
@@ -484,6 +485,22 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   `FONTES_LOCAIS=<pasta @fontsource/inter/files>` usa a Inter sem internet).
 - Teste da tela confere título, etiquetas, 167 + 223 contornos e a divisa no login.
 
+### Comemoração que aparece de verdade (PR 22, pedido do Breno em 24/09)
+- **Causa real** (medida no site publicado, workflow "Capturas da tela" › `comemoracao`, `ferramentas/diagnosticar_comemoracao.mjs`):
+  com criação simulada e Chrome rápido ela aparecia; com a criação **real** e CPU de celular (4×) **não desenhava nenhum
+  quadro**. A criação leva ~6 s (transação + disparo do motor) e, logo depois, a busca nova chega pelo Firestore e o Início
+  redesenha: **tela travada ~3 s** (5 tarefas longas, 5,5 s no total, master com 50 buscas). A animação contava o tempo pelo
+  relógio e tinha trava de 2,6 s: quando a tela destravava, os 2 s já tinham "passado" e o canvas sumia sem desenhar.
+- **Correção** (`comemorar(mensagem)` → Promise, uma só para Nova busca, Estado inteiro RN/PB inclusive agendado e Liberar
+  lista): relógio = soma do tempo dos QUADROS (máx. 1/30 s por quadro; trava de segurança 8 s ou aba escondida); primeiro
+  quadro na hora; canvas no `<body>` (`position:fixed`, `z-index:2950`, `pointer-events:none`); Nova busca só vai para o
+  Início DEPOIS da festa; 36 logos (computador) / 28 (celular) de 16 a 60 px sobem, giram e caem (~2,1 s); "reduzir
+  movimento" = 5 logos que pulam uma vez; `data-modo`, `data-pecas`, `data-quadros` no canvas (testes). "Criando busca…" no
+  botão e "Enfileirando…" no Estado inteiro enquanto a Function responde. Logo desenhado em canvas (Path2D), sem arquivo.
+- Testes: 1366 e 390 px (Chromium; no CI também WebKit), tela travada 1,5 s, reduzir movimento, Estado inteiro e lista
+  liberada. Diagnóstico no ar: vendedor novo (com vídeo/GIF na branch `capturas-tela`) e master (só números; criação real
+  apagada na hora, CPU 2×/4×).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -511,7 +528,8 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   Functions, "Testar tela em produção" e capturas reais passaram.
 - **PR 19**: equipes (master › gestor › vendedor), cotas por equipe, carteira por equipe, migração. Mergeado; migrado;
   regras publicadas; teste em produção das equipes (PR 20) passou.
-- **PR 21**: RN · PB no título, login e preview do link.
+- **PR 21**: RN · PB no título, login e preview do link. Mergeado; teste da tela em produção passou.
+- **PR 22**: comemoração que resiste à tela travada (causa medida em produção).
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 

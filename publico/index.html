@@ -1972,92 +1972,110 @@ $("#outras").addEventListener("input", () => { if (NB.passo === 3) estimar(); })
 $("#buscar").onclick = async () => {
   if (!NB.termos.length || !cidadesDoPedido().length) return irParaPasso(1);
   if (passaDoLimite()) return atualizarTravaBuscar();
-  $("#buscar").disabled = true;
+  $("#buscar").disabled = true; $("#buscar").textContent = "Criando busca…"; // a criação leva alguns segundos
   try {
     const r = await api("criar-busca", pedidoComum(false));
-    comemorar(MSG_CRIADA);
+    const festa = comemorar(MSG_CRIADA); // primeiro a festa; a troca para o Início só depois que ela termina
     toast(`Tempo estimado ~${tempo(r.estimativa_seg)} depois de começar. Você ainda pode fazer ${r.restantes_hoje} hoje.`);
     $("#r-resumo").textContent = `Busca criada. Acompanhe no Início. Restam ${r.restantes_hoje} busca(s) hoje.`;
-    carregarCota();
-    location.hash = "#inicio";
+    festa.then(() => { carregarCota(); if (rota().pag === "nova") location.hash = "#inicio"; });
   } catch (e) { toast(e.message, "erro"); $("#r-resumo").textContent = e.message; }
-  finally { $("#buscar").disabled = false; }
+  finally { $("#buscar").disabled = false; $("#buscar").textContent = "Buscar"; }
 };
 // ============================================================ COMEMORAÇÃO (busca criada, Estado inteiro, lista liberada)
-// Uma função só, chamada em todo ponto onde algo é criado com sucesso:
-//  - "chuva" (padrão): vários logos do MapaLeads (o pino azul) saltam, quicam e giram por ~2 s, num canvas próprio;
-//  - "reduzir movimento" ligado no aparelho: a mensagem + UM logo que pula uma vez (dá para perceber que funcionou);
-//  - "pequena" (lista liberada): só a mensagem.
-// O canvas fica por cima de tudo (acima de modais e da barra de baixo; só os avisos ficam acima dele), não recebe toques
-// e some sozinho em ~2 s (com uma trava de segurança, caso a aba vá para o fundo e o requestAnimationFrame pare).
+// Uma função só — comemorar(mensagem) — chamada em todo ponto onde algo é criado com sucesso (Nova busca, Estado inteiro
+// RN/PB inclusive agendado, Liberar lista). Vários logos do MapaLeads (o pino azul), de tamanhos variados, sobem, giram e
+// caem por ~2 s num canvas próprio, preso no <body> (fora das páginas que são redesenhadas), por cima de tudo (só os
+// avisos ficam acima, para a mensagem aparecer), sem pegar toques. "Reduzir movimento" no aparelho: a mensagem + 5 logos
+// que pulam uma vez (nunca "nada").
+// Robustez (causa do "não aparece nada" em produção): o relógio da animação soma só o tempo dos QUADROS desenhados (no
+// máximo 1/30 s por quadro). Se a tela travar logo depois de criar a busca (Início redesenhando com muitas buscas, dados
+// chegando), a animação espera e continua de onde parou — antes ela contava o tempo do relógio e, quando a tela destravava,
+// os 2 s já tinham passado e o canvas sumia sem ter desenhado nada. O primeiro quadro sai na hora (sem esperar o navegador)
+// e a troca de página (Nova busca → Início) só acontece DEPOIS da comemoração (a função devolve uma Promise).
 const MSG_CRIADA = "Busca criada! Te aviso quando os leads chegarem.";
 const MSG_ESTADO = "Estado inteiro enfileirado! Te aviso quando os leads chegarem.";
 const PINO = new Path2D("M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"), PINO_MIOLO = new Path2D("M14.5 9a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0z");
-function comemorar(mensagem = MSG_CRIADA, { tipo = "chuva" } = {}) {
+function comemorar(mensagem = MSG_CRIADA) {
   toast(mensagem, "ok");
-  if (tipo === "pequena") return;
-  // iPhone: começa só depois que o teclado e a janela de confirmação fecham (senão o Safari mede a área errada e o
-  // desenho sai escondido/cortado). Tira o foco do campo (fecha o teclado) e espera a área visível parar de mudar.
+  // iPhone: começa depois que o teclado fecha (senão o Safari mede a área errada). Tira o foco do campo (fecha o teclado)
+  // e, se a área visível estiver encolhida, espera ela parar de mudar (até 0,7 s).
   document.activeElement?.blur?.();
-  const vv = window.visualViewport;
-  let feito = false, espera;
-  const vai = () => { if (feito) return; feito = true; clearTimeout(espera); vv?.removeEventListener("resize", aoMudar); requestAnimationFrame(() => requestAnimationFrame(animarComemoracao)); };
-  const aoMudar = () => { clearTimeout(espera); espera = setTimeout(vai, 120); };
-  if (vv && vv.height < innerHeight - 120) { vv.addEventListener("resize", aoMudar); espera = setTimeout(vai, 700); } // teclado aberto
-  else vai();
+  return new Promise((fim) => {
+    const vv = window.visualViewport;
+    let feito = false, espera;
+    const vai = () => {
+      if (feito) return; feito = true; clearTimeout(espera); vv?.removeEventListener("resize", aoMudar);
+      try { animarComemoracao(fim); } catch (e) { console.error(e); fim(); }
+    };
+    const aoMudar = () => { clearTimeout(espera); espera = setTimeout(vai, 120); };
+    if (vv && vv.height < innerHeight - 120) { vv.addEventListener("resize", aoMudar); espera = setTimeout(vai, 700); } // teclado aberto
+    else vai();
+  });
 }
-function animarComemoracao() {
+function animarComemoracao(fim) {
   const reduzido = matchMedia("(prefers-reduced-motion: reduce)").matches;
   $("#comemoracao")?.remove();
-  // Tamanho e posição da janela visível de verdade (no iPhone, 100vh inclui a barra do Safari; com a página rolada pelo
-  // teclado, a área visível começa em offsetTop). O canvas tem a resolução da tela (devicePixelRatio, até 2×).
+  // Tamanho e posição da área visível de verdade (no iPhone, 100vh inclui a barra do Safari). Resolução da tela até 2×.
   const vv = window.visualViewport;
-  const dpr = Math.min(devicePixelRatio || 1, 2), L = vv?.width || innerWidth, A = vv?.height || innerHeight;
+  const dpr = Math.min(devicePixelRatio || 1, 2), L = Math.round(vv?.width || innerWidth), A = Math.round(vv?.height || innerHeight);
   const cv = document.createElement("canvas");
   cv.id = "comemoracao"; cv.className = "comemoracao"; cv.setAttribute("aria-hidden", "true");
-  cv.dataset.modo = reduzido ? "um" : "chuva";
   cv.style.width = `${L}px`; cv.style.height = `${A}px`;
   cv.style.left = `${vv?.offsetLeft || 0}px`; cv.style.top = `${vv?.offsetTop || 0}px`;
   cv.width = Math.round(L * dpr); cv.height = Math.round(A * dpr);
-  document.body.appendChild(cv);
   const ctx = cv.getContext("2d");
-  if (!ctx) { cv.remove(); return; }
-  const cheio = reduzido ? 1200 : 2000;
-  setTimeout(() => cv.remove(), cheio + 600); // trava de segurança
-  // o logo é desenhado uma vez (64 px) e depois só copiado: leve no celular
+  if (!ctx) { fim(); return; }
+  // O logo é desenhado uma vez (64 px) e depois só copiado: leve no celular.
   const T = 64 * dpr, logo = document.createElement("canvas"); logo.width = logo.height = T;
   const g = logo.getContext("2d");
-  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--brand").trim() || "#1f5fd6";
-  g.beginPath(); g.roundRect ? g.roundRect(0, 0, T, T, T * 0.28) : g.rect(0, 0, T, T); g.fill();
-  g.translate(T * 0.2, T * 0.2); g.scale(T * 0.6 / 24, T * 0.6 / 24);
+  g.fillStyle = "#1f5fd6";
+  g.beginPath(); if (g.roundRect) g.roundRect(0, 0, T, T, T * 0.28); else g.rect(0, 0, T, T); g.fill();
+  g.translate(T * 0.2, T * 0.2); g.scale((T * 0.6) / 24, (T * 0.6) / 24);
   g.strokeStyle = "#fff"; g.lineWidth = 2.2; g.lineJoin = g.lineCap = "round";
   g.stroke(PINO); g.stroke(PINO_MIOLO);
-  const G = A * 2.6; // gravidade em px/s²
-  // Reduzido: um logo grande no meio, um pulo só (sem girar, sem quicar). Chuva: saem de baixo, em leque, e quicam.
-  const pecas = reduzido
-    ? [{ x: L / 2, y: A * 0.62, t: 72, vx: 0, vy: -Math.sqrt(2 * G * A * 0.18), r: 0, vr: 0, uma: true, y0: A * 0.62 }]
-    : Array.from({ length: L < 500 ? 16 : 26 }, () => ({
-      x: L * (0.2 + Math.random() * 0.6), y: A + 40, t: 18 + Math.random() * 30,
-      vx: (Math.random() - 0.5) * L * 0.9, vy: -(A * (0.9 + Math.random() * 0.7)),
-      r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 10,
-    }));
-  let antes = performance.now(); const inicio = antes;
-  const quadro = (agora) => {
-    if (!cv.isConnected) return;
-    const dt = Math.min(0.05, (agora - antes) / 1000), passou = agora - inicio; antes = agora;
+  const G = A * 2.4; // gravidade (px/s²), proporcional à altura da tela
+  const sobe = (fracao) => Math.sqrt(2 * G * A * fracao); // velocidade para subir essa fração da altura
+  // Reduzido: 5 logos em fila que pulam uma vez (sem girar). Normal: 36 (computador) / 28 (celular) de 16 a 60 px,
+  // saindo de baixo em leque, em ondas de até 0,3 s, girando, e caindo para fora da tela.
+  const n = reduzido ? 5 : L < 500 ? 28 : 36;
+  const pecas = Array.from({ length: n }, (_, i) => reduzido
+    ? { x: (L * (i + 1)) / 6, y: A * 0.7, y0: A * 0.7, t: Math.min(64, L / 7), vx: 0, vy: -sobe(0.22), r: 0, vr: 0, espera: i * 0.06, pousa: true }
+    : { x: L * (0.1 + Math.random() * 0.8), y: A + 40, t: 16 + Math.random() ** 1.4 * 44, vx: (Math.random() - 0.5) * L * 0.7,
+        vy: -sobe(0.45 + Math.random() * 0.45), r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 12, espera: Math.random() * 0.3 });
+  const DURA = reduzido ? 1.4 : 2.1; // segundos de animação (tempo dos quadros, não do relógio)
+  cv.dataset.modo = reduzido ? "reduzido" : "chuva";
+  cv.dataset.pecas = String(n);
+  document.body.appendChild(cv);
+  let tempo = 0, antes = performance.now(), acabou = false;
+  const encerrar = () => {
+    if (acabou) return; acabou = true;
+    clearTimeout(trava); document.removeEventListener("visibilitychange", aoEsconder);
+    cv.remove(); fim();
+  };
+  // Trava de segurança: aba no fundo (o navegador para os quadros) ou algo muito travado → some.
+  const trava = setTimeout(encerrar, 8000);
+  const aoEsconder = () => { if (document.hidden) encerrar(); };
+  document.addEventListener("visibilitychange", aoEsconder);
+  let quadros = 0;
+  const desenhar = (dt) => {
+    tempo += dt; cv.dataset.quadros = String(++quadros); // quadros desenhados (os testes conferem)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, L, A);
-    ctx.globalAlpha = passou > cheio - 400 ? Math.max(0, (cheio - passou) / 400) : 1;
+    ctx.globalAlpha = tempo > DURA - 0.3 ? Math.max(0, (DURA - tempo) / 0.3) : 1;
     for (const p of pecas) {
+      if (tempo < p.espera) continue;
       p.vy += G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
-      if (p.uma) { if (p.y > p.y0) { p.y = p.y0; p.vy = 0; } } // um pulo e pousa
-      else {
-        if (p.y > A - p.t / 2 && p.vy > 0) { p.y = A - p.t / 2; p.vy *= -0.55; p.vx *= 0.8; } // quica
-        if (p.x < p.t / 2 || p.x > L - p.t / 2) { p.vx *= -1; p.x = Math.max(p.t / 2, Math.min(L - p.t / 2, p.x)); }
-      }
+      if (p.pousa && p.y > p.y0) { p.y = p.y0; p.vy = 0; } // um pulo e pousa
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.drawImage(logo, -p.t / 2, -p.t / 2, p.t, p.t); ctx.restore();
     }
-    if (passou < cheio) requestAnimationFrame(quadro); else cv.remove();
   };
+  const quadro = (agora) => {
+    if (acabou || !cv.isConnected) return encerrar();
+    const dt = Math.min(1 / 30, Math.max(0, (agora - antes) / 1000)); antes = agora;
+    desenhar(dt);
+    if (tempo < DURA) requestAnimationFrame(quadro); else encerrar();
+  };
+  desenhar(1 / 60); // primeiro quadro já na hora
   requestAnimationFrame(quadro);
 }
 // Perfis salvos (no servidor, por usuário)
@@ -2588,7 +2606,7 @@ $("#painel-liberar").addEventListener("click", async (ev) => {
     try {
       await api("liberar-busca", { acao: "liberar_equipe", id: LB.id, equipe_id: eq });
       if (e) e.liberada = true;
-      comemorar(`Lista liberada para a equipe ${e?.nome || eq}.`, { tipo: "pequena" });
+      comemorar(`Lista liberada para a equipe ${e?.nome || eq}.`);
       desenharLiberar();
     } catch (erro) { toast(erro.message, "erro"); }
     return;
@@ -2599,7 +2617,7 @@ $("#painel-liberar").addEventListener("click", async (ev) => {
   try {
     const r = await api("liberar-busca", corpoLiberar("liberar"));
     const nomes = r.por_vendedor.map((p) => LB.vendedores.find((v) => v.uid === p.uid)?.rotulo || "vendedor");
-    comemorar(`Lista liberada para ${nomes.length > 1 ? `${nomes.slice(0, -1).join(", ")} e ${nomes.at(-1)}` : nomes[0]}.`, { tipo: "pequena" });
+    comemorar(`Lista liberada para ${nomes.length > 1 ? `${nomes.slice(0, -1).join(", ")} e ${nomes.at(-1)}` : nomes[0]}.`);
     fecharPaineis();
   } catch (e) { toast(e.message, "erro"); botao.disabled = false; botao.textContent = "Liberar"; }
 });
@@ -3560,7 +3578,7 @@ function desenharCartaoEstadoInteiro() {
   $("#rn-uf-rot").textContent = UF_ATUAL;
 }
 $("#rn-confirmar").onclick = async () => {
-  $("#rn-confirmar").disabled = true;
+  $("#rn-confirmar").disabled = true; $("#msg-rn").textContent = "Enfileirando…"; // a criação leva alguns segundos
   try {
     const r = await api("criar-busca", pedidoRn(false));
     comemorar(r.agendada_para ? `Estado inteiro agendado para ${dataHora(new Date(r.agendada_para))}! Te aviso quando os leads chegarem.` : MSG_ESTADO);

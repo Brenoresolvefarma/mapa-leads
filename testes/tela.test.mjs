@@ -805,28 +805,74 @@ test("apagar busca: vendedor apaga a própria em dois passos (celular); em andam
   await db.doc("buscas/b-fila").delete();
 });
 
-test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mensagem; com 'reduzir movimento' um logo pula uma vez", async () => {
+// Acompanha a comemoração: espera o canvas, lê o máximo de quadros/peças enquanto existe e quanto tempo ficou na tela.
+async function acompanharComemoracao(p, { travarMs = 0 } = {}) {
+  await p.waitForSelector("#comemoracao", { state: "attached", timeout: 15000 }).catch(async (e) => {
+    throw new Error(`${e.message.split("\n")[0]} · avisos: ${await p.textContent("#toasts").catch(() => "")} · ${await p.evaluate(() => location.hash)}`);
+  });
+  const inicio = Date.now();
+  const c = await p.$eval("#comemoracao", (e) => {
+    const z = (sel) => Number(getComputedStyle(document.querySelector(sel)).zIndex) || 0, r = e.getBoundingClientRect();
+    return { modo: e.dataset.modo, pecas: Number(e.dataset.pecas), pe: getComputedStyle(e).pointerEvents, pos: getComputedStyle(e).position,
+      z: Number(getComputedStyle(e).zIndex), barra: z("#barra-inferior"), modal: z("#confirmacao"), painel: z("#painel-liberar"),
+      w: Math.round(r.width), h: Math.round(r.height), vw: Math.round(window.visualViewport?.width || innerWidth), vh: Math.round(window.visualViewport?.height || innerHeight),
+      pai: e.parentElement === document.body, hash: location.hash };
+  });
+  // Tela travada logo depois (como no celular do master em produção: 3 s de trava ao chegar a busca nova e redesenhar o Início).
+  if (travarMs) await p.evaluate((ms) => { const fim = performance.now() + ms; while (performance.now() < fim) { /* trava */ } }, travarMs);
+  let quadros = 0;
+  for (;;) {
+    const q = await p.evaluate(() => { const e = document.querySelector("#comemoracao"); return e ? Number(e.dataset.quadros) || 0 : -1; });
+    if (q < 0) break;
+    quadros = Math.max(quadros, q);
+    await p.waitForTimeout(100);
+    if (Date.now() - inicio > 9000) throw new Error(`a comemoração não sumiu (quadros ${quadros})`);
+  }
+  return { ...c, quadros, durou: Date.now() - inicio };
+}
+const conferirChuva = (c, largura) => {
+  assert.equal(c.modo, "chuva");
+  assert.ok(c.pecas >= 25 && c.pecas <= 40, `peças: ${c.pecas}`);
+  assert.deepEqual([c.pe, c.pos, c.pai, c.w, c.h], ["none", "fixed", true, largura, c.vh]);
+  assert.ok(c.z > c.barra && c.z > c.modal && c.z > c.painel, JSON.stringify(c));
+  assert.ok(c.quadros >= 30, `quadros desenhados: ${c.quadros}`);
+  assert.ok(c.durou >= 1200 && c.durou <= 5000, `ficou ${c.durou} ms`);
+};
+
+test("comemoração: ao criar a busca, 25–40 logos saltam por ~2 s por cima de tudo (1366 e 390 px), antes de ir para o Início; resiste a tela travada; 'reduzir movimento' = 5 logos", async () => {
   const criar = async (p) => {
-    await p.tap("#barra-inferior a[data-ir=nova]");
+    const cel = p.viewportSize().width < 500, toque = (sel) => (cel ? p.locator(sel).first().tap() : p.locator(sel).first().click());
+    await p.evaluate(() => { location.hash = "#nova"; });
+    // Segunda busca: a Nova busca continua no passo 3 → volta ao passo 1
+    for (const v of ["[data-passo-conteudo='3'] [data-ir-passo='2']", "[data-passo-conteudo='2'] [data-ir-passo='1']"])
+      if (await p.locator(v).first().isVisible()) await toque(v);
     await p.fill("#termo-input", "pet shop"); await p.press("#termo-input", "Enter");
-    await p.tap("[data-passo-conteudo='1'] [data-ir-passo='2']");
+    await toque("[data-passo-conteudo='1'] [data-ir-passo='2']");
     await p.$eval(`#regioes input[data-regiao='${MICRO_NATAL}']`, (e) => e.closest("label").scrollIntoView({ block: "center", inline: "center" }));
     await p.check(`#regioes input[data-regiao='${MICRO_NATAL}']`);
-    await p.tap("[data-passo-conteudo='2'] [data-ir-passo='3']");
-    await p.tap("#buscar");
+    await toque("[data-passo-conteudo='2'] [data-ir-passo='3']");
+    await toque("#buscar");
   };
-  const p = await abrir("ana@x.example", "senha-forte-2", { width: 390, height: 844 });
-  await criar(p);
-  await p.waitForSelector("#comemoracao", { state: "attached", timeout: 10000 });
-  await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
-  if (process.env.PASTA_CAPTURAS) { await p.waitForTimeout(450); await capturar(p, "comemoracao-nova-busca"); }
-  const c = await p.$eval("#comemoracao", (e) => ({ pe: getComputedStyle(e).pointerEvents, w: e.getBoundingClientRect().width }));
-  assert.deepEqual(c, { pe: "none", w: 390 }); // não bloqueia os toques
-  await p.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 }); // some sozinho (~2 s)
-  assert.deepEqual(erros, []);
-  await p.context().close();
+  // Cota do dia da Ana livre para as 3 buscas daqui (os testes anteriores já usaram parte); devolvida no fim.
+  const refAna = firebase().db.doc(`usuarios/${uids.ana}`), antesAna = (await refAna.get()).data();
+  await refAna.update({ contagem_dia: 0, consultas_dia: 0 });
+  // 390 px: com a tela TRAVADA 1,5 s logo depois de começar (como no celular do master em produção, quando a busca nova
+  // chega e o Início redesenha) — o relógio antigo perdia a festa inteira; agora ela espera e continua.
+  for (const [largura, altura, travarMs] of [[1366, 768, 0], [390, 844, 1500]]) {
+    const p = await abrir("ana@x.example", "senha-forte-2", { width: largura, height: altura });
+    await criar(p);
+    const cap = process.env.PASTA_CAPTURAS ? p.waitForTimeout(700).then(() => capturar(p, `comemoracao-nova-busca-${largura}`)) : null;
+    const c = await acompanharComemoracao(p, { travarMs });
+    await cap;
+    conferirChuva(c, largura);
+    assert.equal(c.hash, "#nova", "a festa começa antes de trocar de página");
+    await esperarTexto(p, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
+    await p.waitForFunction(() => location.hash === "#inicio", null, { timeout: 5000 }); // e depois vai para o Início
+    assert.deepEqual(erros, []);
+    await p.context().close();
+  }
 
-  // Reduzir movimento: a mensagem e UM logo que pula uma vez (sem a chuva)
+  // Reduzir movimento: a mensagem e 5 logos que pulam uma vez (nunca "nada")
   const ctx = await navegador.newContext({ locale: "pt-BR", viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: "reduce" });
   await rotearCdn(ctx);
   await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
@@ -837,11 +883,17 @@ test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mens
   await r.fill("#le", "ana@x.example"); await r.fill("#ls", "senha-forte-2"); await r.tap("#entrar");
   await r.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
   await criar(r);
+  const c = await acompanharComemoracao(r);
+  assert.deepEqual([c.modo, c.pecas, c.pe], ["reduzido", 5, "none"]);
+  assert.ok(c.quadros >= 20, `quadros: ${c.quadros}`);
   await esperarTexto(r, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
-  await r.waitForSelector("#comemoracao[data-modo=um]", { state: "attached", timeout: 5000 });
-  await r.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 });
   assert.deepEqual(erros, []);
   await ctx.close();
+  // Limpeza: as buscas "pet shop" criadas aqui (e as partes delas), para não mexer nos testes seguintes
+  const { db } = firebase();
+  for (const d of (await db.collection("buscas").where("dono_uid", "==", uids.ana).get()).docs)
+    if ((d.data().parametros?.termos || []).includes("pet shop")) await d.ref.delete();
+  await refAna.update({ contagem_dia: antesAna.contagem_dia ?? 0, consultas_dia: antesAna.consultas_dia ?? 0 }); // devolve a cota como estava
 });
 
 test("paralelismo: busca rodando mostra 'X de Y cidades prontas' e os leads já prontos; aviso de cidades pequenas na Nova busca", async () => {
@@ -1152,7 +1204,7 @@ test("liberar busca (390 px): admin libera dividindo sem repetir; vendedor vê '
   await esperarTexto(a, "#lib-previa", /: 6 leads · lista inteira/);
   await a.locator("#lib-confirmar").tap();
   await esperarTexto(a, "#toasts", /Lista liberada para [^,]+\./);
-  assert.equal(await a.locator("#comemoracao").count(), 0, "lista liberada: só a mensagem, sem logos");
+  conferirChuva(await acompanharComemoracao(a), 390); // lista liberada também comemora (a mesma função)
   // Chips "Liberada para" com revogar
   await a.tap("#abrir-buscas");
   await a.waitForSelector(`#caixa-buscas [data-revogar=lib][data-uid="${lia.uid}"]`);
@@ -1442,7 +1494,7 @@ test("PB (390 px): Nova busca na Paraíba manda as cidades com 'PB'; Mapa PB com
   void breno;
 });
 
-test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por cima de tudo e somem em ~2 s; agendado com 'reduzir movimento' → um logo", async () => {
+test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por cima de tudo e somem em ~2 s; agendado com 'reduzir movimento' → 5 logos", async () => {
   const { db } = firebase();
   const tel = { width: 390, height: 844 };
   const confirmar = async (pg, uf, noite) => {
@@ -1458,19 +1510,11 @@ test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por 
   const a = await abrir("breno@x.example", "senha-forte-1", tel);
   await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
   await confirmar(a, "RN", false);
-  await a.waitForSelector("#comemoracao[data-modo=chuva]", { state: "attached", timeout: 10000 });
+  const cap = process.env.PASTA_CAPTURAS ? a.waitForTimeout(600).then(() => capturar(a, "comemoracao-admin-estado-inteiro")) : null;
+  const c = await acompanharComemoracao(a);
+  await cap;
+  conferirChuva(c, 390); // por cima da barra de baixo, dos painéis e dos modais; cobre a tela visível; não pega os toques
   await esperarTexto(a, "#toasts", /Estado inteiro enfileirado! Te aviso quando os leads chegarem\./);
-  if (process.env.PASTA_CAPTURAS) { await a.waitForTimeout(450); await capturar(a, "comemoracao-admin-estado-inteiro"); }
-  // Por cima de tudo: acima da barra de baixo, dos painéis e dos modais; cobre a tela visível; não pega os toques
-  const c = await a.$eval("#comemoracao", (e) => {
-    const z = (sel) => Number(getComputedStyle(document.querySelector(sel)).zIndex) || 0, r = e.getBoundingClientRect();
-    return { z: Number(getComputedStyle(e).zIndex), barra: z("#barra-inferior"), modal: z("#confirmacao"), painel: z("#painel-liberar"),
-      w: Math.round(r.width), h: Math.round(r.height), vh: Math.round(window.visualViewport?.height || innerHeight), pe: getComputedStyle(e).pointerEvents };
-  });
-  assert.ok(c.z > c.barra && c.z > c.modal && c.z > c.painel, JSON.stringify(c));
-  assert.deepEqual([c.w, c.h, c.pe], [390, c.vh, "none"]);
-  await a.screenshot({ path: join(pasta, "comemoracao-admin.png") });
-  await a.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 }); // some sozinho (~2 s)
   assert.match(await a.textContent("#msg-rn"), /Enfileirado: 249 consultas/);
   assert.deepEqual(erros, []);
   await a.context().close();
@@ -1486,10 +1530,9 @@ test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por 
   await r.fill("#le", "breno@x.example"); await r.fill("#ls", "senha-forte-1"); await r.tap("#entrar");
   await r.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
   await confirmar(r, "PB", true);
-  await r.waitForSelector("#comemoracao[data-modo=um]", { state: "attached", timeout: 10000 });
+  const cr = await acompanharComemoracao(r);
+  assert.deepEqual([cr.modo, cr.pecas], ["reduzido", 5]);
   await esperarTexto(r, "#toasts", /Estado inteiro agendado para .+! Te aviso quando os leads chegarem\./);
-  if (process.env.PASTA_CAPTURAS) { await r.waitForTimeout(250); await capturar(r, "comemoracao-admin-reduzir-movimento"); }
-  await r.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 });
   assert.deepEqual(erros, []);
   await ctx.close();
   // Limpeza: as duas mães do Estado inteiro e as filhas
