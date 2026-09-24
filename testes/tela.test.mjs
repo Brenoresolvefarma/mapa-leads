@@ -790,7 +790,7 @@ test("apagar busca: vendedor apaga a própria em dois passos (celular); em andam
   await db.doc("buscas/b-fila").delete();
 });
 
-test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mensagem; com 'reduzir movimento' só a mensagem", async () => {
+test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mensagem; com 'reduzir movimento' um logo pula uma vez", async () => {
   const criar = async (p) => {
     await p.tap("#barra-inferior a[data-ir=nova]");
     await p.fill("#termo-input", "pet shop"); await p.press("#termo-input", "Enter");
@@ -810,7 +810,7 @@ test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mens
   assert.deepEqual(erros, []);
   await p.context().close();
 
-  // Reduzir movimento: só a mensagem
+  // Reduzir movimento: a mensagem e UM logo que pula uma vez (sem a chuva)
   const ctx = await navegador.newContext({ locale: "pt-BR", viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: "reduce" });
   await rotearCdn(ctx);
   await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
@@ -822,7 +822,8 @@ test("comemoração: ao criar a busca, logos saltam por ~2 s (canvas) com a mens
   await r.waitForSelector("#tela-app:not(.oculto) [data-pagina=inicio]:not(.oculto)");
   await criar(r);
   await esperarTexto(r, "#toasts", /Busca criada! Te aviso quando os leads chegarem\./);
-  assert.equal(await r.locator("#comemoracao").count(), 0, "sem animação com reduzir movimento");
+  await r.waitForSelector("#comemoracao[data-modo=um]", { state: "attached", timeout: 5000 });
+  await r.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 });
   assert.deepEqual(erros, []);
   await ctx.close();
 });
@@ -1122,7 +1123,7 @@ test("liberar busca (390 px): admin libera dividindo sem repetir; vendedor vê '
   await a.locator("input[name=lib-modo][value=inteira]").check();
   await esperarTexto(a, "#lib-previa", /Lia: 3 leads · 1 cidade/);
   await conf.tap();
-  await esperarTexto(a, "#toasts", /liberada para 2 vendedor/);
+  await esperarTexto(a, "#toasts", /Lista liberada para Lia e Rui\./);
   let b = (await db.doc("buscas/lib").get()).data();
   assert.deepEqual([...b.liberada_para].sort(), [lia.uid, rui.uid].sort());
   const copia = async (uid) => (await db.doc(`buscas/lib/liberacoes/${uid}/lotes/0`).get()).data().leads.map((l) => l.id_lugar);
@@ -1134,7 +1135,8 @@ test("liberar busca (390 px): admin libera dividindo sem repetir; vendedor vê '
   await a.locator(`[data-lib-vend="${uids.ana}"]`).check();
   await esperarTexto(a, "#lib-previa", /: 6 leads · lista inteira/);
   await a.locator("#lib-confirmar").tap();
-  await esperarTexto(a, "#toasts", /liberada para 1 vendedor/);
+  await esperarTexto(a, "#toasts", /Lista liberada para [^,]+\./);
+  assert.equal(await a.locator("#comemoracao").count(), 0, "lista liberada: só a mensagem, sem logos");
   // Chips "Liberada para" com revogar
   await a.tap("#abrir-buscas");
   await a.waitForSelector(`#caixa-buscas [data-revogar=lib][data-uid="${lia.uid}"]`);
@@ -1416,4 +1418,56 @@ test("PB (390 px): Nova busca na Paraíba manda as cidades com 'PB'; Mapa PB com
   await db.doc(`buscas/${criada.id}`).delete();
   await db.doc("buscas/pbA/lotes/0").delete(); await db.doc("buscas/pbA").delete();
   void breno;
+});
+
+test("comemoração do Estado inteiro (390 px): Admin confirma RN → logos por cima de tudo e somem em ~2 s; agendado com 'reduzir movimento' → um logo", async () => {
+  const { db } = firebase();
+  const tel = { width: 390, height: 844 };
+  const confirmar = async (pg, uf, noite) => {
+    await pg.evaluate(() => { location.hash = "#admin"; });
+    await pg.waitForSelector("#rn-uf");
+    await pg.selectOption("#rn-uf", uf);
+    await pg.fill("#rn-termos", "farmácia");
+    if (noite) await pg.check("#rn-noite");
+    await pg.locator("#rn-estimar").tap();
+    await pg.waitForSelector("#rn-confirmar:not([disabled])");
+    await pg.locator("#rn-confirmar").tap();
+  };
+  const a = await abrir("breno@x.example", "senha-forte-1", tel);
+  await a.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await confirmar(a, "RN", false);
+  await a.waitForSelector("#comemoracao[data-modo=chuva]", { state: "attached", timeout: 10000 });
+  await esperarTexto(a, "#toasts", /Estado inteiro enfileirado! Te aviso quando os leads chegarem\./);
+  // Por cima de tudo: acima da barra de baixo, dos painéis e dos modais; cobre a tela visível; não pega os toques
+  const c = await a.$eval("#comemoracao", (e) => {
+    const z = (sel) => Number(getComputedStyle(document.querySelector(sel)).zIndex) || 0, r = e.getBoundingClientRect();
+    return { z: Number(getComputedStyle(e).zIndex), barra: z("#barra-inferior"), modal: z("#confirmacao"), painel: z("#painel-liberar"),
+      w: Math.round(r.width), h: Math.round(r.height), vh: Math.round(window.visualViewport?.height || innerHeight), pe: getComputedStyle(e).pointerEvents };
+  });
+  assert.ok(c.z > c.barra && c.z > c.modal && c.z > c.painel, JSON.stringify(c));
+  assert.deepEqual([c.w, c.h, c.pe], [390, c.vh, "none"]);
+  await a.screenshot({ path: join(pasta, "comemoracao-admin.png") });
+  await a.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 }); // some sozinho (~2 s)
+  assert.match(await a.textContent("#msg-rn"), /Enfileirado: 249 consultas/);
+  assert.deepEqual(erros, []);
+  await a.context().close();
+
+  // PB agendado para a noite, com "reduzir movimento": mensagem de agendado + um logo só
+  const ctx = await navegador.newContext({ locale: "pt-BR", viewport: tel, hasTouch: true, reducedMotion: "reduce" });
+  await rotearCdn(ctx);
+  await ctx.addInitScript(() => { const o = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return /^mapaleads\.tour\./.test(k) ? "true" : o.call(this, k); }; });
+  const r = await ctx.newPage();
+  erros = []; r.on("pageerror", (e) => erros.push(e.message));
+  await r.goto(`${local.url}/?emulador=1`);
+  await r.waitForSelector("#entrar:not([disabled])", { timeout: 30000 });
+  await r.fill("#le", "breno@x.example"); await r.fill("#ls", "senha-forte-1"); await r.tap("#entrar");
+  await r.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await confirmar(r, "PB", true);
+  await r.waitForSelector("#comemoracao[data-modo=um]", { state: "attached", timeout: 10000 });
+  await esperarTexto(r, "#toasts", /Estado inteiro agendado para .+! Te aviso quando os leads chegarem\./);
+  await r.waitForSelector("#comemoracao", { state: "detached", timeout: 4000 });
+  assert.deepEqual(erros, []);
+  await ctx.close();
+  // Limpeza: as duas mães do Estado inteiro e as filhas
+  for (const d of (await db.collection("buscas").where("tipo", "in", ["rn_mae", "rn_filha"]).get()).docs) await d.ref.delete();
 });
