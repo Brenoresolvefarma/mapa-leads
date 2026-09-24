@@ -1132,7 +1132,8 @@ function aplicarTema(t) {
 function escolherTema(t) {
   guardar("mapaleads.tema", aplicarTema(t));
   // Mapa e gráficos guardam cores ao desenhar: redesenha a tela atual com as cores novas.
-  if (M.mapa) { M.mapa.remove(); M.mapa = null; M.mun = M.micro = M.pontos = null; M.uf = ""; }
+  // Sem destruir o mapa (remover no meio de um zoom animado dava erro no Leaflet): só refaz os contornos com as cores novas.
+  if (M.mapa) M.uf = "";
   if (usuario) irPara();
 }
 aplicarTema(params.get("tema") || ler("mapaleads.tema", "claro"));
