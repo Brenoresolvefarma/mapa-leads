@@ -28,6 +28,8 @@ const { default: adminUsuarios } = await import(funcao("admin-usuarios"));
 const { default: configPublica } = await import(funcao("config-publica"));
 const { default: perfis } = await import(funcao("perfis"));
 const { default: saudeMotor } = await import(funcao("saude-motor"));
+const { default: equipesFn } = await import(funcao("equipes"));
+const { default: equipeFn } = await import(funcao("equipe"));
 const { acordar } = await import(funcao("despertador"));
 const { firebase } = await import("../netlify/lib/servidor.mjs");
 
@@ -642,7 +644,7 @@ test("mini-CRM e carteira: status com histórico; vendedor B recebe 409 no lead 
   const reg = crmFla.leads[K1];
   assert.deepEqual([reg.s, reg.n, reg.p, reg.busca], ["contatado", "ligar sexta", "2026-09-26", "crm1"]);
   assert.deepEqual([reg.h[0].u, reg.h[0].s, reg.h[0].n], ["Flávio", "contatado", "ligar sexta"]);
-  let cart = (await db.doc(`carteira/${fatiaDe(K1)}`).get()).data().leads[K1];
+  let cart = (await db.doc(`carteira/resolve-farma__${fatiaDe(K1)}`).get()).data().leads[K1];
   assert.deepEqual([cart.uid, cart.nome, cart.s], [fla.uid, "Flávio", "contatado"]);
   // Gil tem o mesmo lugar numa busca dele: 409 "Na carteira de Flávio"
   const r2 = await st(tokens.gil, { busca_id: "crm2", chave: K1, status: "contatado" });
@@ -657,7 +659,7 @@ test("mini-CRM e carteira: status com histórico; vendedor B recebe 409 no lead 
   assert.deepEqual(reg2.h.map((h) => h.s), ["negociando", "contatado"]);
   assert.equal(reg2.p, "2026-09-26"); // próximo contato continua
   // Prazo: sem contato há 61 dias → livre (padrão 60); com o prazo em 90 dias, continua do Flávio
-  const refCart = db.doc(`carteira/${fatiaDe(K1)}`);
+  const refCart = db.doc(`carteira/resolve-farma__${fatiaDe(K1)}`);
   await refCart.set({ leads: { [K1]: { ...cart, s: "negociando", ultimo: Date.now() - 61 * 86400000 } } }, { merge: true });
   assert.equal((await pedido(adminUsuarios, { acao: "definir_config", carteira_dias: 90 }, tokens.breno)).corpo.config.carteira_dias, 90);
   assert.equal((await st(tokens.gil, { busca_id: "crm2", chave: K1, status: "contatado" })).status, 409);
@@ -743,4 +745,160 @@ test("PB: Estado inteiro (admin) estima com 'PB'; vendedor recebe 403; busca com
   assert.equal((await pedido(crmLead, { acao: "status", busca_id: "pbL", chave, status: "contatado" }, tokens.fla)).status, 200);
   assert.equal((await pedido(crmLead, { acao: "status", busca_id: "pbL", chave, status: "contatado" }, tokens.gil)).status, 403); // não é da parte dele
   await pedido(apagarBusca, { id: "pbL" }, tokens.breno);
+});
+
+// ------------------------------------------------------------ EQUIPES (master › gestor › vendedor)
+test("equipes: master cria equipe e gestor; gestor cria prepostos no limite, 403 em outra equipe; cotas da equipe; carteira isolada; liberar e desativar", async () => {
+  const { auth, db } = firebase();
+  const { chaveLead, fatiaDe } = await import("../netlify/lib/logica.mjs");
+  // Master cria duas equipes (com o representante de cada uma)
+  assert.equal((await pedido(equipesFn, { acao: "listar" }, tokens.ana)).status, 403); // vendedor não
+  const e1 = await pedido(equipesFn, { acao: "criar", nome: "Farma Norte", gestor: { email: "gestor1@x.example", senha: "senha-forte-g1", nome: "Gestor Um" },
+    cotas: { max_usuarios: 3, buscas_dia: 2, consultas_mes: 12 } }, tokens.breno);
+  assert.equal(e1.status, 201, JSON.stringify(e1.corpo));
+  assert.equal(e1.corpo.id, "farma-norte");
+  const e2 = await pedido(equipesFn, { acao: "criar", nome: "Farma Sul", gestor: { email: "gestor2@x.example", senha: "senha-forte-g2", nome: "Gestor Dois" } }, tokens.breno);
+  assert.equal(e2.status, 201);
+  assert.deepEqual((await db.doc("equipes/farma-sul").get()).data().cotas, { max_usuarios: 10, buscas_dia: 100, consultas_mes: 6000 }); // padrão do Breno
+  const claims = (await auth.getUser(e1.corpo.gestor_uid)).customClaims;
+  assert.deepEqual(claims, { papel: "gestor", equipe_id: "farma-norte" });
+  const g1 = await entrar("gestor1@x.example", "senha-forte-g1"), g2 = await entrar("gestor2@x.example", "senha-forte-g2");
+  assert.equal((await pedido(equipesFn, { acao: "listar" }, g1)).status, 403); // gestor não mexe nas equipes
+
+  // Gestor cria prepostos na própria equipe, dentro do limite de usuários (o gestor conta: 3 = gestor + 2)
+  const p1 = await pedido(equipeFn, { acao: "criar_preposto", email: "pn1@x.example", senha: "senha-forte-n1", nome: "Preposto Norte 1" }, g1);
+  assert.equal(p1.status, 201, JSON.stringify(p1.corpo));
+  const p2 = await pedido(equipeFn, { acao: "criar_preposto", email: "pn2@x.example", senha: "senha-forte-n2", nome: "Preposto Norte 2", limite_diario: 1 }, g1);
+  assert.equal(p2.status, 201);
+  const cheio = await pedido(equipeFn, { acao: "criar_preposto", email: "pn3@x.example", senha: "senha-forte-n3" }, g1);
+  assert.equal(cheio.status, 409);
+  assert.match(cheio.corpo.erro, /3 de 3 usuários/);
+  assert.deepEqual((await auth.getUser(p1.corpo.uid)).customClaims, { papel: "vendedor", equipe_id: "farma-norte" });
+  // Limite acima do da equipe (2 buscas/dia): recusado
+  assert.equal((await pedido(equipeFn, { acao: "editar_preposto", uid: p1.corpo.uid, limite_diario: 5 }, g1)).status, 400);
+  assert.equal((await pedido(equipeFn, { acao: "editar_preposto", uid: p1.corpo.uid, limite_diario: 2 }, g1)).status, 200);
+  // Outra equipe: 403 (ver, criar e mexer em preposto de lá)
+  assert.equal((await pedido(equipeFn, { acao: "resumo", equipe_id: "farma-sul" }, g1)).status, 403);
+  assert.equal((await pedido(equipeFn, { acao: "criar_preposto", equipe_id: "farma-sul", email: "x9@x.example", senha: "senha-forte-x9" }, g1)).status, 403);
+  const ps = await pedido(equipeFn, { acao: "criar_preposto", email: "ps1@x.example", senha: "senha-forte-s1", nome: "Preposto Sul" }, g2);
+  assert.equal(ps.status, 201);
+  assert.equal((await pedido(equipeFn, { acao: "editar_preposto", uid: ps.corpo.uid, nome: "Roubado" }, g1)).status, 403);
+  assert.equal((await pedido(equipeFn, { acao: "desativar_preposto", uid: ps.corpo.uid }, g1)).status, 403);
+  // Vendedor não abre "Minha equipe"; o master abre qualquer uma
+  const tn1 = await entrar("pn1@x.example", "senha-forte-n1"), tn2 = await entrar("pn2@x.example", "senha-forte-n2"), ts1 = await entrar("ps1@x.example", "senha-forte-s1");
+  assert.equal((await pedido(equipeFn, { acao: "resumo" }, tn1)).status, 403);
+  const rm = await pedido(equipeFn, { acao: "resumo", equipe_id: "farma-sul" }, tokens.breno);
+  assert.equal(rm.status, 200);
+  assert.equal(rm.corpo.usuarios, 2);
+  const r1 = await pedido(equipeFn, { acao: "resumo" }, g1);
+  assert.equal(r1.corpo.membros.length, 3);
+  assert.equal(r1.corpo.teto.limite_diario, 2);
+
+  // Buscas: levam o equipe_id; a cota da equipe (2 buscas/dia, 12 consultas/mês) bloqueia ao passar
+  const b1 = await pedido(criarBusca, { termos: "farmácia", cidades: "Natal RN, Parnamirim RN", profundidade: "rapida" }, tn1);
+  assert.equal(b1.status, 201, JSON.stringify(b1.corpo));
+  assert.equal((await db.doc(`buscas/${b1.corpo.id}`).get()).data().equipe_id, "farma-norte");
+  const partes = await db.collection("buscas").where("mae_id", "==", b1.corpo.id).get();
+  assert.ok(partes.docs.every((d) => d.data().equipe_id === "farma-norte"));
+  const grande = await pedido(criarBusca, { termos: "a, b, c, d, e, f", cidades: "Natal RN, Parnamirim RN", profundidade: "rapida" }, tn2);
+  assert.equal(grande.status, 429); // 2 + 12 consultas > 12 no mês
+  assert.match(grande.corpo.erro, /Cota de consultas da equipe no mês: 2 de 12/);
+  assert.equal((await pedido(criarBusca, { termos: "drogaria", cidades: "Natal RN", profundidade: "rapida" }, tn2)).status, 201);
+  const terceira = await pedido(criarBusca, { termos: "drogaria", cidades: "Mossoró RN", profundidade: "rapida" }, tn1);
+  assert.equal(terceira.status, 429);
+  assert.match(terceira.corpo.erro, /2 de 2 buscas hoje \(cota da equipe\)/);
+  const usoNorte = (await db.doc("equipes/farma-norte").get()).data().uso;
+  assert.deepEqual([usoNorte.buscas_dia, usoNorte.consultas_mes], [2, 3]);
+  // Master: busca na área dele (_master), sem cota de equipe
+  const bm = await pedido(criarBusca, { termos: "clínica", cidades: "Natal RN", profundidade: "rapida" }, tokens.breno);
+  assert.equal((await db.doc(`buscas/${bm.corpo.id}`).get()).data().equipe_id, "_master");
+
+  // Carteira isolada por equipe: o mesmo estabelecimento na carteira do Norte e do Sul, sem 409
+  const lugar = { nome: "Farmácia Central", cidade: "Natal", id_lugar: "EQX", telefone: "(84) 99999-7777" };
+  for (const [id, dono, eq] of [["eqn1", p1.corpo.uid, "farma-norte"], ["eqs1", ps.corpo.uid, "farma-sul"]]) {
+    await db.doc(`buscas/${id}`).set({ dono_uid: dono, equipe_id: eq, tipo: "comum", lista: true, status: "concluida", qtd_lotes: 1, resumo: { total: 1 }, criada_em: new Date() });
+    await db.doc(`buscas/${id}/lotes/0`).set({ dono_uid: dono, equipe_id: eq, leads: [lugar] });
+  }
+  const K = chaveLead(lugar), f = fatiaDe(K);
+  assert.equal((await pedido(crmLead, { acao: "status", busca_id: "eqn1", chave: K, status: "contatado" }, tn1)).status, 200);
+  assert.equal((await pedido(crmLead, { acao: "status", busca_id: "eqs1", chave: K, status: "negociando" }, ts1)).status, 200);
+  assert.equal((await db.doc(`carteira/farma-norte__${f}`).get()).data().leads[K].uid, p1.corpo.uid);
+  assert.equal((await db.doc(`carteira/farma-sul__${f}`).get()).data().leads[K].uid, ps.corpo.uid);
+  assert.equal((await db.doc(`crm/${p1.corpo.uid}__${f}`).get()).data().equipe_id, "farma-norte");
+  // Dentro da equipe continua o "sem conflito": o preposto 2 do Norte recebe 409
+  await db.doc("buscas/eqn2").set({ dono_uid: p2.corpo.uid, equipe_id: "farma-norte", tipo: "comum", lista: true, status: "concluida", qtd_lotes: 1, criada_em: new Date() });
+  await db.doc("buscas/eqn2/lotes/0").set({ dono_uid: p2.corpo.uid, equipe_id: "farma-norte", leads: [lugar] });
+  const conflito = await pedido(crmLead, { acao: "status", busca_id: "eqn2", chave: K, status: "contatado" }, tn2);
+  assert.equal(conflito.status, 409);
+  assert.match(conflito.corpo.erro, /carteira de Preposto Norte 1/);
+  // Gestor: transfere só dentro da equipe; vê as carteiras só da equipe dele
+  assert.equal((await pedido(crmLead, { acao: "transferir", chave: K, para_uid: ps.corpo.uid }, g1)).status, 403);
+  const cg = await pedido(crmLead, { acao: "carteiras" }, g1);
+  assert.equal(cg.status, 200);
+  assert.ok(cg.corpo.vendedores.every((v) => v.equipe_id === "farma-norte"));
+  assert.equal(cg.corpo.vendedores.find((v) => v.uid === p1.corpo.uid).carteira, 1);
+
+  // Apagar: gestor apaga busca da equipe; de outra equipe → 403
+  assert.equal((await pedido(apagarBusca, { id: "eqs1" }, g1)).status, 403);
+  await db.doc("buscas/eqn3").set({ dono_uid: p2.corpo.uid, equipe_id: "farma-norte", tipo: "comum", lista: true, status: "concluida", qtd_lotes: 0, criada_em: new Date() });
+  assert.equal((await pedido(apagarBusca, { id: "eqn3" }, g1)).status, 200);
+
+  // Liberar: gestor repassa busca da equipe só para prepostos da equipe; busca de outra equipe → 403
+  assert.equal((await pedido(liberarBusca, { acao: "simular", id: "eqs1" }, g1)).status, 403);
+  const sim = await pedido(liberarBusca, { acao: "simular", id: "eqn1" }, g1);
+  assert.equal(sim.status, 200);
+  assert.deepEqual(sim.corpo.vendedores.map((v) => v.uid), [p2.corpo.uid]); // só a equipe, fora o dono
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "eqn1", vendedores: [ps.corpo.uid], modo: "inteira" }, g1)).status, 400);
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "eqn1", vendedores: [p2.corpo.uid], modo: "inteira" }, g1)).status, 200);
+  // Master libera uma lista dele para a equipe inteira: o gestor lê e redistribui; não conta na cota
+  await db.doc("buscas/est9").set({ dono_uid: (await auth.getUserByEmail("breno@x.example")).uid, equipe_id: "_master", tipo: "rn_mae", lista: true, status: "concluida", qtd_lotes: 1, resumo: { total: 1 }, criada_em: new Date() });
+  await db.doc("buscas/est9/lotes/0").set({ equipe_id: "_master", leads: [{ nome: "Drogaria Estado", cidade: "Mossoró", id_lugar: "EST9" }] });
+  assert.equal((await pedido(liberarBusca, { acao: "simular", id: "est9" }, g1)).status, 403); // ainda não liberada
+  assert.equal((await pedido(liberarBusca, { acao: "liberar_equipe", id: "est9", equipe_id: "farma-norte" }, g1)).status, 403); // só o master
+  assert.equal((await pedido(liberarBusca, { acao: "liberar_equipe", id: "est9", equipe_id: "farma-norte" }, tokens.breno)).status, 200);
+  assert.deepEqual((await db.doc("buscas/est9/lotes/0").get()).data().liberada_equipes, ["farma-norte"]);
+  assert.equal((await pedido(liberarBusca, { acao: "liberar", id: "est9", vendedores: [p1.corpo.uid], modo: "inteira" }, g1)).status, 200);
+  assert.equal((await pedido(liberarBusca, { acao: "simular", id: "est9" }, g2)).status, 403); // outra equipe
+  assert.deepEqual((await db.doc("equipes/farma-norte").get()).data().uso.buscas_dia, 2); // não contou
+  // Master revoga da equipe: sai também o que o gestor repassou
+  assert.equal((await pedido(liberarBusca, { acao: "revogar_equipe", id: "est9", equipe_id: "farma-norte" }, tokens.breno)).status, 200);
+  const est9 = (await db.doc("buscas/est9").get()).data();
+  assert.deepEqual([est9.liberada_equipes, est9.liberada_para], [[], []]);
+
+  // Desativar preposto com carteira: 409; libera a carteira e desativa
+  const des = await pedido(equipeFn, { acao: "desativar_preposto", uid: p1.corpo.uid }, g1);
+  assert.equal(des.status, 409);
+  assert.match(des.corpo.erro, /1 lead\(s\) na carteira/);
+  const tc = await pedido(crmLead, { acao: "transferir_carteira", de_uid: p1.corpo.uid, para_uid: p2.corpo.uid }, g1);
+  assert.equal(tc.status, 200);
+  assert.equal(tc.corpo.leads, 1);
+  assert.equal((await db.doc(`carteira/farma-norte__${f}`).get()).data().leads[K].uid, p2.corpo.uid);
+  assert.equal((await pedido(equipeFn, { acao: "desativar_preposto", uid: p1.corpo.uid }, g1)).status, 200);
+  assert.equal((await auth.getUser(p1.corpo.uid)).disabled, true);
+  assert.equal((await pedido(crmLead, { acao: "liberar_carteira", uid: p2.corpo.uid }, g2)).status, 403); // outra equipe
+  assert.equal((await pedido(crmLead, { acao: "liberar_carteira", uid: p2.corpo.uid }, g1)).status, 200);
+  assert.equal((await db.doc(`carteira/farma-norte__${f}`).get()).data().leads[K], undefined);
+
+  // Painel da equipe e representadas
+  assert.equal((await pedido(equipeFn, { acao: "representadas", lista: ["Marca A", "marca a", " Marca B "] }, g1)).corpo.representadas.join("|"), "Marca A|Marca B");
+  const pn = await pedido(equipeFn, { acao: "painel" }, g1);
+  assert.equal(pn.status, 200);
+  const linha1 = pn.corpo.pessoas.find((x) => x.uid === p1.corpo.uid);
+  assert.equal(linha1.buscas, 2); // a dele criada pela tela + a eqn1
+  assert.ok(pn.corpo.pessoas.every((x) => [e1.corpo.gestor_uid, p1.corpo.uid, p2.corpo.uid].includes(x.uid)));
+  assert.deepEqual(pn.corpo.equipe.representadas, ["Marca A", "Marca B"]);
+
+  // Master desativa a equipe do Sul: as contas de lá são desligadas; reativar volta
+  assert.equal((await pedido(equipesFn, { acao: "ativar", id: "farma-sul", ativa: false }, tokens.breno)).status, 200);
+  assert.equal((await auth.getUser(ps.corpo.uid)).disabled, true);
+  assert.equal((await pedido(equipesFn, { acao: "ativar", id: "farma-sul", ativa: true }, tokens.breno)).status, 200);
+  assert.equal((await auth.getUser(ps.corpo.uid)).disabled, false);
+  const lista = await pedido(equipesFn, { acao: "listar" }, tokens.breno);
+  assert.deepEqual(lista.corpo.equipes.map((x) => x.id), ["farma-norte", "farma-sul"]);
+  assert.equal(lista.corpo.equipes[0].usuarios, 2); // gestor + preposto 2 (o 1 foi desativado)
+  // Limpeza: buscas deste teste
+  for (const id of ["eqn1", "eqn2", "eqs1", "est9", b1.corpo.id, bm.corpo.id]) {
+    for (const d of (await db.collection("buscas").where("mae_id", "==", id).get()).docs) await d.ref.delete();
+    await db.recursiveDelete(db.doc(`buscas/${id}`));
+  }
 });

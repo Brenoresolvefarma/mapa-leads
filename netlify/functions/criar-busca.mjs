@@ -4,6 +4,8 @@
 // Com { simular: true } só devolve a estimativa, sem criar nada.
 // Paralelismo (24/09): a busca comum com várias cidades já nasce dividida em até 4 PARTES
 // (por cidade), uma por máquina do motor; a estimativa é a da parte mais demorada.
+// Equipes (24/09): a busca leva o equipe_id (master → área só dele); gestor e vendedor respeitam também a cota da
+// equipe (buscas por dia e consultas por mês), conferida e contada na mesma transação. Equipe desativada → 403.
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as L from "../lib/logica.mjs";
@@ -51,11 +53,20 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
 
   const ref = db.collection("buscas").doc();
   const refsPartes = partes.map(() => db.collection("buscas").doc());
+  const equipeId = L.equipeDaNovaBusca(usuario);
+  const refEquipe = usuario.admin ? null : db.doc(`equipes/${usuario.equipe_id}`);
   // Limite diário conferido e contado na MESMA transação que cria a busca:
   // dois cliques ao mesmo tempo não furam o limite.
   const limite = await db.runTransaction(async (t) => {
     const refUsuario = db.doc(`usuarios/${usuario.uid}`);
-    const [docUsuario, docGeral] = await t.getAll(refUsuario, db.doc("config/geral"));
+    const [docUsuario, docGeral, docEquipe] = await t.getAll(refUsuario, db.doc("config/geral"), ...(refEquipe ? [refEquipe] : []));
+    // Cota da equipe (o master não tem). Equipe sem documento (antes da migração) = sem limite.
+    if (docEquipe?.exists) {
+      if (docEquipe.data().ativa === false) throw new ErroHttp(403, "Equipe desativada. Fale com o administrador.");
+      const cota = L.conferirCotaEquipe(docEquipe.data(), consultas.length);
+      if (!cota.permitido) throw new ErroHttp(429, cota.erro);
+      t.update(refEquipe, { uso: cota.uso });
+    }
     const situacao = L.conferirLimiteDiario(docUsuario.data() || {}, docGeral.data() || {});
     if (!situacao.permitido) {
       throw new ErroHttp(429, `Limite diário atingido (${situacao.limite} buscas por dia). Tente novamente amanhã.`);
@@ -73,6 +84,7 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
       lista: true, // aparece em "Minhas buscas" (filhas do RN e partes não aparecem)
       dono_uid: usuario.uid,
       dono_email: usuario.email,
+      equipe_id: equipeId,
       criada_em: FieldValue.serverTimestamp(),
       status: "na_fila",
       origem: "tela",
@@ -88,6 +100,7 @@ async function criarBuscaComum(db, usuario, corpo, metricas) {
         mae_id: ref.id,
         dono_uid: usuario.uid,
         dono_email: usuario.email,
+        equipe_id: equipeId,
         parametros: { termos: parametros.termos, extrair_email: parametros.extrair_email },
         cidades: parte.cidades,
         consultas: parte.consultas,
@@ -137,6 +150,7 @@ async function criarRnInteiro(db, usuario, corpo, metricas) {
     lista: true,
     dono_uid: usuario.uid,
     dono_email: usuario.email,
+    equipe_id: L.EQUIPE_MASTER, // Estado inteiro é do master: área só dele até ele liberar
     criada_em: FieldValue.serverTimestamp(),
     status: "na_fila",
     origem: "tela",
@@ -156,6 +170,7 @@ async function criarRnInteiro(db, usuario, corpo, metricas) {
       mae_id: refMae.id,
       dono_uid: usuario.uid,
       dono_email: usuario.email,
+      equipe_id: L.EQUIPE_MASTER,
       parametros: { termos: plano.parametros.termos, extrair_email: plano.parametros.extrair_email, uf: plano.parametros.uf },
       consultas,
       ordem,

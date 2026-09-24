@@ -2,7 +2,8 @@
 
 ## O que é
 Sistema multiusuário de prospecção B2B via Google Maps para o Breno (prospecção comercial; começou no RN,
-vai para os **9 estados do Nordeste** — ver "Fase 3 — Nordeste"). Admin (Breno) + usuários comuns.
+vai para os **9 estados do Nordeste** — ver "Fase 3 — Nordeste"). **Desde o PR 19: 3 níveis e equipes isoladas** —
+master (Breno) › gestor (representante comercial, dono da equipe) › vendedor (preposto). Ver "Equipes (PR 19)".
 Buscas sob demanda: termos e cidades livres, e "RN inteiro" (só admin; vira "Estado inteiro").
 Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita aprovada pelo Breno).
 
@@ -31,7 +32,7 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
 ## Arquitetura
 1. Tela HTML single-file (CDN) no Netlify — `publico/index.html` (**Fase 3a v2** no ar; celular primeiro no PR 13).
 2. Firebase Auth e-mail/senha, sem cadastro público (admin cria/remove) — **Fase 2 (feito)**.
-3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/liberar-busca`, `/api/crm-lead`, `/api/admin-usuarios`, `/api/config-publica`,
+3. Netlify Functions (`/api/criar-busca`, `/api/cancelar-busca`, `/api/apagar-busca`, `/api/liberar-busca`, `/api/crm-lead`, `/api/admin-usuarios`, `/api/equipes`, `/api/equipe`, `/api/config-publica`,
    `/api/perfis`, `/api/saude-motor` + `despertador` agendada): guardam token do GitHub e credencial admin do
    Firebase; validam ID token (checkRevoked) — Fases 2 e 3a (feito).
 4. Motor: GitHub Actions (`workflow_dispatch` + `schedule` `7,22,37,52 * * * *`) + despertador do Netlify;
@@ -427,6 +428,53 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   pelo Playwright; confere municípios da PB (João Pessoa, Campina Grande; 223), mapa da PB (223 contornos), números, que
   recarregar abre na PB e a volta ao RN. `PASTA_CAPTURAS=/pasta` guarda capturas desses momentos e das comemorações.
 
+### Equipes: master › gestor › vendedor (PR 19, pedido e respostas do Breno em 24/09)
+- **Papéis** (custom claims gravadas só pelo servidor; `logica.papelDe`): `papel = master | gestor | vendedor` + `equipe_id`.
+  A claim antiga `admin: true` vale como master (o master mantém as duas). Sem claim de equipe = `resolve-farma`
+  (servidor e regras). `usuarioDoToken` devolve `papel`, `equipe_id`, `admin` (= master) e `gestor`.
+  - **master** (Breno): tudo, de todas as equipes; aba **Equipes**; Admin (motor, Estado inteiro, Configurações, estados).
+    As buscas dele (e o Estado inteiro) ficam com `equipe_id: "_master"` — **área só dele**, ninguém vê sem ele liberar.
+  - **gestor** (representante): vê buscas, leads, CRM e carteiras **só da equipe dele**; cria/edita/desativa prepostos
+    (dentro do limite de usuários; **o gestor conta**); faz buscas com os limites de vendedor; libera listas da equipe (e as
+    que o master liberou para a equipe) para os prepostos; transfere carteira entre prepostos; apaga/cancela buscas da
+    equipe; menu **Minha equipe** (no celular, "Equipe" no lugar do Mapa, que vai para o menu do avatar). Sem Configurações,
+    Estado inteiro, estados ou motor.
+  - **vendedor** (preposto): como antes — só as buscas dele e as listas liberadas para ele.
+- **Firestore**: `equipes/{id} = {nome, ativa, gestor_uid, cotas: {max_usuarios, buscas_dia, consultas_mes} (null = sem limite),
+  uso: {dia, buscas_dia, mes, consultas_mes}, representadas[], criada_em}`; `usuarios/{uid}` + `equipe_id`, `papel`, `ativo`;
+  `equipe_id` em buscas, partes, filhas, **cada lote**, cópias liberadas, `liberacoes.{uid}`, `crm/*` e `estatisticas/{dia}__{uid}`
+  (o motor copia da busca: `campo_equipe`). **Carteira por equipe**: `carteira/{equipe}__{fatia}` — equipes diferentes
+  trabalham o mesmo estabelecimento sem se ver; o "sem conflito" vale dentro da equipe.
+- **Cotas por equipe** (valores do Breno): Resolve Farma **sem limite**; equipe nova 10 usuários / 100 buscas por dia /
+  6.000 consultas por mês (editável na aba Equipes). Mês = calendário a partir do dia 1, fuso de Fortaleza. Conferidas e
+  contadas na transação do `criar-busca` (`logica.conferirCotaEquipe`, 429); o master não tem cota. Os limites por preposto
+  (40 cidades / 120 consultas / 300 por dia) continuam; o gestor pode baixar o de cada preposto, nunca acima do da equipe
+  (`tetoDoPreposto`). Lista liberada pelo master para a equipe **não conta** na cota.
+- **Functions**: `/api/equipes` (só master: listar, criar equipe + conta do gestor, editar cotas, ativar/desativar — desativar
+  desliga todas as contas; reativar volta só quem a equipe desligou); `/api/equipe` (gestor; master com `equipe_id`: resumo,
+  criar/editar/desativar/reativar preposto, representadas, painel). `liberar-busca`: gestor só busca da equipe ou liberada
+  para ela, só para prepostos da equipe (rótulos e revogar só da equipe); master + `liberar_equipe`/`revogar_equipe`
+  (`liberada_equipes` na busca e nos lotes; revogar tira também o que o gestor repassou). `crm-lead`: carteira da equipe,
+  gestor transfere dentro da equipe, `transferir_carteira`/`liberar_carteira` (em lote). `apagar`/`cancelar`: gestor nas da
+  equipe. `admin-usuarios` (master) cria vendedor com equipe (padrão Resolve Farma). Outra equipe → **403**.
+- **Desativar preposto** (decisão do Breno): só com a carteira dele vazia — antes o gestor transfere para outro preposto ou
+  libera (a tela oferece as duas na hora do 409).
+- **Regras**: master lê tudo; gestor lê o que tem `equipe_id` igual ao dele (+ `liberada_equipes`), `usuarios` e `crm` da
+  equipe, `equipes/{id}` dele; vendedor como antes; carteira pelo prefixo do id (`^{equipe}__NN$`). Navegador sem gravar.
+- **Tela**: `#selo` = "master"; `#selo-equipe` = "gestor · <equipe>" / "vendedor · <equipe>" (nome de `equipes/{id}`).
+  Gestor ouve `equipe_id == a dele` (até 100) + `liberada_equipes array-contains` (marca `_daEquipe` / `_paraEquipe`);
+  CRM da equipe (`crm where equipe_id`); ficha com status (como vendedor) + transferir. Vendedor vê "Liberada por
+  representante" quando quem liberou é o gestor da equipe. Planilha: Resumo com Equipe e Representadas (se houver).
+- **Migração** (`ferramentas/migrar_equipes.mjs`, workflow manual "Migrar equipes": simular → aplicar → depois
+  `limpar_carteira_antiga`): cria `equipes/resolve-farma` (sem limite), master com `papel=master`, demais `vendedor` da
+  Resolve Farma, `equipe_id` em tudo (buscas do master → `_master`), `carteira/NN` → `carteira/resolve-farma__NN` (fica o
+  contato mais recente). Idempotente; nada muda de dono; log só com contagens. "Definir admin" também grava `papel=master`.
+- Índices novos: `buscas` (`lista`, `equipe_id`, `criada_em` ↓) e (`lista`, `liberada_equipes` CONTAINS, `criada_em` ↓).
+- Testes: regras (gestor só a equipe, carteira isolada, vendedor sem outra equipe, master tudo, lista liberada p/ equipe),
+  Functions (criar equipe/gestor, prepostos no limite, 403 entre equipes, cotas 429, carteira isolada, liberar/revogar
+  equipe, desativar com carteira, painel), motor (equipe_id nos lotes/parciais/estatísticas), migração no emulador e
+  tela 390 px (master cria equipe, gestor cria preposto e vê só a equipe, preposto não vê outra, desativar pede a carteira).
+
 ## Estado atual
 - Fase 1 concluída e validada com execução real (PRs 1 e 2 mergeados).
 - Fase 2 implementada (PR 3): 90 testes (53 pytest + 7 motor no emulador + 12 lógica Node + 7 regras
@@ -450,7 +498,9 @@ Futuro: venda por assinatura (Fase 4, só depois da análise de custo x receita 
   capturas reais do CRM/PB feitas no site (workflow "Capturas da tela", conjunto crm-pb).
 - **PR 17**: comemoração em todo ponto de criação (Estado inteiro incluído) + mapa no celular. Mergeado; Verificar Functions
   e "Testar tela em produção" passaram.
-- **PR 18**: seletor de estado no celular (Mapa, Nova busca, Mercado, Admin) + comemoração no iOS.
+- **PR 18**: seletor de estado no celular (Mapa, Nova busca, Mercado, Admin) + comemoração no iOS. Mergeado; Verificar
+  Functions, "Testar tela em produção" e capturas reais passaram.
+- **PR 19**: equipes (master › gestor › vendedor), cotas por equipe, carteira por equipe, migração.
 - Ainda não medido de verdade: tempos de normal/completa e com e-mail; confirmação do "fim real" no scraper real;
   **primeira busca real com 4 máquinas** (tempo total e se aparece algum sinal de bloqueio).
 

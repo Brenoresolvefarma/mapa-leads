@@ -386,11 +386,12 @@ def dia_fortaleza(agora=None):
     return (agora or agora_utc()).astimezone(ZoneInfo("America/Fortaleza")).strftime("%Y-%m-%d")
 
 
-def registrar_estatisticas(db, dono_uid, resumo, log=None):
+def registrar_estatisticas(db, dono_uid, resumo, log=None, equipe_id=None):
     """Soma a busca concluída nas estatísticas do dia (painel "Hoje"): 2 gravações.
 
     estatisticas/{dia}__{uid}  -> o próprio usuário lê (regra do Firestore);
     estatisticas/{dia}__geral  -> só o admin lê.
+    O documento do usuário leva a equipe (o gestor lê os da equipe dele).
     """
     from firebase_admin import firestore
 
@@ -406,7 +407,7 @@ def registrar_estatisticas(db, dono_uid, resumo, log=None):
     }
     try:
         col = db.collection("estatisticas")
-        col.document(f"{dia}__{dono_uid}").set({**soma, "dono_uid": dono_uid}, merge=True)
+        col.document(f"{dia}__{dono_uid}").set({**soma, "dono_uid": dono_uid, **({"equipe_id": equipe_id} if equipe_id else {})}, merge=True)
         col.document(f"{dia}__geral").set(soma, merge=True)
     except Exception as erro:  # noqa: BLE001 - estatística não pode derrubar a busca
         if log:

@@ -57,6 +57,7 @@ DISJUNTOR_VAZIAS = 3
 DISJUNTOR_PAUSA = timedelta(minutes=30)
 
 COLECAO = fila.COLECAO
+EQUIPE_MASTER = "_master"  # área só do master (buscas dele; ninguém vê sem ele liberar)
 
 
 def log(mensagem):
@@ -120,6 +121,7 @@ def criar_busca_manual(db, inputs):
         "criada_em": firestore.SERVER_TIMESTAMP,
         "status": "na_fila",
         "origem": "github_manual",
+        "equipe_id": EQUIPE_MASTER,  # busca do master: área só dele (ninguém vê sem ele liberar)
         "parametros": {
             "termos": termos,
             "cidades": cidades,
@@ -129,6 +131,12 @@ def criar_busca_manual(db, inputs):
     })
     log(f"Busca criada na fila: {len(termos)} termo(s) x {len(cidades)} cidade(s).")
     return ref.id
+
+
+def campo_equipe(dados):
+    """Equipe da busca, copiada para cada lote (as regras do Firestore filtram por ela). Sem equipe: nada."""
+    equipe = (dados or {}).get("equipe_id")
+    return {"equipe_id": equipe} if equipe else {}
 
 
 def gravar_resultado(ref, dados, dono, leads, resumo, aviso, duracao,
@@ -142,6 +150,7 @@ def gravar_resultado(ref, dados, dono, leads, resumo, aviso, duracao,
     for indice, lote in enumerate(lotes):
         lote_firestore.set(ref.collection("lotes").document(str(indice)), {
             "dono_uid": dono,
+            **campo_equipe(dados),
             "indice": indice,
             "leads": lote,
         })
@@ -329,7 +338,8 @@ class Motor:
         if uid not in self.admins:
             try:
                 claims = auth.get_user(uid).custom_claims or {}
-                self.admins[uid] = bool(claims.get("admin"))
+                # Master: claim papel=master (equipes, 24/09) ou a antiga admin=true.
+                self.admins[uid] = bool(claims.get("admin")) or claims.get("papel") == "master"
             except Exception:  # noqa: BLE001
                 self.admins[uid] = False
         return self.admins[uid]
@@ -465,7 +475,7 @@ class Motor:
         else:
             status, aviso = "concluida", self.montar_aviso(resultado, total, leads)
         gravar_resultado(ref, dados, dono, leads, resumo, aviso, time.time() - inicio, status=status)
-        fila.registrar_estatisticas(self.db, dono, resumo, log)
+        fila.registrar_estatisticas(self.db, dono, resumo, log, dados.get("equipe_id"))
         log(f"Busca {status} e gravada.")
 
     # ------------------------------------------------ RN inteiro (lote)
@@ -579,7 +589,7 @@ class Motor:
         antigos = int(dados.get("_lotes_parciais") or 0)
         lote = self.db.batch()
         for indice, itens in enumerate(lotes):
-            lote.set(ref.collection("lotes").document(str(indice)), {"dono_uid": dono, "indice": indice, "leads": itens})
+            lote.set(ref.collection("lotes").document(str(indice)), {"dono_uid": dono, **campo_equipe(dados), "indice": indice, "leads": itens})
         for indice in range(len(lotes), antigos):
             lote.delete(ref.collection("lotes").document(str(indice)))
         lote.update(ref, {

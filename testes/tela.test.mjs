@@ -1298,13 +1298,13 @@ test("mini-CRM e carteira (390 px): status em um toque, 'Como foi?', histórico,
   const cb = cartaoDe(b, "CRM Alfa");
   await cb.waitFor();
   await b.waitForFunction(() => /Na carteira de/.test(document.querySelector("#cartoes .cartao-lead")?.textContent || ""));
-  const nomeDaAna = (await db.doc(`carteira/${fatiaDe("p_cr1")}`).get()).data().leads.p_cr1.nome;
+  const nomeDaAna = (await db.doc(`carteira/resolve-farma__${fatiaDe("p_cr1")}`).get()).data().leads.p_cr1.nome;
   assert.match(await cb.textContent(), new RegExp(`Na carteira de ${nomeDaAna}`));
   assert.equal(await cb.locator("a.btn-whats, a[href^='tel:'], .status-lead").count(), 0);
   assert.match(await b.textContent("#crm-barra [data-crm-hoje]"), /Para hoje\s*0/);
   await b.context().close();
   // Prazo: sem contato há 61 dias (padrão 60) → volta a ficar livre para o Beto
-  const refCart = db.doc(`carteira/${fatiaDe("p_cr1")}`);
+  const refCart = db.doc(`carteira/resolve-farma__${fatiaDe("p_cr1")}`);
   await refCart.set({ leads: { p_cr1: { ultimo: agora - 61 * 86400000 } } }, { merge: true });
   const b2 = await abrir("beto@x.example", "senha-forte-b", tel);
   await abrirSo(b2, "crmB");
@@ -1576,4 +1576,105 @@ test("seletor de estado (390 px, também no WebKit): Paraíba em Nova busca, Map
   // WebKit: o recarregamento corta a escuta do Firestore (emulador) e registra "... access control checks" (ver teste do tema).
   assert.deepEqual(erros.filter((e) => !/Firestore\/Listen\/channel.*access control checks/.test(e)), []);
   await a.context().close();
+});
+
+test("equipes (390 px): master cria equipe; gestor vê 'gestor · equipe', cria preposto e vê só a equipe; preposto não vê outra equipe; desativar pede a carteira", async () => {
+  const { db, auth } = firebase();
+  const tel = { width: 390, height: 844 };
+  // ---- Master: aba Equipes → cria a equipe com o representante
+  const m = await abrir("breno@x.example", "senha-forte-1", tel);
+  await m.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  assert.equal((await m.textContent("#selo")).trim(), "master");
+  await m.evaluate(() => { location.hash = "#equipes"; });
+  await m.waitForSelector("#eqn-criar");
+  await m.waitForFunction(() => document.querySelector("#eqn-usuarios").value === "10"); // padrão do Breno já preenchido
+  assert.deepEqual([await m.inputValue("#eqn-buscas"), await m.inputValue("#eqn-consultas")], ["100", "6000"]);
+  await m.fill("#eqn-nome", "Farma Tela");
+  await m.fill("#eqn-gnome", "Gina Gestora");
+  await m.fill("#eqn-gemail", "gina@x.example");
+  await m.fill("#eqn-gsenha", "senha-forte-gina");
+  await m.locator("#eqn-criar").tap();
+  await esperarTexto(m, "#equipes-tabela", /Farma Tela[\s\S]*Gina Gestora/);
+  let med = await medirLargura(m); assert.equal(med.rolagem, med.largura, `Equipes: ${med.fora.join(", ")}`);
+  await m.$eval("#equipes-tabela", (e) => e.scrollIntoView({ block: "start" })); await capturar(m, "equipes-master");
+  await m.context().close();
+  // Outra equipe (dados fictícios): uma busca que a Gina NÃO pode ver
+  await db.doc("equipes/outra-eq").set({ nome: "Outra Equipe", ativa: true, cotas: {}, uso: {} });
+  await db.doc("buscas/outraEq").set({ tipo: "comum", lista: true, dono_uid: "alguem", equipe_id: "outra-eq", status: "concluida", qtd_lotes: 1,
+    criada_em: new Date(), finalizada_em: new Date(), parametros: { termos: ["segredo"], cidades: ["Natal RN"] }, resumo: { total: 1 } });
+  await db.doc("buscas/outraEq/lotes/0").set({ dono_uid: "alguem", equipe_id: "outra-eq", leads: [lead({ nome: "Lead Da Outra Equipe", cidade: "Natal", id_lugar: "oe1" })] });
+
+  // ---- Gestor: selo, menu "Equipe" no lugar do Mapa, cria preposto
+  const g = await abrir("gina@x.example", "senha-forte-gina", tel);
+  await esperarTexto(g, "#selo-equipe", /^gestor · Farma Tela$/);
+  assert.equal(await g.isVisible("#selo"), false);
+  const barra = await g.$$eval("#barra-inferior a", (as) => as.map((a) => a.dataset.ir));
+  assert.deepEqual(barra, ["inicio", "nova", "leads", "equipe"]);
+  await g.tap("#barra-inferior a[data-ir=equipe]");
+  await esperarTexto(g, "#eq-kpis", /Usuários\s*1 de 10/);
+  await g.fill("#eqp-email", "pedro@x.example");
+  await g.fill("#eqp-senha", "senha-forte-pedro");
+  await g.fill("#eqp-nome", "Pedro Preposto");
+  await g.locator("#eqp-criar").tap();
+  await esperarTexto(g, "#eq-membros", /Pedro Preposto/);
+  await esperarTexto(g, "#eq-kpis", /Usuários\s*2 de 10/);
+  const pedro = (await auth.getUserByEmail("pedro@x.example")).uid;
+  assert.deepEqual((await auth.getUser(pedro)).customClaims, { papel: "vendedor", equipe_id: "farma-tela" });
+  // Uma busca do Pedro (fictícia) com um lead na carteira dele
+  await db.doc("buscas/pedro1").set({ tipo: "comum", lista: true, dono_uid: pedro, dono_email: "pedro@x.example", equipe_id: "farma-tela", status: "concluida", qtd_lotes: 1,
+    criada_em: new Date(), finalizada_em: new Date(), parametros: { termos: ["farmácia"], cidades: ["Natal RN"] }, resumo: { total: 1 } });
+  await db.doc("buscas/pedro1/lotes/0").set({ dono_uid: pedro, equipe_id: "farma-tela", leads: [lead({ nome: "Farmácia Do Pedro", cidade: "Natal", id_lugar: "fp1", telefone: "(84) 99999-1212" })] });
+  const { fatiaDe } = await import("../netlify/lib/logica.mjs");
+  await db.doc(`carteira/farma-tela__${fatiaDe("p_fp1")}`).set({ leads: { p_fp1: { uid: pedro, nome: "Pedro Preposto", s: "contatado", desde: Date.now(), ultimo: Date.now() } } });
+  await db.doc(`crm/${pedro}__${fatiaDe("p_fp1")}`).set({ dono_uid: pedro, equipe_id: "farma-tela", leads: { p_fp1: { s: "contatado", em: Date.now(), h: [] } } });
+  // Buscas da equipe: a do Pedro sim (com Liberar/Apagar), a da outra equipe não
+  await g.locator("#eq-atualizar").tap();
+  await esperarTexto(g, "#eq-buscas", /farmácia/);
+  assert.doesNotMatch(await g.textContent("#eq-buscas"), /segredo/);
+  assert.equal(await g.locator("#eq-buscas [data-apagar='pedro1']").count(), 1);
+  await esperarTexto(g, "#eq-painel", /Pedro Preposto[\s\S]*1[\s\S]*1/);
+  med = await medirLargura(g); assert.equal(med.rolagem, med.largura, `Minha equipe: ${med.fora.join(", ")}`);
+  await g.evaluate(() => scrollTo(0, 0)); await capturar(g, "minha-equipe-gestor");
+  await g.$eval("#eq-membros", (e) => e.scrollIntoView({ block: "start" })); await capturar(g, "minha-equipe-prepostos");
+  // Meus leads do gestor: o lead do Pedro sim; o da outra equipe nunca
+  await g.evaluate(() => { location.hash = "#leads"; });
+  await g.locator("#abrir-buscas").tap();
+  await g.waitForSelector("#caixa-buscas [data-abrir='pedro1']");
+  assert.equal(await g.locator("#caixa-buscas [data-abrir='outraEq']").count(), 0);
+
+  // ---- Preposto: selo e nada da outra equipe (nem do gestor)
+  const p = await abrir("pedro@x.example", "senha-forte-pedro", tel);
+  await esperarTexto(p, "#selo-equipe", /^vendedor · Farma Tela$/);
+  await capturar(p, "preposto-inicio");
+  assert.equal(await p.locator("#barra-inferior a[data-ir=equipe], #menu [data-ir=equipes], #menu [data-ir=admin]").count(), 0);
+  await p.evaluate(() => { location.hash = "#equipe"; }); // tenta abrir: volta ao Início
+  await p.waitForFunction(() => !document.querySelector("[data-pagina=inicio]").classList.contains("oculto"));
+  await p.evaluate(() => { location.hash = "#leads"; });
+  await p.locator("#abrir-buscas").tap();
+  await p.waitForSelector("#caixa-buscas [data-abrir='pedro1']");
+  assert.equal(await p.locator("#caixa-buscas [data-abrir='outraEq']").count(), 0);
+  await p.context().close();
+
+  // ---- Desativar o Pedro: tem 1 lead na carteira → pede para liberar/transferir; libera e desativa
+  await g.evaluate(() => { location.hash = "#equipe"; });
+  await g.waitForSelector(`#eq-membros [data-m-desativar="${pedro}"]`);
+  await g.locator(`#eq-membros [data-m-desativar="${pedro}"]`).tap();
+  await g.locator("#conf-sim").tap();
+  await esperarTexto(g, "#eq-desativar", /1 lead\(s\) na carteira/);
+  await capturar(g, "desativar-pede-carteira");
+  await g.locator(`#eq-desativar [data-carteira-liberar="${pedro}"]`).tap();
+  await esperarTexto(g, "#eq-membros", /Pedro Preposto[\s\S]*desativado/);
+  assert.equal((await auth.getUser(pedro)).disabled, true);
+  assert.equal((await db.doc(`carteira/farma-tela__${fatiaDe("p_fp1")}`).get()).data().leads.p_fp1, undefined);
+  assert.deepEqual(erros, []);
+  await g.context().close();
+
+  // ---- Master abre a equipe pela aba Equipes
+  const m2 = await abrir("breno@x.example", "senha-forte-1", tel);
+  await m2.waitForSelector("#selo:not(.oculto)", { timeout: 15000 });
+  await m2.evaluate(() => { location.hash = "#equipe/farma-tela"; });
+  await esperarTexto(m2, "#eq-titulo", /Equipe Farma Tela/);
+  await esperarTexto(m2, "#eq-membros", /Gina Gestora[\s\S]*Pedro Preposto/);
+  await m2.context().close();
+  for (const id of ["pedro1", "outraEq"]) await db.recursiveDelete(db.doc(`buscas/${id}`));
 });

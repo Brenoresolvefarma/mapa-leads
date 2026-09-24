@@ -1,7 +1,8 @@
 // POST /api/apagar-busca  { id }
 // Apaga uma busca e os leads dela (documento + subcoleção "lotes").
 // - Vendedor: só as próprias (dono_uid = o uid do token); de outro → 403.
-// - Admin: qualquer busca, de qualquer vendedor.
+// - Gestor (representante): as buscas da equipe dele (equipe_id da busca = a dele); de outra equipe → 403.
+// - Master (admin): qualquer busca, de qualquer equipe.
 // - Em andamento (na fila / rodando): recusa com 409 — cancelar primeiro, apagar depois.
 // - Busca-mãe do Estado inteiro: apaga também os lotes (filhas) e os leads de cada uma.
 // - Liberada para vendedores: apaga também as cópias por vendedor (a lista some para eles).
@@ -10,6 +11,7 @@
 // As regras do Firestore continuam com write false para o navegador: só o servidor apaga.
 
 import { FieldValue } from "firebase-admin/firestore";
+import { equipeDaBusca } from "../lib/logica.mjs";
 import { ErroHttp, firebase, handler, json, lerCorpo, logPrivado, usuarioDoToken } from "../lib/servidor.mjs";
 
 const FINAIS = ["concluida", "erro", "cancelada"];
@@ -23,7 +25,8 @@ export default handler(async (req) => {
   const doc = await ref.get();
   if (!doc.exists) throw new ErroHttp(404, "Busca não encontrada.");
   const dados = doc.data();
-  if (!usuario.admin && dados.dono_uid !== usuario.uid) throw new ErroHttp(403, "Você só pode apagar as suas buscas.");
+  const daEquipe = usuario.gestor && equipeDaBusca(dados) === usuario.equipe_id;
+  if (!usuario.admin && !daEquipe && dados.dono_uid !== usuario.uid) throw new ErroHttp(403, "Você só pode apagar as suas buscas.");
   if (dados.tipo === "rn_filha") throw new ErroHttp(400, "Apague pela busca principal do Estado inteiro.");
   if (dados.tipo === "parte") throw new ErroHttp(400, "Apague pela busca principal.");
   if (!FINAIS.includes(dados.status)) throw new ErroHttp(409, "Busca em andamento: cancele primeiro e depois apague.");

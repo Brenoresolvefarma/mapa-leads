@@ -45,6 +45,7 @@ def criar_filha_restante(db, filha_dados, consultas_restantes, pausada_ate=None)
         "mae_id": filha_dados["mae_id"],
         "dono_uid": filha_dados["dono_uid"],
         "dono_email": filha_dados.get("dono_email", ""),
+        **({"equipe_id": filha_dados["equipe_id"]} if filha_dados.get("equipe_id") else {}),
         "parametros": filha_dados.get("parametros") or {},
         "consultas": consultas_restantes,
         "ordem": int(filha_dados.get("ordem") or 0),
@@ -170,7 +171,7 @@ def finalizar_mae_se_pronta(db, mae_id, gravar_resultado, log):
                      duracao, status=status, mensagem_erro=mensagem_erro)
     if status != "erro":
         from fila import registrar_estatisticas
-        registrar_estatisticas(db, mae.get("dono_uid"), resumo, log)
+        registrar_estatisticas(db, mae.get("dono_uid"), resumo, log, mae.get("equipe_id"))
     log(f"Busca {'comum' if comum else 'mãe'} consolidada: {len(filhas)} {nome}, {len(leads)} lead(s) sem duplicados.")
     return True
 

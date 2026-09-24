@@ -5,6 +5,8 @@
 
 import { FieldValue } from "firebase-admin/firestore";
 import { LIMITE_DIARIO_PADRAO, LIMITES_VENDEDOR_PADRAO, diaFortaleza, diasCarteira, limitesVendedor } from "../lib/logica.mjs";
+import { EQUIPE_PADRAO } from "../lib/logica.mjs";
+import { criarConta } from "../lib/equipes.mjs";
 import { ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
 
 export default handler(async (req) => {
@@ -61,7 +63,10 @@ async function listar(auth, db) {
       uid: u.uid,
       email: u.email || "",
       nome: p.nome || u.displayName || "",
-      admin: u.customClaims?.admin === true,
+      admin: u.customClaims?.admin === true || u.customClaims?.papel === "master",
+      papel: u.customClaims?.admin === true || u.customClaims?.papel === "master" ? "master" : u.customClaims?.papel || p.papel || "vendedor",
+      equipe_id: u.customClaims?.equipe_id || p.equipe_id || EQUIPE_PADRAO,
+      ativo: !u.disabled,
       limite_diario: Number.isInteger(p.limite_diario) ? p.limite_diario : null,
       limite_consultas_dia: Number.isInteger(p.limite_consultas_dia) ? p.limite_consultas_dia : null,
       buscas_hoje: p.dia === hoje ? p.contagem_dia || 0 : 0,
@@ -120,26 +125,13 @@ async function definirConfig(db, corpo) {
 // Nome mostrado na saudação ("Olá, Breno"): até 60 caracteres, sem espaços sobrando.
 const limparNome = (nome) => String(nome ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
 
-async function criar(auth, db, { email, senha, nome: nomeBruto, limite_diario }) {
-  const nome = limparNome(nomeBruto);
-  if (!email || !senha) throw new ErroHttp(400, "Informe e-mail e senha.");
-  if (String(senha).length < 8) throw new ErroHttp(400, "A senha precisa ter pelo menos 8 caracteres.");
-  let conta;
-  try {
-    conta = await auth.createUser({ email: String(email).trim(), password: String(senha), displayName: nome || undefined });
-  } catch (erro) {
-    if (erro?.code === "auth/email-already-exists") throw new ErroHttp(409, "Já existe um usuário com esse e-mail.");
-    if (erro?.code === "auth/invalid-email") throw new ErroHttp(400, "E-mail inválido.");
-    throw new ErroHttp(400, "Não foi possível criar o usuário.");
-  }
-  await db.doc(`usuarios/${conta.uid}`).set({
-    email: conta.email,
-    nome: nome || "",
-    ...(Number.isInteger(limite_diario) && limite_diario >= 0 ? { limite_diario } : {}),
-    criado_em: FieldValue.serverTimestamp(),
-    removido: false,
-  }, { merge: true });
-  return { uid: conta.uid };
+// Master cria vendedor em qualquer equipe (padrão: a equipe de antes das equipes). Representante novo: aba Equipes.
+async function criar(auth, db, { email, senha, nome: nomeBruto, limite_diario, equipe_id }) {
+  const equipe = typeof equipe_id === "string" && equipe_id ? equipe_id : EQUIPE_PADRAO;
+  if (equipe !== EQUIPE_PADRAO && !(await db.doc(`equipes/${equipe}`).get()).exists) throw new ErroHttp(400, "Equipe não encontrada.");
+  const uid = await criarConta(auth, db, { email, senha, nome: limparNome(nomeBruto), papel: "vendedor", equipe,
+    extras: Number.isInteger(limite_diario) && limite_diario >= 0 ? { limite_diario } : {} });
+  return { uid };
 }
 
 async function remover(auth, db, admin, { uid }) {
@@ -151,7 +143,7 @@ async function remover(auth, db, admin, { uid }) {
   } catch {
     throw new ErroHttp(404, "Usuário não encontrado.");
   }
-  if (conta.customClaims?.admin === true) throw new ErroHttp(400, "Não é possível remover um administrador.");
+  if (conta.customClaims?.admin === true || conta.customClaims?.papel === "master") throw new ErroHttp(400, "Não é possível remover um administrador.");
   await auth.deleteUser(uid);
   // As buscas do usuário continuam no banco, visíveis para o admin, marcadas como "removido".
   await db.doc(`usuarios/${uid}`).set({

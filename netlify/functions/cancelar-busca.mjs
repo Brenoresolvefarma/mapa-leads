@@ -1,10 +1,11 @@
 // POST /api/cancelar-busca  { id }
-// Dono da busca ou admin. Na fila: cancela na hora. Rodando: pede o cancelamento
+// Dono da busca, gestor da equipe da busca ou master. Na fila: cancela na hora. Rodando: pede o cancelamento
 // e o motor para antes da próxima consulta, guardando os leads já coletados.
 // Busca-mãe do RN: cancela os lotes que ainda não rodaram e fecha a mãe com o que já foi coletado.
 // Busca comum dividida em partes (paralelismo): mesma coisa com as partes; se nenhuma começou, cancela na hora.
 
 import { FieldValue } from "firebase-admin/firestore";
+import { equipeDaBusca } from "../lib/logica.mjs";
 import { dispararMotor, ErroHttp, firebase, handler, json, lerCorpo, usuarioDoToken } from "../lib/servidor.mjs";
 
 const FINAIS = ["concluida", "erro", "cancelada"];
@@ -18,7 +19,8 @@ export default handler(async (req) => {
   const doc = await ref.get();
   const dados = doc.data();
   // Mesma resposta para "não existe" e "não é sua": não revela buscas de outros.
-  if (!doc.exists || !(usuario.admin || dados.dono_uid === usuario.uid)) {
+  const daEquipe = doc.exists && usuario.gestor && equipeDaBusca(dados) === usuario.equipe_id;
+  if (!doc.exists || !(usuario.admin || daEquipe || dados.dono_uid === usuario.uid)) {
     throw new ErroHttp(404, "Busca não encontrada.");
   }
   if (dados.tipo === "rn_filha") throw new ErroHttp(400, "Cancele pela busca principal do RN inteiro.");

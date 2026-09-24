@@ -263,3 +263,43 @@ test("cidades pequenas (< 5 mil hab.) também na PB; nome repetido em outro esta
   assert.equal(L.cidadesPequenas(["Santa Cruz PB"]).length, scPb.populacao_2022 < 5000 ? 1 : 0);
   assert.equal(L.cidadesPequenas(["Santa Cruz RN"]).length, 0); // Santa Cruz/RN tem ~40 mil hab.
 });
+
+// ------------------------------------------------------------ EQUIPES
+test("equipes: papel pelas claims (admin antigo = master), equipe padrão, mês de Fortaleza e id da carteira", async () => {
+  const L = await import("../netlify/lib/logica.mjs");
+  assert.equal(L.papelDe({ admin: true }), "master");
+  assert.equal(L.papelDe({ papel: "master" }), "master");
+  assert.equal(L.papelDe({ papel: "gestor", equipe_id: "x" }), "gestor");
+  assert.equal(L.papelDe({}), "vendedor");
+  assert.equal(L.equipeDe({}), "resolve-farma");
+  assert.equal(L.equipeDaNovaBusca({ papel: "master", equipe_id: "resolve-farma" }), "_master");
+  assert.equal(L.equipeDaNovaBusca({ papel: "vendedor", equipe_id: "eqa" }), "eqa");
+  assert.equal(L.equipeDaBusca({}), "resolve-farma");
+  // 1º de outubro às 01h UTC ainda é 30/09 em Fortaleza (a cota do mês vira à meia-noite de lá)
+  assert.equal(L.mesFortaleza(new Date("2026-10-01T01:00:00Z")), "2026-09");
+  assert.equal(L.mesFortaleza(new Date("2026-10-01T04:00:00Z")), "2026-10");
+  assert.equal(L.idCarteira("eqa", "03"), "eqa__03");
+  assert.equal(L.idDaEquipe("Farma Nordeste Ltda."), "farma-nordeste-ltda");
+});
+
+test("equipes: cota da equipe (buscas/dia e consultas/mês, null = sem limite, zera na virada) e teto do preposto", async () => {
+  const L = await import("../netlify/lib/logica.mjs");
+  const agora = new Date("2026-09-24T15:00:00Z");
+  const eq = { cotas: { buscas_dia: 2, consultas_mes: 10 }, uso: { dia: "2026-09-24", buscas_dia: 1, mes: "2026-09", consultas_mes: 8 } };
+  assert.equal(L.conferirCotaEquipe(eq, 2, agora).permitido, true);
+  assert.deepEqual(L.conferirCotaEquipe(eq, 2, agora).uso, { dia: "2026-09-24", mes: "2026-09", buscas_dia: 2, consultas_mes: 10 });
+  assert.match(L.conferirCotaEquipe(eq, 3, agora).erro, /8 de 10 usadas e esta busca tem 3/);
+  assert.match(L.conferirCotaEquipe({ ...eq, uso: { ...eq.uso, buscas_dia: 2 } }, 1, agora).erro, /2 de 2 buscas hoje/);
+  // Outro dia / outro mês: contadores zerados
+  assert.equal(L.conferirCotaEquipe(eq, 10, new Date("2026-10-02T15:00:00Z")).permitido, true);
+  // Sem limite (Resolve Farma): sempre passa, mas conta o uso
+  const livre = L.conferirCotaEquipe({ cotas: { buscas_dia: null, consultas_mes: null }, uso: {} }, 999, agora);
+  assert.deepEqual([livre.permitido, livre.uso.consultas_mes], [true, 999]);
+  assert.throws(() => L.validarCotas({ buscas_dia: 0 }), /1 a 1\.000\.000/);
+  assert.deepEqual(L.validarCotas({ buscas_dia: null, max_usuarios: 5 }), { buscas_dia: null, max_usuarios: 5 });
+  // Teto do preposto: nunca acima do da equipe nem do de vendedor
+  assert.deepEqual(L.tetoDoPreposto({}, { cotas: { buscas_dia: 5, consultas_mes: 100 } }), { limite_diario: 5, limite_consultas_dia: 100 });
+  assert.deepEqual(L.tetoDoPreposto({}, { cotas: {} }), { limite_diario: 20, limite_consultas_dia: 300 });
+  assert.deepEqual(L.limparRepresentadas(["Marca A", "marca a", "  Marca  B ", ""]), ["Marca A", "Marca B"]);
+  assert.throws(() => L.limparRepresentadas(Array.from({ length: 21 }, (_, i) => `M${i}`)), /No máximo 20/);
+});

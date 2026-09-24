@@ -4,26 +4,86 @@
       "collectionGroup": "buscas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "lista", "order": "ASCENDING" },
-        { "fieldPath": "dono_uid", "order": "ASCENDING" },
-        { "fieldPath": "criada_em", "order": "DESCENDING" }
+        {
+          "fieldPath": "lista",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dono_uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criada_em",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "buscas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "lista", "order": "ASCENDING" },
-        { "fieldPath": "criada_em", "order": "DESCENDING" }
+        {
+          "fieldPath": "lista",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criada_em",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "buscas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "lista", "order": "ASCENDING" },
-        { "fieldPath": "liberada_para", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "criada_em", "order": "DESCENDING" }
+        {
+          "fieldPath": "lista",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "liberada_para",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "criada_em",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "buscas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "lista",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "equipe_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criada_em",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "buscas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "lista",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "liberada_equipes",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "criada_em",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],

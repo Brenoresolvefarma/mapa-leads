@@ -220,6 +220,12 @@ a.cartao.kpi .seta { position:absolute; right:12px; top:12px; }
 .duas { display:grid; grid-template-columns:1.6fr 1fr; gap:12px; }
 @media (max-width: 1080px) { .duas { grid-template-columns:1fr; } }
 .pilula { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:99px; background:var(--surface-2); color:var(--ink-2); white-space:nowrap; }
+/* Equipes: selo do papel ("gestor · Equipe"), aviso de carteira antes de desativar, linha de total do painel */
+.selo-equipe { max-width:42vw; overflow:hidden; text-overflow:ellipsis; display:inline-block; }
+@media (max-width: 420px) { .selo-equipe { max-width:30vw; } }
+.aviso-carteira { margin-top:10px; padding:10px 12px; border:1px solid var(--line-2); border-radius:10px; background:var(--surface-2); }
+.aviso-carteira p { margin:0 0 8px; }
+tr.total td { font-weight:700; border-top:2px solid var(--line-2); }
 .pilula.ok { background:var(--ok-soft); color:var(--ok); } .pilula.warn { background:var(--warn-soft); color:var(--warn); }
 .pilula.bad { background:var(--bad-soft); color:var(--bad); } .pilula.azul { background:var(--brand-soft); color:var(--brand-ink); }
 .linha-tempo { display:flex; align-items:center; margin-top:8px; }
@@ -580,7 +586,7 @@ select.uf-seletor { min-height:44px; min-width:180px; max-width:100%; font-weigh
           <div class="barra" role="progressbar" aria-label="Cota de hoje usada" id="cota-barra" aria-valuemin="0"><i style="width:0%"></i></div>
         </div>
         <span class="status-motor" id="status-motor" title="Situação do motor de buscas"><i class="bolinha"></i><span class="txt">Verificando…</span></span>
-        <span class="pilula azul oculto" id="selo">admin</span>
+        <span class="pilula azul oculto" id="selo">master</span><span class="pilula oculto selo-equipe" id="selo-equipe"></span>
         <button class="btn btn-fantasma btn-icone" id="tema-btn" aria-label="Trocar para o tema escuro" title="Tema claro/escuro"></button>
         <button class="avatar" id="avatar" aria-label="Menu do usuário" aria-haspopup="true" aria-expanded="false"></button>
       </div>
@@ -590,6 +596,8 @@ select.uf-seletor { min-height:44px; min-width:180px; max-width:100%; font-weigh
         <a href="#mercado" role="menuitem" class="so-celular">Mercado (IBGE)</a>
         <a href="#sobre" role="menuitem">Sobre o MapaLeads</a>
         <a href="#admin" role="menuitem" class="oculto" id="menu-admin-celular">Admin</a>
+        <a href="#equipes" role="menuitem" class="oculto" id="menu-equipes-celular">Equipes</a>
+        <a href="#mapa" role="menuitem" class="oculto" id="menu-mapa-celular">Mapa</a>
         <button role="menuitem" id="rever-tour">Rever o tour</button>
         <div class="linha" style="padding:6px 10px"><span class="small ink2">Tema</span>
           <div class="segmentado" id="tema"><button data-tema="claro">Claro</button><button data-tema="escuro">Escuro</button></div></div>
@@ -844,6 +852,55 @@ select.uf-seletor { min-height:44px; min-width:180px; max-width:100%; font-weigh
         </div>
       </section>
 
+      <!-- ---------------------------------------------------------- EQUIPES (só o master) -->
+      <section data-pagina="equipes" class="oculto">
+        <div class="cab"><div><h1>Equipes</h1><p>Representantes e prepostos: cada equipe vê só o que é dela. Cotas por equipe, uso do mês e desativar.</p></div></div>
+        <div class="pilha">
+          <div class="cartao"><div class="entre"><h2>Nova equipe <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Cria a equipe e a conta do representante (gestor). Ele cria os prepostos dele, dentro do limite de usuários (o representante conta). Cotas vazias = sem limite.">i</button></h2></div>
+            <div class="grade-cfg form-equipe" style="margin-top:8px">
+              <div><label class="campo" for="eqn-nome">Nome da equipe</label><input id="eqn-nome" type="text" maxlength="60" placeholder="ex.: Farma Nordeste"></div>
+              <div><label class="campo" for="eqn-gnome">Nome do representante</label><input id="eqn-gnome" type="text" maxlength="60"></div>
+              <div><label class="campo" for="eqn-gemail">E-mail do representante</label><input id="eqn-gemail" type="email"></div>
+              <div><label class="campo" for="eqn-gsenha">Senha inicial (mín. 8)</label><input id="eqn-gsenha" type="text"></div>
+              <div><label class="campo" for="eqn-usuarios">Máximo de usuários</label><input id="eqn-usuarios" type="number" min="1" inputmode="numeric"></div>
+              <div><label class="campo" for="eqn-buscas">Buscas por dia (equipe)</label><input id="eqn-buscas" type="number" min="1" inputmode="numeric"></div>
+              <div><label class="campo" for="eqn-consultas">Consultas por mês (equipe)</label><input id="eqn-consultas" type="number" min="1" inputmode="numeric"></div>
+            </div>
+            <button class="btn btn-primario" id="eqn-criar" style="margin-top:8px">Criar equipe</button></div>
+          <div class="cartao"><div class="entre"><h2>Equipes</h2><button class="btn btn-sec btn-mini" id="equipes-atualizar">Atualizar</button></div>
+            <div class="caixa-tabela" style="margin-top:8px"><table class="tabela vira-cartao" id="equipes-tabela"></table></div>
+            <p class="small muted" style="margin-top:6px">Cotas vazias = sem limite. Os limites de cada preposto (40 cidades / 120 consultas por busca, 300 consultas por dia) continuam valendo dentro das cotas da equipe.</p></div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- MINHA EQUIPE (gestor; o master abre por #equipe/<id>) -->
+      <section data-pagina="equipe" class="oculto">
+        <div class="cab"><div><h1 id="eq-titulo">Minha equipe</h1><p id="eq-sub">Prepostos, listas, carteiras e resultados da sua equipe.</p></div></div>
+        <div class="pilha">
+          <div class="grade-kpi" id="eq-kpis"></div>
+          <div class="cartao"><div class="entre"><h2>Resultados por preposto <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Buscas e leads de cada um (das buscas dele e das listas liberadas para ele) e o funil do mini-CRM pelo status atual de cada lead. Conversão = clientes ÷ (contatados + negociando + clientes).">i</button></h2><button class="btn btn-sec btn-mini" id="eq-atualizar">Atualizar</button></div>
+            <div class="caixa-tabela" style="margin-top:8px"><table class="tabela vira-cartao" id="eq-painel"></table></div></div>
+          <div class="cartao"><div class="entre"><h2>Prepostos <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Crie, edite e desative os prepostos da sua equipe. O limite de cada um nunca passa do da equipe. Antes de desativar, os leads da carteira dele vão para outro preposto ou ficam livres.">i</button></h2></div>
+            <div class="grade-cfg form-preposto" style="margin-top:8px">
+              <div><label class="campo" for="eqp-email">E-mail</label><input id="eqp-email" type="email"></div>
+              <div><label class="campo" for="eqp-senha">Senha inicial (mín. 8)</label><input id="eqp-senha" type="text"></div>
+              <div><label class="campo" for="eqp-nome">Nome</label><input id="eqp-nome" type="text" maxlength="60"></div>
+              <div><label class="campo" for="eqp-limite">Buscas por dia</label><input id="eqp-limite" type="number" min="0" inputmode="numeric"></div>
+              <div><label class="campo" for="eqp-consultas">Consultas por dia</label><input id="eqp-consultas" type="number" min="0" inputmode="numeric"></div>
+            </div>
+            <button class="btn btn-primario" id="eqp-criar" style="margin-top:8px">Criar preposto</button>
+            <div class="caixa-tabela" style="margin-top:10px"><table class="tabela vira-cartao" id="eq-membros"></table></div>
+            <div id="eq-desativar" class="oculto"></div></div>
+          <div class="cartao"><div class="entre"><h2>Buscas da equipe <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Buscas dos prepostos e as listas que o administrador liberou para a equipe. Libere para os prepostos (inteira, por cidades ou dividida) ou apague.">i</button></h2></div>
+            <div class="caixa-tabela" style="margin-top:8px;max-height:420px"><table class="tabela vira-cartao" id="eq-buscas"></table></div></div>
+          <div class="cartao"><div class="entre"><h2>Carteiras</h2></div>
+            <div class="caixa-tabela" style="margin-top:8px"><table class="tabela vira-cartao" id="eq-carteiras"></table></div></div>
+          <div class="cartao"><h2>Representadas <button type="button" class="info" aria-label="O que é isso?" data-ajuda="Empresas ou marcas que a equipe representa (opcional). Só informação: aparecem aqui e na aba Resumo da planilha exportada.">i</button></h2>
+            <label class="campo" for="eq-representadas">Uma por linha (até 20)</label><textarea id="eq-representadas" rows="4" maxlength="2000"></textarea>
+            <button class="btn btn-sec" id="eq-rep-salvar" style="margin-top:6px">Salvar representadas</button></div>
+        </div>
+      </section>
+
       <!-- ---------------------------------------------------------- SOBRE -->
       <section data-pagina="sobre" class="oculto">
         <div class="cab"><div><h1>Sobre o MapaLeads</h1></div></div>
@@ -1013,6 +1070,7 @@ const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValu
 
 const ICONES = {
   pin: '<path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+  equipe: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/>',
   inicio: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/>',
   busca: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   leads: '<path d="M4 6h16M4 12h16M4 18h10"/>',
@@ -1282,6 +1340,8 @@ async function api(caminho, corpo) {
   return dados;
 }
 let usuario = null, ehAdmin = false, buscas = [], estadoFila = null, cota = null, perfis = [];
+// Equipes (24/09): papel e equipe vêm das claims do token (master › gestor › vendedor). ehAdmin = master.
+let ehGestor = false, equipeId = "", equipeDoc = null;
 // Limites do vendedor (não admin), de config/geral (Admin › Configurações); o servidor confere de novo.
 let LIMV = { cidades: 40, consultas: 120, consultasDia: 300 };
 let pararBuscas = null, pararLiberadas = null, pararFila = null, saindo = false, uidDaPagina = null, chaveBuscasComLeads = "";
@@ -1304,14 +1364,21 @@ onAuthStateChanged(auth, async (u) => {
   // Qualquer troca de usuário recarrega a página: leads, buscas, filtros e "admin" nunca passam de um para outro.
   if (uidDaPagina && (u?.uid || null) !== uidDaPagina) { pararOuvintes(); document.body.innerHTML = ""; location.reload(); return; }
   uidDaPagina = u?.uid || null;
-  usuario = u; ehAdmin = false;
-  $("#selo").classList.add("oculto");
+  usuario = u; ehAdmin = false; ehGestor = false;
+  $("#selo").classList.add("oculto"); $("#selo-equipe").classList.add("oculto");
   $("#tela-login").classList.toggle("oculto", !!u);
   $("#tela-app").classList.toggle("oculto", !u);
   if (!u) return;
-  ehAdmin = (await u.getIdTokenResult(true)).claims.admin === true; // só a claim do token recém-atualizado
+  // Só as claims do token recém-atualizado (papel e equipe nunca são herdados de outra sessão).
+  const claims = (await u.getIdTokenResult(true)).claims;
+  ehAdmin = claims.admin === true || claims.papel === "master";
+  ehGestor = !ehAdmin && claims.papel === "gestor";
+  equipeId = claims.equipe_id || "resolve-farma";
   $("#selo").classList.toggle("oculto", !ehAdmin);
   $("#menu-admin-celular").classList.toggle("oculto", !ehAdmin);
+  $("#menu-equipes-celular").classList.toggle("oculto", !ehAdmin);
+  $("#menu-mapa-celular").classList.toggle("oculto", !ehGestor); // no celular do gestor, "Equipe" ocupa o lugar do Mapa
+  carregarEquipeDoUsuario();
   $("#lateral-email").textContent = u.email; $("#menu-email").textContent = u.email;
   $("#avatar").textContent = (u.email || "?")[0].toUpperCase();
   mostrarSaudacao(u.displayName);
@@ -1331,14 +1398,18 @@ const PAGINAS = [
   { id: "leads", nome: "Meus leads", curto: "Leads", icone: "leads", barra: true },
   { id: "mapa", nome: "Mapa", icone: "mapa", barra: true },
   { id: "mercado", nome: "Mercado (IBGE)", curto: "Mercado", icone: "mercado" },
+  { id: "equipe", nome: "Minha equipe", curto: "Equipe", icone: "equipe", soGestor: true },
+  { id: "equipes", nome: "Equipes", icone: "equipe", soAdmin: true },
   { id: "admin", nome: "Admin", icone: "admin", soAdmin: true },
   { id: "sobre", nome: "Sobre", escondido: true },
 ];
 function montarMenus() {
-  const vis = PAGINAS.filter((p) => !p.escondido && (!p.soAdmin || ehAdmin));
+  const vis = PAGINAS.filter((p) => !p.escondido && (!p.soAdmin || ehAdmin) && (!p.soGestor || ehGestor));
   $("#menu").innerHTML = `<div class="grupo">Prospecção</div>` + vis.map((p) => `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.nome}</span></a>`).join("");
-  // Celular: barra fixa embaixo só com Início, Nova busca, Leads e Mapa (Mercado e Admin ficam no menu do avatar).
-  $("#barra-inferior").innerHTML = vis.filter((p) => p.barra).map((p) => `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.curto || p.nome}</span></a>`).join("");
+  // Celular: barra fixa embaixo com Início, Nova busca, Leads e Mapa (Mercado e Admin ficam no menu do avatar).
+  // Gestor: "Equipe" no lugar do Mapa (o Mapa vai para o menu do avatar).
+  const naBarra = (p) => (ehGestor ? p.barra && p.id !== "mapa" || p.id === "equipe" : p.barra);
+  $("#barra-inferior").innerHTML = vis.filter(naBarra).map((p) => `<a href="#${p.id}" data-ir="${p.id}">${icone(p.icone)}<span>${p.curto || p.nome}</span></a>`).join("");
 }
 const rota = () => { const [pag, ...resto] = location.hash.slice(1).split("/"); return { pag: pag || "inicio", resto: resto.map((x) => decodeURIComponent(x)) }; };
 addEventListener("hashchange", () => irPara());
@@ -1348,10 +1419,11 @@ function irPara() {
   const { pag, resto } = rota();
   let p = PAGINAS.find((x) => x.id === pag) || PAGINAS[0];
   if (p.soAdmin && !ehAdmin) p = PAGINAS[0];
+  if (p.soGestor && !ehGestor && !ehAdmin) p = PAGINAS[0]; // o master abre a equipe de alguém por #equipe/<id>
   const mudou = p.id !== paginaAtual; paginaAtual = p.id;
   for (const s of $$("[data-pagina]")) s.classList.toggle("oculto", s.dataset.pagina !== p.id);
   for (const a of $$("[data-ir]")) { if (a.dataset.ir === p.id) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
-  $("#titulo-pagina").textContent = p.nome;
+  $("#titulo-pagina").textContent = p.id === "equipe" && ehAdmin ? "Equipe" : p.nome;
   $("#menu-usuario").classList.add("oculto");
   fecharPaineis();
   if (p.id === "inicio") desenharInicio();
@@ -1360,6 +1432,8 @@ function irPara() {
   if (p.id === "mapa") abrirMapa(resto, mudou);
   if (p.id === "mercado") abrirMercado();
   if (p.id === "admin") carregarAdmin();
+  if (p.id === "equipes") carregarEquipes();
+  if (p.id === "equipe") abrirEquipe(ehAdmin ? resto[0] || "" : equipeId);
   if (mudou) scrollTo(0, 0);
 }
 $("#avatar").onclick = (ev) => { ev.stopPropagation(); const m = $("#menu-usuario"); m.classList.toggle("oculto"); $("#avatar").setAttribute("aria-expanded", String(!m.classList.contains("oculto"))); };
@@ -1369,16 +1443,20 @@ $("#rever-tour").onclick = () => { $("#menu-usuario").classList.add("oculto"); a
 // ============================================================ DADOS DO USUÁRIO (poucas leituras)
 function ouvirDados() {
   const col = collection(db, "buscas");
-  // Até 50 buscas mais recentes (admin: de todos). Leads só são lidos quando a busca é aberta.
+  // Até 50 buscas mais recentes (master: de todos; gestor: da equipe, até 100). Leads só são lidos quando a busca é aberta.
   const q = ehAdmin ? query(col, where("lista", "==", true), orderBy("criada_em", "desc"), limit(50))
+    : ehGestor ? query(col, where("lista", "==", true), where("equipe_id", "==", equipeId), orderBy("criada_em", "desc"), limit(100))
     : query(col, where("lista", "==", true), where("dono_uid", "==", usuario.uid), orderBy("criada_em", "desc"), limit(50));
-  pararBuscas = onSnapshot(q, (s) => { buscasProprias = s.docs.map((d) => ({ id: d.id, ...d.data() })); juntarBuscas(); },
+  // Gestor: as buscas dos prepostos vêm marcadas "_daEquipe" (ele vê, libera e apaga; o Início dele conta só as dele).
+  pararBuscas = onSnapshot(q, (s) => { buscasProprias = s.docs.map((d) => ({ id: d.id, ...d.data(), ...(ehGestor && d.data().dono_uid !== usuario.uid ? { _daEquipe: true } : {}) })); juntarBuscas(); },
     (e) => toast(`Não foi possível carregar as buscas (${e.code}).`, "erro"));
-  // Vendedor: também as buscas que o admin LIBEROU para ele (etiqueta "Liberada por admin"; não apaga nem libera).
+  // Vendedor: também as buscas LIBERADAS para ele (etiqueta "Liberada por admin/representante"; não apaga nem libera).
+  // Gestor: as listas que o master liberou para a equipe (ele redistribui para os prepostos).
   // Sem o índice/regras novos publicados, só não aparecem (as buscas dele continuam normais).
   if (!ehAdmin) {
-    const ql = query(col, where("lista", "==", true), where("liberada_para", "array-contains", usuario.uid), orderBy("criada_em", "desc"), limit(50));
-    pararLiberadas = onSnapshot(ql, (s) => { buscasLiberadas = s.docs.map((d) => ({ id: d.id, ...d.data(), _liberada: true })); juntarBuscas(); },
+    const ql = ehGestor ? query(col, where("lista", "==", true), where("liberada_equipes", "array-contains", equipeId), orderBy("criada_em", "desc"), limit(50))
+      : query(col, where("lista", "==", true), where("liberada_para", "array-contains", usuario.uid), orderBy("criada_em", "desc"), limit(50));
+    pararLiberadas = onSnapshot(ql, (s) => { buscasLiberadas = s.docs.map((d) => ({ id: d.id, ...d.data(), _liberada: true, ...(ehGestor ? { _paraEquipe: true } : {}) })); juntarBuscas(); },
       (e) => console.warn("buscas liberadas indisponíveis:", e.code));
   }
   pararFila = onSnapshot(doc(db, "fila/estado"), (d) => { estadoFila = { ...(d.data() || {}), lidoEm: Date.now() }; desenharStatus(); if (paginaAtual === "admin") desenharFilaViva(); });
@@ -1387,8 +1465,9 @@ function ouvirDados() {
 }
 let buscasProprias = [], buscasLiberadas = [];
 // ============================================================ MINI-CRM (status por vendedor + carteira)
-// Vendedor: lê crm/{uid}__00..15 (os dele) e carteira/00..15 (de quem é cada lugar) — 32 leituras por visita.
-// Admin: todos os crm/* (vê os status de todos) + carteira. Gravação só pela Function /api/crm-lead.
+// Vendedor: lê crm/{uid}__00..15 (os dele) e a carteira da equipe (carteira/{equipe}__00..15) — 32 leituras por visita.
+// Gestor: o CRM da equipe (crm com equipe_id = a dele) + a carteira da equipe. Master: todos os crm/* e todas as carteiras.
+// Gravação só pela Function /api/crm-lead.
 const CRM = { meu: new Map(), todos: new Map(), carteira: new Map(), dias: 60, pronto: null, vendedores: null };
 const rotuloStatus = (s) => (STATUS_CRM.find(([k]) => k === s) || [s, s])[1];
 const rotuloMotivo = (m) => (MOTIVOS_DESCARTE.find(([k]) => k === m) || [m, m])[1];
@@ -1397,18 +1476,21 @@ function carregarCrm() {
   const fatias = Array.from({ length: FATIAS_CRM }, (_, i) => String(i).padStart(2, "0"));
   CRM.pronto = (async () => {
     const [cart, meus, geral] = await Promise.all([
-      Promise.all(fatias.map((f) => getDoc(doc(db, `carteira/${f}`)))),
-      ehAdmin ? getDocs(collection(db, "crm")).then((q) => q.docs) : Promise.all(fatias.map((f) => getDoc(doc(db, `crm/${usuario.uid}__${f}`)))),
+      ehAdmin ? getDocs(collection(db, "carteira")).then((q) => q.docs) : Promise.all(fatias.map((f) => getDoc(doc(db, `carteira/${equipeId}__${f}`)))),
+      ehAdmin ? getDocs(collection(db, "crm")).then((q) => q.docs)
+        : ehGestor ? getDocs(query(collection(db, "crm"), where("equipe_id", "==", equipeId))).then((q) => q.docs)
+        : Promise.all(fatias.map((f) => getDoc(doc(db, `crm/${usuario.uid}__${f}`)))),
       getDoc(doc(db, "config/geral")),
     ]);
     const dias = geral.data()?.carteira_dias;
     CRM.dias = Number.isInteger(dias) && dias >= 1 ? dias : 60;
-    for (const d of cart) for (const [k, e] of Object.entries(d.data()?.leads || {})) CRM.carteira.set(k, e);
+    // Master vê as carteiras de todas as equipes: para o mesmo lugar em duas equipes, fica o contato mais recente.
+    for (const d of cart) for (const [k, e] of Object.entries(d.data()?.leads || {})) if (!CRM.carteira.has(k) || Number(e.ultimo || 0) > Number(CRM.carteira.get(k).ultimo || 0)) CRM.carteira.set(k, e);
     for (const d of meus) {
       const dono = d.data()?.dono_uid || d.id.split("__")[0];
       for (const [k, r] of Object.entries(d.data()?.leads || {})) {
         if (dono === usuario.uid) CRM.meu.set(k, r);
-        if (ehAdmin) { const l = CRM.todos.get(k) || []; l.push({ ...r, _uid: dono }); CRM.todos.set(k, l); }
+        if (ehAdmin || ehGestor) { const l = CRM.todos.get(k) || []; l.push({ ...r, _uid: dono }); CRM.todos.set(k, l); }
       }
     }
   })().catch((e) => { CRM.pronto = null; console.warn("CRM indisponível:", e.code || e.message); });
@@ -1419,7 +1501,7 @@ function crmDe(l) {
   const k = chaveCrm(l), e = CRM.carteira.get(k);
   const dono = carteiraAtiva(e, Date.now(), CRM.dias) ? e : null;
   let reg = CRM.meu.get(k) || null;
-  if (ehAdmin) { // admin vê o do dono da carteira ou, sem carteira, o mais recente de qualquer vendedor
+  if (ehAdmin || (ehGestor && !reg)) { // master/gestor veem o do dono da carteira ou, sem carteira, o mais recente
     const todos = CRM.todos.get(k) || [];
     reg = (dono && todos.find((r) => r._uid === dono.uid)) || todos.sort((a, b) => b.em - a.em)[0] || null;
   }
@@ -1438,7 +1520,7 @@ async function salvarStatus(l, { status, motivo, anotacao, proximo }) {
     toast(`${rotuloStatus(status)}${status === "descartado" ? ` · ${rotuloMotivo(motivo)}` : ""} — salvo.`, "ok");
   } catch (e) {
     toast(e.message, "erro");
-    if (/carteira de/.test(e.message)) { const d = await getDoc(doc(db, `carteira/${fatiaDe(c.k)}`)); const x = d.data()?.leads?.[c.k]; if (x) CRM.carteira.set(c.k, x); }
+    if (/carteira de/.test(e.message)) { const d = await getDoc(doc(db, `carteira/${equipeId}__${fatiaDe(c.k)}`)); const x = d.data()?.leads?.[c.k]; if (x) CRM.carteira.set(c.k, x); }
   }
   aposMudarCrm(l);
 }
@@ -1460,6 +1542,7 @@ function juntarBuscas() {
   if (chave !== chaveBuscasComLeads) { chaveBuscasComLeads = chave; if (paginaAtual === "mapa" || paginaAtual === "mercado") irPara(); }
   desenharCaixaBuscas();
   if (paginaAtual === "admin") desenharBuscasAdmin();
+  if (paginaAtual === "equipe") desenharBuscasEquipe();
 }
 async function carregarCota() {
   try {
@@ -1529,7 +1612,12 @@ function lotesDaBusca(b) {
 const temLeads = (b) => lotesDaBusca(b).length > 0;
 // Quantos leads a busca tem PARA QUEM ESTÁ VENDO (liberada em recorte = só os das cidades do vendedor).
 const totalLeads = (b) => (b._liberada && b.liberacoes?.[usuario.uid]?.modo === "recorte" ? b.liberacoes[usuario.uid].qtd_leads : b.resumo?.total) || 0;
-const etiquetaLiberada = (b) => (b._liberada ? ' <span class="pilula azul etiqueta-liberada">Liberada por admin</span>' : "");
+const etiquetaLiberada = (b) => {
+  if (b._paraEquipe) return ' <span class="pilula azul etiqueta-liberada">Liberada para a equipe</span>';
+  if (!b._liberada) return b._daEquipe && b.dono_email ? ` <span class="pilula etiqueta-equipe">${txt(b.dono_email)}</span>` : "";
+  const porGestor = equipeDoc?.gestor_uid && b.liberacoes?.[usuario.uid]?.liberada_por === equipeDoc.gestor_uid;
+  return ` <span class="pilula azul etiqueta-liberada">Liberada por ${porGestor ? "representante" : "admin"}</span>`;
+};
 const parcial = (b) => !(b.qtd_lotes > 0) && temLeads(b); // ainda rodando, com cidades prontas
 function leadsDaBusca(b) {
   const caminhos = lotesDaBusca(b);
@@ -1671,7 +1759,7 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.targ
 // Cartões do Início → detalhe com o mesmo recorte do número (no segmento = filtros padrão; "Ver total" = filtros desligados).
 const modoInicio = () => (INICIO.total ? { segmento: false, pedida: false } : {});
 // O Início conta só as buscas do próprio vendedor; as liberadas pelo admin ficam em Meus leads, Mapa e Mercado.
-function minha(b) { return !b._liberada; }
+function minha(b) { return !b._liberada && !b._daEquipe; }
 const DETALHES = {
   total: () => detalharLeads({ ids: idsComLeads(minha), filtros: { ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: INICIO.total ? "Todos os leads" : "Leads no segmento" } }),
   semana: () => { const p = { dias: 7 }; detalharLeads({ ids: idsComLeads((b) => minha(b) && buscaNoPeriodo(b, p)), filtros: { periodo: p, ...modoInicio() }, origem: { rot: "Início", href: "#inicio", item: "Leads da semana" } }); },
@@ -2344,28 +2432,35 @@ document.addEventListener("click", (ev) => {
   ev.preventDefault(); ev.stopPropagation();
   apagarBusca(id);
 }, true);
-function desenharBuscasAdmin() {
-  if (!ehAdmin) return;
-  $("#buscas-admin").innerHTML = buscas.length ? `<thead><tr><th>Busca</th><th>Vendedor</th><th>Criada</th><th>Status</th><th>Leads</th><th></th></tr></thead><tbody>` +
-    buscas.map((b) => { const [rot, cls] = STATUS[b.status] || [b.status, ""];
-      return `<tr><td class="principal-td" data-rot=""><b>${txt(rotuloBusca(b))}</b></td><td data-rot="Vendedor">${txt(b.dono_email || "–")}</td><td data-rot="Criada">${b.criada_em ? dataHora(b.criada_em.toDate()) : "–"}</td>
+function htmlBuscasTabela(lista) {
+  return lista.length ? `<thead><tr><th>Busca</th><th>Vendedor</th><th>Criada</th><th>Status</th><th>Leads</th><th></th></tr></thead><tbody>` +
+    lista.map((b) => { const [rot, cls] = STATUS[b.status] || [b.status, ""];
+      return `<tr><td class="principal-td" data-rot=""><b>${txt(rotuloBusca(b))}</b>${b._paraEquipe ? etiquetaLiberada(b) : ""}</td><td data-rot="Vendedor">${txt(b.dono_email || (b._paraEquipe ? "master" : "–"))}</td><td data-rot="Criada">${b.criada_em ? dataHora(b.criada_em.toDate()) : "–"}</td>
         <td data-rot="Status"><span class="pilula ${cls}">${txt(rot)}</span></td><td data-rot="Leads" class="num">${numero(b.resumo?.total || 0)}</td><td data-rot=""><div class="linha" style="gap:6px">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</td></tr>`; }).join("") + "</tbody>"
     : `<tbody><tr><td class="muted">Nenhuma busca ainda.</td></tr></tbody>`;
+}
+function desenharBuscasAdmin() {
+  if (!ehAdmin) return;
+  $("#buscas-admin").innerHTML = htmlBuscasTabela(buscas);
 }
 // ============================================================ LIBERAR BUSCA PARA VENDEDOR (só admin; pela Function)
 // O admin escolhe vendedores, lista inteira ou só algumas cidades/regiões e se divide entre eles (cada um com cidades
 // diferentes, sem repetir lead). A prévia (quantos leads cada um recebe) vem do servidor antes de confirmar.
-const podeLiberar = (b) => ehAdmin && FINAIS.includes(b.status) && (b.qtd_lotes || 0) > 0 && !["parte", "rn_filha"].includes(b.tipo);
+// Master: qualquer busca. Gestor: as da equipe e as que o master liberou para a equipe (repassa aos prepostos).
+const podeLiberar = (b) => (ehAdmin || (ehGestor && (!b._liberada || b._paraEquipe))) && FINAIS.includes(b.status) && (b.qtd_lotes || 0) > 0 && !["parte", "rn_filha"].includes(b.tipo);
 function botaoLiberar(b, classe = "btn-mini") {
   return podeLiberar(b) ? `<button class="btn btn-sec ${classe}" data-liberar="${txt(b.id)}">Liberar para vendedor</button>` : "";
 }
 function liberadosDe(b) {
-  const libs = Object.entries(b.liberacoes || {});
-  if (!ehAdmin || !libs.length) return "";
-  return `<div class="liberados"><span class="muted">Liberada para:</span>${libs.map(([uid, l]) =>
+  // Gestor vê (e revoga) só o que foi para os prepostos da equipe dele; o master vê tudo e as equipes.
+  const libs = Object.entries(b.liberacoes || {}).filter(([, l]) => ehAdmin || (ehGestor && (l.equipe_id || "resolve-farma") === equipeId));
+  const eqs = ehAdmin ? Object.entries(b.liberacoes_equipes || {}) : [];
+  if ((!ehAdmin && !ehGestor) || (!libs.length && !eqs.length)) return "";
+  return `<div class="liberados"><span class="muted">Liberada para:</span>${eqs.map(([id, e]) =>
+    `<span class="chip chip-equipe">Equipe ${txt(e.nome || id)}<button data-revogar-equipe="${txt(b.id)}" data-equipe="${txt(id)}" aria-label="Revogar a liberação da equipe ${txt(e.nome || id)}">${icone("fechar")}</button></span>`).join("")}${libs.map(([uid, l]) =>
     `<span class="chip" title="${txt(l.modo === "inteira" ? "lista inteira" : `${(l.cidades || []).length} cidade(s)${l.dividida ? " (dividida)" : ""}`)} · ${numero(l.qtd_leads || 0)} leads">${txt(l.rotulo || "vendedor")} · ${numero(l.qtd_leads || 0)}<button data-revogar="${txt(b.id)}" data-uid="${txt(uid)}" aria-label="Revogar a liberação de ${txt(l.rotulo || "vendedor")}">${icone("fechar")}</button></span>`).join("")}</div>`;
 }
-const LB = { id: "", vendedores: [], cidades: [], escolhidos: new Set(), modo: "inteira", marcadas: new Set(), dividir: false, plano: null, erro: "", vez: 0 };
+const LB = { id: "", vendedores: [], equipes: [], cidades: [], escolhidos: new Set(), modo: "inteira", marcadas: new Set(), dividir: false, plano: null, erro: "", vez: 0 };
 async function abrirLiberar(id) {
   const b = buscas.find((x) => x.id === id);
   if (!b) return;
@@ -2376,7 +2471,7 @@ async function abrirLiberar(id) {
   abrirGaveta("#painel-liberar");
   try {
     const r = await api("liberar-busca", { acao: "simular", id });
-    LB.vendedores = r.vendedores; LB.cidades = r.cidades;
+    LB.vendedores = r.vendedores; LB.cidades = r.cidades; LB.equipes = r.equipes || [];
     desenharLiberar();
   } catch (e) { toast(e.message, "erro"); fecharPaineis(); }
 }
@@ -2396,7 +2491,12 @@ function desenharLiberar() {
   if (!b) return fecharPaineis();
   const total = LB.cidades.reduce((t, c) => t + c.leads, 0);
   const vend = LB.vendedores.length ? LB.vendedores.map((v) => `<label class="alternar"><input type="checkbox" data-lib-vend="${txt(v.uid)}" ${LB.escolhidos.has(v.uid) ? "checked" : ""}> ${txt(v.rotulo)}${b.liberacoes?.[v.uid] ? ' <span class="small muted">(já recebeu — será trocada)</span>' : ""}</label>`).join("")
-    : `<p class="small muted">Nenhum vendedor disponível (crie em Admin › Usuários).</p>`;
+    : `<p class="small muted">Nenhum vendedor disponível (${ehGestor ? "crie em Minha equipe" : "crie em Admin › Usuários ou em Equipes"}).</p>`;
+  // Master: também para uma EQUIPE inteira (o representante dela repassa aos prepostos; não conta na cota da equipe).
+  const equipes = ehAdmin && LB.equipes.length ? `<div><label class="campo">Ou para uma equipe inteira ${aj("A lista vai para o representante da equipe, que repassa aos prepostos dele (inteira, por cidades ou dividida). Não conta na cota da equipe. Revogar tira também o que ele repassou.")}</label>
+      <div class="lib-vendedores" id="lib-equipes">${LB.equipes.map((e) => `<div class="linha lib-equipe" style="justify-content:space-between"><span>${txt(e.nome)}</span>${e.liberada
+        ? `<span class="linha" style="gap:6px"><span class="pilula ok">liberada</span><button class="btn btn-sec btn-mini" data-revogar-equipe="${txt(LB.id)}" data-equipe="${txt(e.id)}">Revogar</button></span>`
+        : `<button class="btn btn-sec btn-mini" data-lib-equipe="${txt(e.id)}">Liberar para a equipe</button>`}</div>`).join("")}</div></div>` : "";
   const cidades = LB.modo === "cidades" ? `<div class="entre" style="margin-top:8px"><span class="small muted">Marque regiões inteiras ou cidade a cidade.</span>
       <div class="segmentado" id="lib-tipo-regiao"><button data-tipo="micro" aria-pressed="${NB.tipoRegiao === "micro"}">Microrregiões</button><button data-tipo="imediata" aria-pressed="${NB.tipoRegiao === "imediata"}">Regiões imediatas</button></div></div>
     <div class="lib-cidades" id="lib-cidades">${gruposLiberar().map(([chave, g]) => {
@@ -2407,12 +2507,13 @@ function desenharLiberar() {
       <div class="small muted">${txt(rotuloBusca(b))} · ${numero(total)} leads em ${numero(LB.cidades.length)} cidade(s)</div></div>
       <button class="btn btn-fantasma btn-icone" data-fechar aria-label="Fechar">${icone("fechar")}</button></div>
     <div class="painel-corpo pilha">
-      <div><label class="campo">1. Vendedores</label><div class="lib-vendedores" id="lib-vendedores">${vend}</div></div>
+      <div><label class="campo">1. ${ehGestor ? "Prepostos" : "Vendedores"}</label><div class="lib-vendedores" id="lib-vendedores">${vend}</div></div>
+      ${equipes}
       <div><label class="campo">2. O que liberar</label><div class="lib-vendedores">
         <label class="alternar"><input type="radio" name="lib-modo" value="inteira" ${LB.modo === "inteira" ? "checked" : ""}> Lista inteira</label>
         <label class="alternar"><input type="radio" name="lib-modo" value="cidades" ${LB.modo === "cidades" ? "checked" : ""}> Só estas cidades/regiões</label></div>${cidades}</div>
       <div><label class="alternar"><input type="checkbox" id="lib-dividir" ${LB.dividir ? "checked" : ""}> Dividir entre os vendedores escolhidos ${aj("Cada vendedor recebe cidades diferentes (nenhum lead repetido). As cidades com mais leads são repartidas primeiro, sempre para quem está com menos.")}</label></div>
-      <p class="small muted">A lista aparece em Meus leads do vendedor com a etiqueta "Liberada por admin". Não conta na cota dele. Você pode revogar quando quiser.</p>
+      <p class="small muted">A lista aparece em Meus leads do vendedor com a etiqueta "Liberada por ${ehGestor ? "representante" : "admin"}". Não conta na cota dele. Você pode revogar quando quiser.</p>
     </div>
     <div class="painel-rodape"><div class="lib-previa" id="lib-previa" aria-live="polite"></div>
       <div class="acoes"><button class="btn btn-sec" data-fechar>Voltar</button><button class="btn btn-primario" id="lib-confirmar" disabled>Liberar</button></div></div>`;
@@ -2461,6 +2562,17 @@ $("#painel-liberar").addEventListener("click", async (ev) => {
   if (ev.target.closest("[data-fechar]")) return fecharPaineis();
   const tipo = ev.target.closest("#lib-tipo-regiao [data-tipo]")?.dataset.tipo;
   if (tipo) { NB.tipoRegiao = tipo; guardar("mapaleads.tipoRegiao", tipo); return desenharLiberar(); }
+  const eq = ev.target.closest("[data-lib-equipe]")?.dataset.libEquipe;
+  if (eq) {
+    const e = LB.equipes.find((x) => x.id === eq);
+    try {
+      await api("liberar-busca", { acao: "liberar_equipe", id: LB.id, equipe_id: eq });
+      if (e) e.liberada = true;
+      comemorar(`Lista liberada para a equipe ${e?.nome || eq}.`, { tipo: "pequena" });
+      desenharLiberar();
+    } catch (erro) { toast(erro.message, "erro"); }
+    return;
+  }
   const botao = ev.target.closest("#lib-confirmar");
   if (!botao || botao.disabled) return;
   botao.disabled = true; botao.textContent = "Liberando…";
@@ -2476,12 +2588,23 @@ async function revogarLiberacao(id, uid) {
   if (!(await confirmar({ titulo: "Revogar liberação", texto: `Tirar esta lista de ${rot}? Ela some da tela dele na hora.`, sim: "Sim, revogar" }))) return;
   try { await api("liberar-busca", { acao: "revogar", id, uid }); toast("Liberação revogada.", "ok"); } catch (e) { toast(e.message, "erro"); }
 }
+async function revogarEquipe(id, equipe) {
+  const b = buscas.find((x) => x.id === id), nome = b?.liberacoes_equipes?.[equipe]?.nome || LB.equipes.find((e) => e.id === equipe)?.nome || "a equipe";
+  if (!(await confirmar({ titulo: "Revogar liberação", texto: `Tirar esta lista da equipe ${nome}? Sai também o que o representante repassou aos prepostos.`, sim: "Sim, revogar" }))) return;
+  try {
+    await api("liberar-busca", { acao: "revogar_equipe", id, equipe_id: equipe });
+    toast("Liberação da equipe revogada.", "ok");
+    const e = LB.equipes.find((x) => x.id === equipe);
+    if (e) { e.liberada = false; if (!$("#painel-liberar").classList.contains("oculto")) desenharLiberar(); }
+  } catch (e) { toast(e.message, "erro"); }
+}
 document.addEventListener("click", (ev) => {
   const lib = ev.target.closest("[data-liberar]")?.dataset.liberar;
   const rev = ev.target.closest("[data-revogar]");
-  if (!lib && !rev) return;
+  const revEq = ev.target.closest("[data-revogar-equipe]");
+  if (!lib && !rev && !revEq) return;
   ev.preventDefault(); ev.stopPropagation();
-  if (lib) abrirLiberar(lib); else revogarLiberacao(rev.dataset.revogar, rev.dataset.uid);
+  if (lib) abrirLiberar(lib); else if (revEq) revogarEquipe(revEq.dataset.revogarEquipe, revEq.dataset.equipe); else revogarLiberacao(rev.dataset.revogar, rev.dataset.uid);
 }, true);
 // Seletor de buscas abertas (uma ou várias, juntas sem repetidos)
 function desenharCaixaBuscas() {
@@ -2489,7 +2612,7 @@ function desenharCaixaBuscas() {
   $("#rot-buscas").textContent = n ? `${n} busca(s) aberta(s)` : "Escolher buscas";
   // Todas as buscas: com leads dá para abrir; terminada dá para apagar; em andamento, cancelar primeiro.
   const lista = buscas;
-  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>${ehAdmin ? "Buscas" : "Suas buscas"}</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
+  $("#caixa-buscas").innerHTML = `<div class="entre" style="padding:4px 8px 8px"><b>${ehAdmin ? "Buscas" : ehGestor ? "Buscas da equipe" : "Suas buscas"}</b><span class="small muted">marque uma ou várias para abrir</span></div>` +
     (lista.map((b) => { const comLeads = temLeads(b);
       const situacao = parcial(b) ? `${b.cidades_prontas || 0} de ${b.cidades_total} cidades prontas` : comLeads ? `${numero(totalLeads(b))} leads` : txt((STATUS[b.status] || [b.status])[0]);
       return `<div class="linha-busca" data-busca="${txt(b.id)}"><label class="${comLeads ? "" : "sem-leads"}"><input type="checkbox" data-abrir="${txt(b.id)}" ${W.ids.includes(b.id) ? "checked" : ""} ${comLeads ? "" : "disabled"}><span><b>${txt(rotuloBusca(b))}</b>${etiquetaLiberada(b)}<br><span class="small muted">${b.criada_em ? dataHora(b.criada_em.toDate()) : ""} · ${situacao}${ehAdmin && b.dono_email ? ` · ${txt(b.dono_email)}` : ""}</span></span></label><div class="acoes-busca">${botaoLiberar(b)}${botaoApagar(b)}</div>${liberadosDe(b)}</div>`; }).join("") ||
@@ -2659,8 +2782,9 @@ $("#visoes").onchange = () => {
 function htmlCrmFicha(l, c) {
   const hist = (c.reg?.h || []).map((h) => { const d = new Date(h.d); const dia = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
     return `<li>${txt([dia, h.u, rotuloStatus(h.s) + (h.m ? ` (${rotuloMotivo(h.m)})` : ""), h.n, h.p ? `próximo ${dataBr(h.p)}` : ""].filter(Boolean).join(" · "))}</li>`; }).join("");
-  if (c.bloqueado) return `<div class="crm-ficha"><span class="pilula warn">Na carteira de ${txt(c.dono.nome)}</span><p class="small muted" style="margin:6px 0 0">Outro vendedor já está atendendo este lugar. O admin pode transferir.</p></div>`;
-  const transferir = ehAdmin ? `<div class="linha" style="margin-top:8px"><select id="transferir-para" aria-label="Transferir para"><option value="">Transferir para…</option>${(CRM.vendedores || []).map((v) => `<option value="${txt(v.uid)}">${txt(v.nome)}</option>`).join("")}</select><button class="btn btn-sec btn-mini" id="transferir-btn">Transferir</button></div>` : "";
+  const transferir = ehAdmin || ehGestor ? `<div class="linha" style="margin-top:8px"><select id="transferir-para" aria-label="Transferir para"><option value="">Transferir para…</option>${(CRM.vendedores || []).map((v) => `<option value="${txt(v.uid)}">${txt(v.nome)}</option>`).join("")}</select><button class="btn btn-sec btn-mini" id="transferir-btn">Transferir</button></div>` : "";
+  // Na carteira de outro: sem status; o master e o representante da equipe podem transferir.
+  if (c.bloqueado) return `<div class="crm-ficha"><span class="pilula warn">Na carteira de ${txt(c.dono.nome)}</span><p class="small muted" style="margin:6px 0 0">Outro vendedor já está atendendo este lugar. ${ehGestor ? "Você pode transferir:" : "O admin ou o representante podem transferir."}</p>${ehGestor ? transferir : ""}</div>`;
   return `<div class="crm-ficha">
     <div class="entre"><b>Status</b>${c.dono ? `<span class="small muted">Carteira: ${txt(c.dono.nome)}</span>` : ""}</div>
     ${ehAdmin ? `<p style="margin:4px 0"><span class="pilula ${c.s === "novo" ? "" : "azul"}">${txt(rotuloStatus(c.s))}</span></p>`
@@ -2687,7 +2811,7 @@ document.addEventListener("click", async (ev) => {
 });
 async function abrirFicha(l) {
   if (!l) return;
-  if (ehAdmin && !CRM.vendedores) api("crm-lead", { acao: "carteiras" }).then((r) => { CRM.vendedores = r.vendedores.map((v) => ({ uid: v.uid, nome: v.nome })); if (leadDaFicha === l) abrirFicha(l); }).catch(() => {});
+  if ((ehAdmin || ehGestor) && !CRM.vendedores) api("crm-lead", { acao: "carteiras" }).then((r) => { CRM.vendedores = r.vendedores.map((v) => ({ uid: v.uid, nome: v.nome })); if (leadDaFicha === l) abrirFicha(l); }).catch(() => {});
   const c = l._coord;
   const campos = [["Categoria", txt(l.categoria)], ["Todas as categorias", txt((l.categorias || []).join(", "))], ["No segmento", txt(l.no_segmento)], ["Telefone", pii(l.telefone)], ["E-mail", pii(l.email)],
     ["Endereço", pii(l.endereco)], ["Bairro", txt(l.bairro)],
@@ -2861,7 +2985,10 @@ async function montarXlsx(lista) {
   const [a, m, d] = diaFortaleza().split("-");
   const noSeg = linhas.filter((v) => v[12] === "Sim").length, comWhats = linhas.filter((v) => v[7]).length;
   [["Termo buscado", W.segmento.termos.join(", ") || "–"], ["Data", `${d}/${m}/${a}`], ["Total de leads", linhas.length],
-    ["No segmento", noSeg], ["Com WhatsApp", comWhats]].forEach(([k, v]) => { const r = rs.addRow([k, v]); r.getCell(1).font = { bold: true }; });
+    ["No segmento", noSeg], ["Com WhatsApp", comWhats],
+    // Equipes: as representadas da equipe (só informação, opcional)
+    ...(equipeDoc?.representadas?.length ? [["Equipe", equipeDoc.nome || equipeId], ["Representadas", equipeDoc.representadas.join(", ")]] : [])]
+    .forEach(([k, v]) => { const r = rs.addRow([k, v]); r.getCell(1).font = { bold: true }; });
   rs.addRow([]);
   const cab = rs.addRow(["Cidade", "Leads", "No segmento", "Com WhatsApp"]);
   estiloCabecalho(cab);
@@ -3293,19 +3420,21 @@ async function desenharGraficosMercado(agg, pesq) {
 // ============================================================ ADMIN
 async function carregarAdmin() { if (!ehAdmin) return; sincronizarSeletoresUf(); desenharCartaoEstadoInteiro(); desenharBuscasAdmin(); carregarUsuarios(); carregarSaude(); desenharFilaViva(); desenharEstados(); carregarCarteiras(); }
 // Painel "Carteiras": leads por vendedor e por status, conversão (Cliente ÷ Contatado+Negociando+Cliente).
-async function carregarCarteiras() {
-  $("#carteiras-tabela").innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
+// Carteiras: Admin (todas as equipes) e Minha equipe (gestor: só a dele; master vendo uma equipe: filtrada por ela).
+async function carregarCarteiras(alvo = "#carteiras-tabela", soEquipe = "") {
+  $(alvo).innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
   try {
-    const { vendedores, dias } = await api("crm-lead", { acao: "carteiras" });
+    const r = await api("crm-lead", { acao: "carteiras" }), dias = r.dias;
+    const vendedores = soEquipe ? r.vendedores.filter((v) => v.equipe_id === soEquipe) : r.vendedores;
     CRM.vendedores = vendedores.map((v) => ({ uid: v.uid, nome: v.nome }));
     const pct = (x) => (x === null ? "–" : `${Math.round(x * 100)}%`);
-    $("#carteiras-tabela").innerHTML = vendedores.length ? `<thead><tr><th>Vendedor</th><th>Na carteira</th>${STATUS_CRM.filter(([k]) => k !== "novo").map(([, r]) => `<th>${r}</th>`).join("")}<th>Conversão</th></tr></thead><tbody>` +
+    $(alvo).innerHTML = vendedores.length ? `<thead><tr><th>Vendedor</th><th>Na carteira</th>${STATUS_CRM.filter(([k]) => k !== "novo").map(([, r]) => `<th>${r}</th>`).join("")}<th>Conversão</th></tr></thead><tbody>` +
       vendedores.map((v) => `<tr data-carteira-uid="${txt(v.uid)}"><td class="principal-td" data-rot=""><b>${txt(v.nome)}</b></td><td class="num" data-rot="Na carteira">${numero(v.carteira)}</td>${STATUS_CRM.filter(([k]) => k !== "novo").map(([k, r]) => `<td class="num" data-rot="${r}">${numero(v.por_status[k] || 0)}</td>`).join("")}<td class="num" data-rot="Conversão">${pct(v.conversao)}</td></tr>`).join("") +
       `</tbody><caption class="small muted" style="caption-side:bottom;text-align:left;padding:6px 8px">Sem contato há mais de ${dias} dias, o lead volta a ficar livre.</caption>`
       : `<tbody><tr><td class="muted">Nenhum vendedor ainda.</td></tr></tbody>`;
-  } catch (e) { $("#carteiras-tabela").innerHTML = `<tbody><tr><td class="muted">${txt(e.message)}</td></tr></tbody>`; }
+  } catch (e) { $(alvo).innerHTML = `<tbody><tr><td class="muted">${txt(e.message)}</td></tr></tbody>`; }
 }
-$("#carteiras-atualizar").onclick = carregarCarteiras;
+$("#carteiras-atualizar").onclick = () => carregarCarteiras();
 async function carregarUsuarios() {
   $("#u-tabela").innerHTML = `<tr><td><div class="esq" style="height:14px"></div></td></tr>`;
   try {
@@ -3420,6 +3549,218 @@ function desenharEstados() {
   const ativo = (uf) => UFS_ATIVAS.includes(uf);
   $("#estados").innerHTML = UFS.map(([uf, nome]) => `<span class="pilula ${ativo(uf) ? "ok" : ""}" data-uf-estado="${uf}" title="${ativo(uf) ? `Ativo · ${ESTADOS_UI[uf].MUNS.length} municípios` : "Dados ainda não carregados"}">${ativo(uf) ? "✓ " : ""}${txt(nome)}${ativo(uf) ? "" : " · em breve"}</span>`).join("");
 }
+
+// ============================================================ EQUIPES (master) e MINHA EQUIPE (gestor) — tudo pelas Functions
+// O selo mostra o papel: "master", "gestor · <equipe>" ou "vendedor · <equipe>". A equipe (nome, gestor, representadas)
+// vem de equipes/{id} (os membros leem; 1 leitura). Antes da migração o documento pode não existir: nome padrão.
+async function carregarEquipeDoUsuario() {
+  if (ehAdmin) return;
+  try { equipeDoc = (await getDoc(doc(db, `equipes/${equipeId}`))).data() || null; } catch { equipeDoc = null; }
+  const nome = equipeDoc?.nome || (equipeId === "resolve-farma" ? "Resolve Farma" : equipeId);
+  $("#selo-equipe").textContent = `${ehGestor ? "gestor" : "vendedor"} · ${nome}`;
+  $("#selo-equipe").classList.remove("oculto");
+  if (buscas.length) { desenharCaixaBuscas(); if (paginaAtual === "leads") abrirLeads(); } // etiqueta "Liberada por representante"
+}
+const pct = (x) => (x === null || x === undefined ? "–" : `${Math.round(x * 100)}%`);
+const deCota = (usado, cota) => (Number.isInteger(cota) ? `${numero(usado)} de ${numero(cota)}` : `${numero(usado)} · sem limite`);
+const inteiroOuNull = (v) => (String(v ?? "").trim() === "" ? null : Number(v));
+
+// ---- Equipes (master)
+const EQS = { lista: [], padrao: null };
+async function carregarEquipes() {
+  if (!ehAdmin) return;
+  $("#equipes-tabela").innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
+  try {
+    const r = await api("equipes", { acao: "listar" });
+    EQS.lista = r.equipes; EQS.padrao = r.cotas_padrao;
+    for (const [id, k] of [["#eqn-usuarios", "max_usuarios"], ["#eqn-buscas", "buscas_dia"], ["#eqn-consultas", "consultas_mes"]]) if (!$(id).value) $(id).value = r.cotas_padrao[k];
+    desenharEquipes();
+  } catch (e) { $("#equipes-tabela").innerHTML = `<tbody><tr><td class="muted">${txt(e.message)}</td></tr></tbody>`; }
+}
+function desenharEquipes() {
+  const cota = (e, k) => `<input type="number" min="1" style="width:92px" data-eq-cota="${txt(e.id)}" data-campo="${k}" value="${e.cotas?.[k] ?? ""}" placeholder="sem limite" aria-label="${k} de ${txt(e.nome)}">`;
+  $("#equipes-tabela").innerHTML = EQS.lista.length ? `<thead><tr><th>Equipe</th><th>Representante</th><th>Usuários</th><th>Buscas hoje</th><th>Consultas no mês</th><th>Cotas (usuários · buscas/dia · consultas/mês)</th><th></th></tr></thead><tbody>` +
+    EQS.lista.map((e) => `<tr data-equipe-id="${txt(e.id)}"><td class="principal-td" data-rot=""><b>${txt(e.nome)}</b> ${e.ativa ? "" : '<span class="pilula bad">desativada</span>'}</td>
+      <td data-rot="Representante">${e.gestor ? `${txt(e.gestor.nome || e.gestor.email)}<br><span class="small muted" style="overflow-wrap:anywhere">${txt(e.gestor.email)}</span>` : '<span class="muted">—</span>'}</td>
+      <td data-rot="Usuários" class="num">${deCota(e.usuarios, e.cotas?.max_usuarios)}</td>
+      <td data-rot="Buscas hoje" class="num">${deCota(e.uso.buscas_dia, e.cotas?.buscas_dia)}</td>
+      <td data-rot="Consultas no mês" class="num">${deCota(e.uso.consultas_mes, e.cotas?.consultas_mes)}</td>
+      <td data-rot="Cotas"><div class="linha" style="gap:4px">${cota(e, "max_usuarios")}${cota(e, "buscas_dia")}${cota(e, "consultas_mes")}<button class="btn btn-sec btn-mini" data-eq-salvar="${txt(e.id)}">Salvar cotas</button></div></td>
+      <td data-rot=""><div class="linha" style="gap:6px"><a class="btn btn-sec btn-mini" href="#equipe/${encodeURIComponent(e.id)}">Abrir</a>
+        <button class="btn ${e.ativa ? "btn-perigo" : "btn-sec"} btn-mini" data-eq-ativar="${txt(e.id)}" data-ativa="${e.ativa ? "0" : "1"}">${e.ativa ? "Desativar" : "Reativar"}</button></div></td></tr>`).join("") + "</tbody>"
+    : `<tbody><tr><td class="muted">Nenhuma equipe ainda.</td></tr></tbody>`;
+}
+$("#equipes-atualizar").onclick = carregarEquipes;
+$("#eqn-criar").onclick = async () => {
+  const botao = $("#eqn-criar");
+  botao.disabled = true;
+  try {
+    const r = await api("equipes", { acao: "criar", nome: $("#eqn-nome").value, gestor: { nome: $("#eqn-gnome").value, email: $("#eqn-gemail").value, senha: $("#eqn-gsenha").value },
+      cotas: { max_usuarios: inteiroOuNull($("#eqn-usuarios").value), buscas_dia: inteiroOuNull($("#eqn-buscas").value), consultas_mes: inteiroOuNull($("#eqn-consultas").value) } });
+    toast(`Equipe criada (${r.id}). O representante já pode entrar.`, "ok");
+    for (const id of ["#eqn-nome", "#eqn-gnome", "#eqn-gemail", "#eqn-gsenha"]) $(id).value = "";
+    carregarEquipes();
+  } catch (e) { toast(e.message, "erro"); }
+  botao.disabled = false;
+};
+$("#equipes-tabela").addEventListener("click", async (ev) => {
+  const salvar = ev.target.closest("[data-eq-salvar]")?.dataset.eqSalvar;
+  if (salvar) {
+    const cotas = {};
+    for (const i of $$(`#equipes-tabela [data-eq-cota="${CSS.escape(salvar)}"]`)) cotas[i.dataset.campo] = inteiroOuNull(i.value);
+    try { await api("equipes", { acao: "editar", id: salvar, cotas }); toast("Cotas salvas.", "ok"); carregarEquipes(); } catch (e) { toast(e.message, "erro"); }
+    return;
+  }
+  const b = ev.target.closest("[data-eq-ativar]");
+  if (!b) return;
+  const e = EQS.lista.find((x) => x.id === b.dataset.eqAtivar), ativa = b.dataset.ativa === "1";
+  if (!ativa && !(await confirmar({ titulo: "Desativar equipe", texto: `Desativar a equipe ${e?.nome || ""}? Todas as contas dela deixam de entrar (os dados ficam guardados; dá para reativar).`, sim: "Sim, desativar" }))) return;
+  try { await api("equipes", { acao: "ativar", id: b.dataset.eqAtivar, ativa }); toast(ativa ? "Equipe reativada." : "Equipe desativada.", "ok"); carregarEquipes(); } catch (x) { toast(x.message, "erro"); }
+});
+
+// ---- Minha equipe (gestor; o master vê a de qualquer equipe)
+const EQ = { id: "", resumo: null, painel: null };
+const corpoEquipe = (x) => (ehAdmin ? { ...x, equipe_id: EQ.id } : x);
+async function abrirEquipe(id) {
+  EQ.id = id;
+  if (!id) { location.hash = ehAdmin ? "#equipes" : "#inicio"; return; }
+  $("#eq-desativar").classList.add("oculto");
+  await Promise.all([carregarResumoEquipe(), carregarPainelEquipe()]);
+  desenharBuscasEquipe();
+  carregarCarteiras("#eq-carteiras", ehAdmin ? EQ.id : "");
+}
+async function carregarResumoEquipe() {
+  try {
+    const r = await api("equipe", corpoEquipe({ acao: "resumo" }));
+    EQ.resumo = r;
+    const e = r.equipe;
+    $("#eq-titulo").textContent = ehAdmin ? `Equipe ${e.nome}` : "Minha equipe";
+    $("#eq-sub").textContent = ehAdmin ? "Visão do administrador: o mesmo que o representante vê." : `${e.nome} · prepostos, listas, carteiras e resultados da sua equipe.`;
+    const kpi = (rot, val, ctx) => `<div class="cartao kpi"><div class="rot">${rot}</div><div class="val num">${val}</div><div class="ctx">${ctx}</div></div>`;
+    $("#eq-kpis").innerHTML = kpi("Usuários", deCota(r.usuarios, e.cotas?.max_usuarios), "o representante conta") +
+      kpi("Buscas hoje", deCota(e.uso.buscas_dia, e.cotas?.buscas_dia), "da equipe inteira") +
+      kpi("Consultas no mês", deCota(e.uso.consultas_mes, e.cotas?.consultas_mes), "a partir do dia 1");
+    $("#eqp-limite").placeholder = `até ${r.teto.limite_diario}`; $("#eqp-consultas").placeholder = `até ${r.teto.limite_consultas_dia}`;
+    $("#eq-representadas").value = (e.representadas || []).join("\n");
+    desenharMembros();
+  } catch (erro) { toast(erro.message, "erro"); }
+}
+function desenharMembros() {
+  const r = EQ.resumo;
+  if (!r) return;
+  const podeMexer = (m) => m.uid !== usuario.uid && (ehAdmin || m.papel === "vendedor");
+  $("#eq-membros").innerHTML = `<thead><tr><th>Pessoa</th><th>Hoje</th><th>Buscas/dia</th><th>Consultas/dia</th><th></th></tr></thead><tbody>` +
+    r.membros.map((m) => `<tr data-membro="${txt(m.uid)}"><td class="principal-td" data-rot=""><b>${txt(m.nome || m.email)}</b> ${m.papel === "gestor" ? '<span class="pilula azul">representante</span>' : ""} ${m.ativo ? "" : '<span class="pilula bad">desativado</span>'}<br><span class="small muted" style="overflow-wrap:anywhere">${txt(m.email)}</span></td>
+      <td data-rot="Hoje" class="num">${numero(m.buscas_hoje)} busca(s) · ${numero(m.consultas_hoje)} consulta(s)</td>
+      <td data-rot="Buscas/dia">${podeMexer(m) ? `<input type="number" min="0" max="${r.teto.limite_diario}" style="width:104px" data-m-limite="${txt(m.uid)}" value="${m.limite_diario ?? ""}" placeholder="padrão" aria-label="Buscas por dia de ${txt(m.nome || m.email)}">` : "–"}</td>
+      <td data-rot="Consultas/dia">${podeMexer(m) ? `<input type="number" min="0" max="${r.teto.limite_consultas_dia}" style="width:104px" data-m-consultas="${txt(m.uid)}" value="${m.limite_consultas_dia ?? ""}" placeholder="padrão" aria-label="Consultas por dia de ${txt(m.nome || m.email)}">` : "–"}</td>
+      <td data-rot="">${podeMexer(m) ? `<div class="linha" style="gap:6px"><button class="btn btn-sec btn-mini" data-m-salvar="${txt(m.uid)}">Salvar</button>${m.ativo
+        ? `<button class="btn btn-perigo btn-mini" data-m-desativar="${txt(m.uid)}">Desativar</button>` : `<button class="btn btn-sec btn-mini" data-m-reativar="${txt(m.uid)}">Reativar</button>`}</div>` : ""}</td></tr>`).join("") + "</tbody>";
+}
+async function carregarPainelEquipe() {
+  $("#eq-painel").innerHTML = `<tbody><tr><td><div class="esq" style="height:14px"></div></td></tr></tbody>`;
+  try {
+    const r = await api("equipe", corpoEquipe({ acao: "painel" }));
+    EQ.painel = r;
+    const linha = (p, total) => `<tr${total ? ' class="total"' : ""}><td class="principal-td" data-rot=""><b>${txt(p.nome)}</b>${p.papel === "gestor" ? ' <span class="pilula azul">representante</span>' : ""}${p.ativo === false ? ' <span class="pilula bad">desativado</span>' : ""}</td>
+      <td class="num" data-rot="Buscas">${numero(p.buscas)}</td><td class="num" data-rot="Leads">${numero(p.leads)}</td><td class="num" data-rot="Contatados">${numero(p.contatados)}</td>
+      <td class="num" data-rot="Negociando">${numero(p.negociando)}</td><td class="num" data-rot="Clientes">${numero(p.clientes)}</td><td class="num" data-rot="Conversão">${pct(p.conversao)}</td></tr>`;
+    $("#eq-painel").innerHTML = `<thead><tr><th>Preposto</th><th>Buscas</th><th>Leads</th><th>Contatados</th><th>Negociando</th><th>Clientes</th><th>Conversão</th></tr></thead><tbody>` +
+      r.pessoas.map((p) => linha(p)).join("") + linha({ nome: "Equipe", ...r.total }, true) + "</tbody>" +
+      (r.equipe.representadas?.length ? `<caption class="small muted" style="caption-side:bottom;text-align:left;padding:6px 8px">Representadas: ${txt(r.equipe.representadas.join(", "))}</caption>` : "");
+  } catch (e) { $("#eq-painel").innerHTML = `<tbody><tr><td class="muted">${txt(e.message)}</td></tr></tbody>`; }
+}
+function desenharBuscasEquipe() {
+  if (paginaAtual !== "equipe") return;
+  // Gestor: as buscas da equipe e as liberadas para ela; master: as da equipe aberta (das 50 mais recentes que ele vê).
+  const lista = ehAdmin ? buscas.filter((b) => b.equipe_id === EQ.id || (b.liberada_equipes || []).includes(EQ.id)) : buscas;
+  $("#eq-buscas").innerHTML = htmlBuscasTabela(lista);
+}
+$("#eq-atualizar").onclick = () => abrirEquipe(EQ.id);
+$("#eqp-criar").onclick = async () => {
+  const botao = $("#eqp-criar");
+  botao.disabled = true;
+  try {
+    const x = { acao: "criar_preposto", email: $("#eqp-email").value, senha: $("#eqp-senha").value, nome: $("#eqp-nome").value };
+    if ($("#eqp-limite").value !== "") x.limite_diario = Number($("#eqp-limite").value);
+    if ($("#eqp-consultas").value !== "") x.limite_consultas_dia = Number($("#eqp-consultas").value);
+    await api("equipe", corpoEquipe(x));
+    toast("Preposto criado. Ele já pode entrar com o e-mail e a senha inicial.", "ok");
+    for (const id of ["#eqp-email", "#eqp-senha", "#eqp-nome", "#eqp-limite", "#eqp-consultas"]) $(id).value = "";
+    await carregarResumoEquipe(); carregarPainelEquipe();
+  } catch (e) { toast(e.message, "erro"); }
+  botao.disabled = false;
+};
+$("#eq-rep-salvar").onclick = async () => {
+  try {
+    const r = await api("equipe", corpoEquipe({ acao: "representadas", lista: $("#eq-representadas").value.split("\n") }));
+    $("#eq-representadas").value = r.representadas.join("\n");
+    if (equipeDoc && !ehAdmin) equipeDoc.representadas = r.representadas;
+    toast("Representadas salvas.", "ok");
+  } catch (e) { toast(e.message, "erro"); }
+};
+// Desativar: se o preposto tem leads na carteira, pede para transferir a outro preposto ou liberar antes (regra do Breno).
+function pedirDestinoCarteira(uid, mensagem) {
+  const m = EQ.resumo.membros.find((x) => x.uid === uid), outros = EQ.resumo.membros.filter((x) => x.uid !== uid && x.ativo);
+  const caixa = $("#eq-desativar");
+  caixa.innerHTML = `<div class="aviso-carteira"><p><b>${txt(m?.nome || m?.email || "Preposto")}</b>: ${txt(mensagem)}</p>
+    <div class="linha" style="gap:6px"><select id="eq-destino" aria-label="Transferir a carteira para"><option value="">Transferir para…</option>${outros.map((o) => `<option value="${txt(o.uid)}">${txt(o.nome || o.email)}</option>`).join("")}</select>
+    <button class="btn btn-sec btn-mini" data-carteira-transferir="${txt(uid)}">Transferir e desativar</button>
+    <button class="btn btn-sec btn-mini" data-carteira-liberar="${txt(uid)}">Liberar a carteira e desativar</button>
+    <button class="btn btn-fantasma btn-mini" data-carteira-cancelar>Cancelar</button></div></div>`;
+  caixa.classList.remove("oculto");
+  caixa.scrollIntoView({ block: "nearest" });
+}
+async function desativarPreposto(uid) {
+  try {
+    await api("equipe", corpoEquipe({ acao: "desativar_preposto", uid }));
+    toast("Preposto desativado.", "ok");
+    $("#eq-desativar").classList.add("oculto");
+    await carregarResumoEquipe(); carregarPainelEquipe();
+  } catch (e) {
+    if (/na carteira/.test(e.message)) return pedirDestinoCarteira(uid, e.message);
+    toast(e.message, "erro");
+  }
+}
+$("#eq-membros").addEventListener("click", async (ev) => {
+  const salvar = ev.target.closest("[data-m-salvar]")?.dataset.mSalvar;
+  if (salvar) {
+    const v = (sel) => { const i = $(`#eq-membros [${sel}="${CSS.escape(salvar)}"]`); return i && i.value !== "" ? Number(i.value) : null; };
+    try { await api("equipe", corpoEquipe({ acao: "editar_preposto", uid: salvar, limite_diario: v("data-m-limite"), limite_consultas_dia: v("data-m-consultas") })); toast("Limites salvos.", "ok"); carregarResumoEquipe(); }
+    catch (e) { toast(e.message, "erro"); }
+    return;
+  }
+  const des = ev.target.closest("[data-m-desativar]")?.dataset.mDesativar;
+  if (des) {
+    const m = EQ.resumo.membros.find((x) => x.uid === des);
+    if (!(await confirmar({ titulo: "Desativar preposto", texto: `Desativar ${m?.nome || m?.email || "o preposto"}? Ele deixa de entrar; as buscas dele continuam na equipe.`, sim: "Sim, desativar" }))) return;
+    return desativarPreposto(des);
+  }
+  const rea = ev.target.closest("[data-m-reativar]")?.dataset.mReativar;
+  if (rea) {
+    try { await api("equipe", corpoEquipe({ acao: "reativar_preposto", uid: rea })); toast("Preposto reativado.", "ok"); await carregarResumoEquipe(); carregarPainelEquipe(); }
+    catch (e) { toast(e.message, "erro"); }
+  }
+});
+$("#eq-desativar").addEventListener("click", async (ev) => {
+  if (ev.target.closest("[data-carteira-cancelar]")) return $("#eq-desativar").classList.add("oculto");
+  const tr = ev.target.closest("[data-carteira-transferir]")?.dataset.carteiraTransferir;
+  const li = ev.target.closest("[data-carteira-liberar]")?.dataset.carteiraLiberar;
+  if (!tr && !li) return;
+  try {
+    if (tr) {
+      const para = $("#eq-destino").value;
+      if (!para) return toast("Escolha para quem transferir.", "erro");
+      const r = await api("crm-lead", { acao: "transferir_carteira", de_uid: tr, para_uid: para });
+      toast(`${numero(r.leads)} lead(s) transferido(s).`, "ok");
+    } else {
+      const r = await api("crm-lead", { acao: "liberar_carteira", uid: li });
+      toast(`${numero(r.leads)} lead(s) liberado(s).`, "ok");
+    }
+    CRM.pronto = null; CRM.meu.clear(); CRM.todos.clear(); CRM.carteira.clear();
+    await desativarPreposto(tr || li);
+  } catch (e) { toast(e.message, "erro"); }
+});
 
 // ============================================================ TOUR (primeiro acesso)
 const PASSOS_TOUR = [
